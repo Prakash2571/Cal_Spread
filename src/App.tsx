@@ -55,6 +55,13 @@ export default function App() {
       .finally(() => setVerifying(false));
   }, []);
 
+  // Auto-load stocks on first open. The instruments list usually works
+  // without a login, so most users will never need to click "Connect".
+  useEffect(() => {
+    if (window.location.pathname === "/zerodha/verify") return;
+    void loadStocks();
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return instruments;
