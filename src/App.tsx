@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createSession,
   fetchFnoBoard,
+  fetchQuotes,
   getStatus,
   logout,
   loginUrl,
@@ -98,6 +99,22 @@ export default function App() {
       ...b.futures.map((f) => f.token),
     ]);
 
+    // 1) Seed prices immediately via REST snapshot (works even after market
+    //    close, so spot AND futures premiums show right away).
+    fetchQuotes(tokens)
+      .then((seed) => {
+        if (seed.length === 0) return;
+        setTicks((prev) => {
+          const next = { ...prev };
+          for (const t of seed) next[t.token] = t;
+          return next;
+        });
+      })
+      .catch(() => {
+        /* non-fatal: live stream may still fill values during market hours */
+      });
+
+    // 2) Live updates via WebSocket-backed SSE.
     const es = new EventSource(streamUrl(tokens));
 
     // Batch ticks and flush twice a second to keep rendering smooth.

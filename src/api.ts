@@ -155,6 +155,19 @@ export function streamUrl(tokens: number[]): string {
   return `${API_BASE_URL}/api/stream?tokens=${tokens.join(",")}`;
 }
 
+/**
+ * One-time snapshot of last price + close for the given tokens (REST).
+ * Works regardless of market hours, so values/premiums show even after close.
+ */
+export async function fetchQuotes(tokens: number[]): Promise<Tick[]> {
+  const res = await fetch(`${API_BASE_URL}/api/quotes?tokens=${tokens.join(",")}`);
+  const body = (await res.json()) as { ticks: Tick[]; error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load quotes (HTTP ${res.status}).`);
+  }
+  return body.ticks;
+}
+
 /** Fetch the list of stocks (defaults to NSE equities on the backend). */
 export async function fetchInstruments(params?: {
   exchange?: string;
