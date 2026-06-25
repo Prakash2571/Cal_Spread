@@ -18,11 +18,12 @@ import {
 interface Props {
   symbol: string;
   onClose: () => void;
+  onAuthError?: () => void;
 }
 
 type TickMap = Record<number, Tick>;
 
-export default function StockDetail({ symbol, onClose }: Props) {
+export default function StockDetail({ symbol, onClose, onAuthError }: Props) {
   const [detail, setDetail] = useState<FnoDetail | null>(null);
   const [ticks, setTicks] = useState<TickMap>({});
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,13 @@ export default function StockDetail({ symbol, onClose }: Props) {
         es.onerror = () => {
           setLive(false);
         };
+        // The backend emits this when Kite rejects the WebSocket auth.
+        es.addEventListener("kite_error", () => {
+          setLive(false);
+          setNeedLogin(true);
+          es?.close();
+          onAuthError?.(); // tell App to drop to logged-out state
+        });
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load details.");

@@ -56,6 +56,13 @@ export async function getStatus(): Promise<{ authenticated: boolean }> {
   return res.json();
 }
 
+/** Forget the Kite session on the backend (logout). */
+export async function logout(): Promise<void> {
+  await fetch(`${API_BASE_URL}/api/logout`, { method: "POST" }).catch(() => {
+    /* ignore network errors on logout */
+  });
+}
+
 /** Fetch only F&O stocks (NSE underlyings that have stock futures). */
 export async function fetchFnoStocks(params?: {
   q?: string;

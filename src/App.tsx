@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createSession,
   fetchFnoStocks,
+  getStatus,
+  logout,
   loginUrl,
   type Instrument,
 } from "./api.ts";
@@ -15,6 +17,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
 
   async function loadStocks() {
     setLoading(true);
@@ -30,6 +33,12 @@ export default function App() {
     }
   }
 
+  async function handleLogout() {
+    await logout();
+    setAuthenticated(false);
+    setSelected(null);
+  }
+
   // Handle the Zerodha redirect that lands on /zerodha/verify?request_token=...
   useEffect(() => {
     if (window.location.pathname !== "/zerodha/verify") return;
@@ -39,7 +48,10 @@ export default function App() {
     const requestToken = params.get("request_token");
 
     if (status !== "success" || !requestToken) {
-      setError("Zerodha login was cancelled or failed. Please try again.");
+      // Login was rejected by Zerodha before issuing a token — auto-logout.
+      void logout();
+      setAuthenticated(false);
+      setError("Zerodha login was cancelled or rejected. Please try again.");
       window.history.replaceState({}, "", "/");
       return;
     }
@@ -47,21 +59,27 @@ export default function App() {
     setVerifying(true);
     createSession(requestToken)
       .then(() => {
+        setAuthenticated(true);
         window.history.replaceState({}, "", "/"); // clean the token from the URL
         return loadStocks();
       })
       .catch((err: unknown) => {
+        // Token exchange failed (e.g. user not enabled) — clear any half state.
+        void logout();
+        setAuthenticated(false);
         setError(err instanceof Error ? err.message : "Login failed.");
         window.history.replaceState({}, "", "/");
       })
       .finally(() => setVerifying(false));
   }, []);
 
-  // Auto-load stocks on first open. The instruments list usually works
-  // without a login, so most users will never need to click "Connect".
+  // Auto-load stocks on first open + check whether a session already exists.
   useEffect(() => {
     if (window.location.pathname === "/zerodha/verify") return;
     void loadStocks();
+    getStatus()
+      .then((s) => setAuthenticated(s.authenticated))
+      .catch(() => setAuthenticated(false));
   }, []);
 
   const filtered = useMemo(() => {
@@ -86,9 +104,15 @@ export default function App() {
       )}
 
       <section className="toolbar">
-        <a className="btn btn--primary" href={loginUrl}>
-          Connect to Zerodha
-        </a>
+        {authenticated ? (
+          <button className="btn" onClick={() => void handleLogout()}>
+            Logout
+          </button>
+        ) : (
+          <a className="btn btn--primary" href={loginUrl}>
+            Connect to Zerodha
+          </a>
+        )}
         <button
           className="btn"
           onClick={() => void loadStocks()}
@@ -162,7 +186,11 @@ export default function App() {
       )}
 
       {selected && (
-        <StockDetail symbol={selected} onClose={() => setSelected(null)} />
+        <StockDetail
+          symbol={selected}
+          onClose={() => setSelected(null)}
+          onAuthError={() => setAuthenticated(false)}
+        />
       )}
     </div>
   );
