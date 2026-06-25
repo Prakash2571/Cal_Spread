@@ -22,8 +22,10 @@ export default function App() {
   const [verifying, setVerifying] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [live, setLive] = useState(false);
+  const [streamOpen, setStreamOpen] = useState(false);
 
   const tickBuffer = useRef<TickMap>({});
+  const verifyGuard = useRef(false);
 
   async function loadBoard() {
     setLoading(true);
@@ -47,6 +49,10 @@ export default function App() {
   // Handle the Zerodha redirect at /zerodha/verify?request_token=...
   useEffect(() => {
     if (window.location.pathname !== "/zerodha/verify") return;
+    // A request_token is single-use. Guard against React StrictMode running
+    // this effect twice (which would re-use the token and fail the 2nd time).
+    if (verifyGuard.current) return;
+    verifyGuard.current = true;
 
     const params = new URLSearchParams(window.location.search);
     const status = params.get("status");
@@ -64,10 +70,10 @@ export default function App() {
     createSession(requestToken)
       .then(() => {
         setAuthenticated(true);
+        setError(null);
         window.history.replaceState({}, "", "/");
       })
       .catch((err: unknown) => {
-        void logout();
         setAuthenticated(false);
         setError(err instanceof Error ? err.message : "Login failed.");
         window.history.replaceState({}, "", "/");
@@ -101,6 +107,7 @@ export default function App() {
       tickBuffer.current = {};
     }, 500);
 
+    es.onopen = () => setStreamOpen(true);
     es.onmessage = (ev) => {
       try {
         const incoming = JSON.parse(ev.data) as Tick[];
@@ -112,13 +119,16 @@ export default function App() {
     };
     es.addEventListener("kite_error", () => {
       setLive(false);
+      setStreamOpen(false);
       setAuthenticated(false);
+      setError("Live feed rejected by Zerodha — your session expired. Please Connect again.");
       es.close();
     });
     es.onerror = () => setLive(false);
 
     return () => {
       clearInterval(flush);
+      setStreamOpen(false);
       es.close();
     };
   }, [authenticated, board]);
@@ -163,7 +173,13 @@ export default function App() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <span className={`live-dot ${live ? "live-dot--on" : ""}`}>
-          {live ? "LIVE" : authenticated ? "connecting…" : "prices: login needed"}
+          {live
+            ? "LIVE"
+            : streamOpen
+              ? "connected · waiting for ticks (market may be closed)"
+              : authenticated
+                ? "connecting…"
+                : "prices: login needed"}
         </span>
         <span className="count">{filtered.length.toLocaleString()} stocks</span>
       </section>
