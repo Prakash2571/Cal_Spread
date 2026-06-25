@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createSession,
-  fetchInstruments,
+  fetchFnoStocks,
   loginUrl,
   type Instrument,
 } from "./api.ts";
@@ -18,7 +18,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchInstruments(); // backend defaults to NSE equities
+      const res = await fetchFnoStocks(); // F&O stocks only
       setInstruments(res.instruments);
       setLoaded(true);
     } catch (err) {
@@ -76,7 +76,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1>Cal Spread</h1>
-        <p className="subtitle">NSE stocks via Zerodha Kite Connect</p>
+        <p className="subtitle">NSE F&amp;O stocks via Zerodha Kite Connect</p>
       </header>
 
       {verifying && (
@@ -92,7 +92,7 @@ export default function App() {
           onClick={() => void loadStocks()}
           disabled={loading}
         >
-          {loading ? "Loading…" : "Load stocks"}
+          {loading ? "Loading…" : "Reload F&O stocks"}
         </button>
         <input
           className="search"
@@ -103,7 +103,7 @@ export default function App() {
         />
         {loaded && (
           <span className="count">
-            {filtered.length.toLocaleString()} stocks
+            {filtered.length.toLocaleString()} F&amp;O stocks
           </span>
         )}
       </section>
@@ -112,18 +112,15 @@ export default function App() {
         <div className="banner banner--error">
           {error}
           <div className="hint">
-            Make sure the backend is running and you have completed the Zerodha
-            login (click “Connect to Zerodha”).
+            Make sure the backend is running. If it says a session is required,
+            click “Connect to Zerodha” for a one-time login.
           </div>
         </div>
       )}
 
       {!loaded && !loading && !error && (
         <div className="empty">
-          <p>
-            Click <strong>Connect to Zerodha</strong> to log in, then load the
-            full list of NSE stocks.
-          </p>
+          <p>Loading the list of NSE F&amp;O stocks…</p>
         </div>
       )}
 
@@ -135,8 +132,7 @@ export default function App() {
                 <th>Symbol</th>
                 <th>Company</th>
                 <th>Exchange</th>
-                <th>Type</th>
-                <th className="num">Lot</th>
+                <th className="num">F&amp;O Lot</th>
                 <th className="num">Token</th>
               </tr>
             </thead>
@@ -146,15 +142,14 @@ export default function App() {
                   <td className="mono">{i.tradingsymbol}</td>
                   <td>{i.name}</td>
                   <td>{i.exchange}</td>
-                  <td>{i.instrument_type}</td>
-                  <td className="num">{i.lot_size}</td>
+                  <td className="num">{i.fno_lot_size ?? i.lot_size}</td>
                   <td className="num mono">{i.instrument_token}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <div className="empty">No stocks match “{query}”.</div>
+            <div className="empty">No F&amp;O stocks match “{query}”.</div>
           )}
         </div>
       )}

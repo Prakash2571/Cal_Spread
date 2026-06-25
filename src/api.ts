@@ -14,6 +14,8 @@ export interface Instrument {
   instrument_type: string;
   segment: string;
   exchange: string;
+  /** Present only on F&O-stock responses: the futures lot size. */
+  fno_lot_size?: number;
 }
 
 export interface InstrumentsResponse {
@@ -52,6 +54,24 @@ export async function getStatus(): Promise<{ authenticated: boolean }> {
   const res = await fetch(`${API_BASE_URL}/`);
   if (!res.ok) throw new Error(`Backend not reachable (HTTP ${res.status}).`);
   return res.json();
+}
+
+/** Fetch only F&O stocks (NSE underlyings that have stock futures). */
+export async function fetchFnoStocks(params?: {
+  q?: string;
+}): Promise<InstrumentsResponse> {
+  const search = new URLSearchParams();
+  if (params?.q) search.set("q", params.q);
+  const qs = search.toString();
+  const res = await fetch(
+    `${API_BASE_URL}/api/fno-stocks${qs ? `?${qs}` : ""}`,
+  );
+
+  const body = (await res.json()) as InstrumentsResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load F&O stocks (HTTP ${res.status}).`);
+  }
+  return body;
 }
 
 /** Fetch the list of stocks (defaults to NSE equities on the backend). */
