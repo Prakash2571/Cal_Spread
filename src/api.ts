@@ -74,6 +74,49 @@ export async function fetchFnoStocks(params?: {
   return body;
 }
 
+/** A single futures contract on an underlying. */
+export interface FnoContract {
+  instrument_token: number;
+  tradingsymbol: string;
+  expiry: string; // YYYY-MM-DD
+  lot_size: number;
+}
+
+/** Detail for one F&O stock: the spot instrument + its nearest futures. */
+export interface FnoDetail {
+  symbol: string;
+  spot: {
+    instrument_token: number;
+    tradingsymbol: string;
+    name: string;
+  };
+  futures: FnoContract[];
+}
+
+/** A live tick relayed from the backend SSE stream. */
+export interface Tick {
+  token: number;
+  last_price: number;
+  close_price: number;
+}
+
+/** Fetch the spot + 3 nearest futures for a single F&O stock. */
+export async function fetchFnoDetail(symbol: string): Promise<FnoDetail> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/fno-stocks/${encodeURIComponent(symbol)}`,
+  );
+  const body = (await res.json()) as FnoDetail & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load ${symbol} (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
+/** URL for the live SSE tick stream for the given instrument tokens. */
+export function streamUrl(tokens: number[]): string {
+  return `${API_BASE_URL}/api/stream?tokens=${tokens.join(",")}`;
+}
+
 /** Fetch the list of stocks (defaults to NSE equities on the backend). */
 export async function fetchInstruments(params?: {
   exchange?: string;

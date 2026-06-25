@@ -5,6 +5,7 @@ import {
   loginUrl,
   type Instrument,
 } from "./api.ts";
+import StockDetail from "./StockDetail.tsx";
 
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -13,6 +14,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
 
   async function loadStocks() {
     setLoading(true);
@@ -138,7 +140,12 @@ export default function App() {
             </thead>
             <tbody>
               {filtered.map((i) => (
-                <tr key={i.instrument_token}>
+                <tr
+                  key={i.instrument_token}
+                  className="row-clickable"
+                  onClick={() => setSelected(i.tradingsymbol)}
+                  title={`View ${i.tradingsymbol} futures`}
+                >
                   <td className="mono">{i.tradingsymbol}</td>
                   <td>{i.name}</td>
                   <td>{i.exchange}</td>
@@ -152,6 +159,10 @@ export default function App() {
             <div className="empty">No F&amp;O stocks match “{query}”.</div>
           )}
         </div>
+      )}
+
+      {selected && (
+        <StockDetail symbol={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );
