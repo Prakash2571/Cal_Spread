@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  createSession,
   fetchInstruments,
   loginUrl,
   type Instrument,
@@ -11,11 +12,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [loaded, setLoaded] = useState(false);
-
-  // Surface the ?auth=success|failed flag the backend redirects back with.
-  const authStatus = useMemo(() => {
-    return new URLSearchParams(window.location.search).get("auth");
-  }, []);
+  const [verifying, setVerifying] = useState(false);
 
   async function loadStocks() {
     setLoading(true);
@@ -31,12 +28,32 @@ export default function App() {
     }
   }
 
-  // Auto-load right after a successful login redirect.
+  // Handle the Zerodha redirect that lands on /zerodha/verify?request_token=...
   useEffect(() => {
-    if (authStatus === "success") {
-      void loadStocks();
+    if (window.location.pathname !== "/zerodha/verify") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status");
+    const requestToken = params.get("request_token");
+
+    if (status !== "success" || !requestToken) {
+      setError("Zerodha login was cancelled or failed. Please try again.");
+      window.history.replaceState({}, "", "/");
+      return;
     }
-  }, [authStatus]);
+
+    setVerifying(true);
+    createSession(requestToken)
+      .then(() => {
+        window.history.replaceState({}, "", "/"); // clean the token from the URL
+        return loadStocks();
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Login failed.");
+        window.history.replaceState({}, "", "/");
+      })
+      .finally(() => setVerifying(false));
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -55,10 +72,8 @@ export default function App() {
         <p className="subtitle">NSE stocks via Zerodha Kite Connect</p>
       </header>
 
-      {authStatus === "failed" && (
-        <div className="banner banner--error">
-          Login failed. Please try connecting again.
-        </div>
+      {verifying && (
+        <div className="banner">Verifying your Zerodha login…</div>
       )}
 
       <section className="toolbar">

@@ -24,6 +24,29 @@ export interface InstrumentsResponse {
 /** URL the user clicks to start the Zerodha login flow (handled by backend). */
 export const loginUrl = `${API_BASE_URL}/login`;
 
+/**
+ * Exchange the request_token (received at the /zerodha/verify redirect) for an
+ * access token. The backend performs the secret-checksum exchange with Kite.
+ */
+export async function createSession(
+  requestToken: string,
+): Promise<{ authenticated: boolean; user_name?: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ request_token: requestToken }),
+  });
+  const body = (await res.json()) as {
+    authenticated?: boolean;
+    user_name?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Login failed (HTTP ${res.status}).`);
+  }
+  return { authenticated: !!body.authenticated, user_name: body.user_name };
+}
+
 /** Backend health/auth status. */
 export async function getStatus(): Promise<{ authenticated: boolean }> {
   const res = await fetch(`${API_BASE_URL}/`);
