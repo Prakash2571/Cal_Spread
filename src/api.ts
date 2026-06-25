@@ -89,6 +89,37 @@ export interface FnoContract {
   lot_size: number;
 }
 
+/** One row of the F&O board: a stock with its spot token + nearest futures. */
+export interface BoardFuture {
+  token: number;
+  expiry: string; // YYYY-MM-DD
+  lot_size: number;
+}
+
+export interface BoardItem {
+  symbol: string;
+  name: string;
+  spot_token: number;
+  futures: BoardFuture[];
+}
+
+/** Fetch the full F&O board (every stock + its spot + 3 nearest futures). */
+export async function fetchFnoBoard(
+  q?: string,
+): Promise<{ count: number; board: BoardItem[] }> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  const res = await fetch(`${API_BASE_URL}/api/fno-board${qs}`);
+  const body = (await res.json()) as {
+    count: number;
+    board: BoardItem[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load board (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 /** Detail for one F&O stock: the spot instrument + its nearest futures. */
 export interface FnoDetail {
   symbol: string;

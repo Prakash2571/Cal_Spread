@@ -1,33 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createSession,
-  fetchFnoStocks,
+  fetchFnoBoard,
   getStatus,
   logout,
   loginUrl,
-  type Instrument,
+  streamUrl,
+  type BoardItem,
+  type Tick,
 } from "./api.ts";
-import StockDetail from "./StockDetail.tsx";
+import StockCard from "./StockCard.tsx";
+
+type TickMap = Record<number, Tick>;
 
 export default function App() {
-  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [board, setBoard] = useState<BoardItem[]>([]);
+  const [ticks, setTicks] = useState<TickMap>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [loaded, setLoaded] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
+  const [live, setLive] = useState(false);
 
-  async function loadStocks() {
+  const tickBuffer = useRef<TickMap>({});
+
+  async function loadBoard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchFnoStocks(); // F&O stocks only
-      setInstruments(res.instruments);
-      setLoaded(true);
+      const res = await fetchFnoBoard();
+      setBoard(res.board);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "Failed to load F&O board.");
     } finally {
       setLoading(false);
     }
@@ -36,10 +41,10 @@ export default function App() {
   async function handleLogout() {
     await logout();
     setAuthenticated(false);
-    setSelected(null);
+    setLive(false);
   }
 
-  // Handle the Zerodha redirect that lands on /zerodha/verify?request_token=...
+  // Handle the Zerodha redirect at /zerodha/verify?request_token=...
   useEffect(() => {
     if (window.location.pathname !== "/zerodha/verify") return;
 
@@ -48,7 +53,6 @@ export default function App() {
     const requestToken = params.get("request_token");
 
     if (status !== "success" || !requestToken) {
-      // Login was rejected by Zerodha before issuing a token — auto-logout.
       void logout();
       setAuthenticated(false);
       setError("Zerodha login was cancelled or rejected. Please try again.");
@@ -60,11 +64,9 @@ export default function App() {
     createSession(requestToken)
       .then(() => {
         setAuthenticated(true);
-        window.history.replaceState({}, "", "/"); // clean the token from the URL
-        return loadStocks();
+        window.history.replaceState({}, "", "/");
       })
       .catch((err: unknown) => {
-        // Token exchange failed (e.g. user not enabled) — clear any half state.
         void logout();
         setAuthenticated(false);
         setError(err instanceof Error ? err.message : "Login failed.");
@@ -73,35 +75,75 @@ export default function App() {
       .finally(() => setVerifying(false));
   }, []);
 
-  // Auto-load stocks on first open + check whether a session already exists.
+  // Load the board + auth status on first open.
   useEffect(() => {
-    if (window.location.pathname === "/zerodha/verify") return;
-    void loadStocks();
+    void loadBoard();
     getStatus()
       .then((s) => setAuthenticated(s.authenticated))
       .catch(() => setAuthenticated(false));
   }, []);
 
+  // Open ONE live stream for every token once authenticated + board is ready.
+  useEffect(() => {
+    if (!authenticated || board.length === 0) return;
+
+    const tokens = board.flatMap((b) => [
+      b.spot_token,
+      ...b.futures.map((f) => f.token),
+    ]);
+
+    const es = new EventSource(streamUrl(tokens));
+
+    // Batch ticks and flush twice a second to keep rendering smooth.
+    const flush = setInterval(() => {
+      if (Object.keys(tickBuffer.current).length === 0) return;
+      setTicks((prev) => ({ ...prev, ...tickBuffer.current }));
+      tickBuffer.current = {};
+    }, 500);
+
+    es.onmessage = (ev) => {
+      try {
+        const incoming = JSON.parse(ev.data) as Tick[];
+        for (const t of incoming) tickBuffer.current[t.token] = t;
+        setLive(true);
+      } catch {
+        // ignore malformed frame
+      }
+    };
+    es.addEventListener("kite_error", () => {
+      setLive(false);
+      setAuthenticated(false);
+      es.close();
+    });
+    es.onerror = () => setLive(false);
+
+    return () => {
+      clearInterval(flush);
+      es.close();
+    };
+  }, [authenticated, board]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return instruments;
-    return instruments.filter(
-      (i) =>
-        i.tradingsymbol.toLowerCase().includes(q) ||
-        i.name.toLowerCase().includes(q),
+    if (!q) return board;
+    return board.filter(
+      (b) =>
+        b.symbol.toLowerCase().includes(q) ||
+        b.name.toLowerCase().includes(q),
     );
-  }, [instruments, query]);
+  }, [board, query]);
 
   return (
     <div className="app">
       <header className="header">
         <h1>Cal Spread</h1>
-        <p className="subtitle">NSE F&amp;O stocks via Zerodha Kite Connect</p>
+        <p className="subtitle">
+          NSE F&amp;O stocks — spot &amp; 3 monthly futures with live
+          premium/discount
+        </p>
       </header>
 
-      {verifying && (
-        <div className="banner">Verifying your Zerodha login…</div>
-      )}
+      {verifying && <div className="banner">Verifying your Zerodha login…</div>}
 
       <section className="toolbar">
         {authenticated ? (
@@ -113,13 +155,6 @@ export default function App() {
             Connect to Zerodha
           </a>
         )}
-        <button
-          className="btn"
-          onClick={() => void loadStocks()}
-          disabled={loading}
-        >
-          {loading ? "Loading…" : "Reload F&O stocks"}
-        </button>
         <input
           className="search"
           type="search"
@@ -127,70 +162,42 @@ export default function App() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {loaded && (
-          <span className="count">
-            {filtered.length.toLocaleString()} F&amp;O stocks
-          </span>
-        )}
+        <span className={`live-dot ${live ? "live-dot--on" : ""}`}>
+          {live ? "LIVE" : authenticated ? "connecting…" : "prices: login needed"}
+        </span>
+        <span className="count">{filtered.length.toLocaleString()} stocks</span>
       </section>
 
-      {error && (
-        <div className="banner banner--error">
-          {error}
-          <div className="hint">
-            Make sure the backend is running. If it says a session is required,
-            click “Connect to Zerodha” for a one-time login.
-          </div>
+      {!authenticated && !verifying && (
+        <div className="banner">
+          Showing the F&amp;O list below. Click{" "}
+          <a className="link" href={loginUrl}>
+            Connect to Zerodha
+          </a>{" "}
+          to stream live prices &amp; premium/discount.
         </div>
       )}
 
-      {!loaded && !loading && !error && (
-        <div className="empty">
-          <p>Loading the list of NSE F&amp;O stocks…</p>
-        </div>
+      {error && <div className="banner banner--error">{error}</div>}
+
+      {loading && board.length === 0 && (
+        <div className="empty">Loading F&amp;O stocks…</div>
       )}
 
-      {loaded && (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Company</th>
-                <th>Exchange</th>
-                <th className="num">F&amp;O Lot</th>
-                <th className="num">Token</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((i) => (
-                <tr
-                  key={i.instrument_token}
-                  className="row-clickable"
-                  onClick={() => setSelected(i.tradingsymbol)}
-                  title={`View ${i.tradingsymbol} futures`}
-                >
-                  <td className="mono">{i.tradingsymbol}</td>
-                  <td>{i.name}</td>
-                  <td>{i.exchange}</td>
-                  <td className="num">{i.fno_lot_size ?? i.lot_size}</td>
-                  <td className="num mono">{i.instrument_token}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length === 0 && (
-            <div className="empty">No F&amp;O stocks match “{query}”.</div>
-          )}
-        </div>
-      )}
+      <div className="legend">
+        Premium / Discount = future − spot.{" "}
+        <span className="tag tag--prem">green = premium</span>{" "}
+        <span className="tag tag--disc">red = discount</span>
+      </div>
 
-      {selected && (
-        <StockDetail
-          symbol={selected}
-          onClose={() => setSelected(null)}
-          onAuthError={() => setAuthenticated(false)}
-        />
+      <div className="cards">
+        {filtered.map((item) => (
+          <StockCard key={item.symbol} item={item} ticks={ticks} />
+        ))}
+      </div>
+
+      {!loading && filtered.length === 0 && (
+        <div className="empty">No F&amp;O stocks match “{query}”.</div>
       )}
     </div>
   );

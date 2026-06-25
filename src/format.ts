@@ -32,3 +32,31 @@ export function fmtSigned(value: number | null | undefined, dash = "—"): strin
   const s = value.toFixed(2);
   return value > 0 ? `+${s}` : s;
 }
+
+
+/** Percent-change text like "+0.74%" / "-0.95%", or a dash when unknown. */
+export function pctText(
+  last: number | null | undefined,
+  close: number | null | undefined,
+  dash = "—",
+): string {
+  if (last == null || !close) return dash;
+  const p = ((last - close) / close) * 100;
+  return `${p > 0 ? "+" : ""}${p.toFixed(2)}%`;
+}
+
+/** CSS class for a percent change: "pos" / "neg" / "". */
+export function pctClass(
+  last: number | null | undefined,
+  close: number | null | undefined,
+): string {
+  if (last == null || !close) return "";
+  const p = last - close;
+  return p > 0 ? "pos" : p < 0 ? "neg" : "";
+}
+
+/** CSS class for a premium/discount value: "prem" / "disc" / "muted". */
+export function pdClass(premium: number | null): string {
+  if (premium === null) return "muted";
+  return premium > 0 ? "prem" : premium < 0 ? "disc" : "";
+}

@@ -306,3 +306,76 @@ body {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.12);
 }
+
+
+/* --- Stacked F&O cards --- */
+.legend {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 16px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.card-symbol {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.card-name {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-ltp {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.card-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.card-table td {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-table tr:last-child td {
+  border-bottom: none;
+}
+
+.card-table td:first-child {
+  width: 40%;
+}
