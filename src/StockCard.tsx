@@ -19,27 +19,34 @@ export default function StockCard({ item, ticks }: Props) {
   const spotLast = spot?.last_price ?? null;
 
   return (
-    <div className="card">
-      <div className="card-head">
+    <article className="card">
+      <header className="card-head">
         <div className="card-title">
           <span className="card-symbol">{item.symbol}</span>
-          <span className="muted card-name">{item.name}</span>
+          <span className="card-name">{item.name}</span>
         </div>
-        <div className="card-ltp">
-          <span className="mono">{fmt(spotLast)}</span>
-          <span className={pctClass(spot?.last_price, spot?.close_price)}>
-            {" "}
+        <div className="card-quote">
+          <span className="card-price mono">{fmt(spotLast)}</span>
+          <span
+            className={`chip ${pctChip(spot?.last_price, spot?.close_price)}`}
+          >
             {pctText(spot?.last_price, spot?.close_price)}
           </span>
         </div>
-      </div>
+      </header>
 
       <table className="card-table">
+        <thead>
+          <tr>
+            <th>Contract</th>
+            <th>LTP</th>
+            <th>Chg</th>
+            <th>Prem/Disc</th>
+          </tr>
+        </thead>
         <tbody>
           <tr className="row-spot">
-            <td>
-              <strong>Spot</strong>
-            </td>
+            <td className="contract-name">Spot</td>
             <td className="num mono">{fmt(spotLast)}</td>
             <td className={`num ${pctClass(spot?.last_price, spot?.close_price)}`}>
               {pctText(spot?.last_price, spot?.close_price)}
@@ -55,21 +62,38 @@ export default function StockCard({ item, ticks }: Props) {
             return (
               <tr key={f.token}>
                 <td>
-                  {formatExpiry(f.expiry)}
-                  <span className="muted"> ({daysToExpiry(f.expiry)} days)</span>
+                  <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
+                  <span className="contract-meta">
+                    {daysToExpiry(f.expiry)}d
+                  </span>
                 </td>
                 <td className="num mono">{fmt(last)}</td>
                 <td className={`num ${pctClass(t?.last_price, t?.close_price)}`}>
                   {pctText(t?.last_price, t?.close_price)}
                 </td>
-                <td className={`num mono ${pdClass(premium)}`}>
-                  {fmtSigned(premium)}
+                <td className="num">
+                  {premium === null ? (
+                    <span className="chip muted">—</span>
+                  ) : (
+                    <span className={`chip ${pdClass(premium)}`}>
+                      {fmtSigned(premium)}
+                    </span>
+                  )}
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
-    </div>
+    </article>
   );
+}
+
+/** Chip class for the header % change: "prem"/"disc"/"muted". */
+function pctChip(
+  last: number | null | undefined,
+  close: number | null | undefined,
+): string {
+  if (last == null || !close) return "muted";
+  return last - close > 0 ? "prem" : last - close < 0 ? "disc" : "muted";
 }

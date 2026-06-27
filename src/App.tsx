@@ -160,46 +160,67 @@ export default function App() {
     );
   }, [board, query]);
 
+  const status = live
+    ? { kind: "live", label: "Live" }
+    : streamOpen
+      ? { kind: "wait", label: "Awaiting ticks" }
+      : authenticated
+        ? { kind: "wait", label: "Connecting…" }
+        : { kind: "idle", label: "Login for live" };
+
   return (
     <div className="app">
-      <header className="header">
-        <h1>Cal Spread</h1>
-        <p className="subtitle">
-          NSE F&amp;O stocks — spot &amp; 3 monthly futures with live
-          premium/discount
-        </p>
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2"
+              strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 3v18M17 3v18" />
+              <rect x="4" y="7" width="6" height="9" rx="1.2" fill="#ffffff" stroke="none" />
+              <rect x="14" y="5" width="6" height="8" rx="1.2" fill="#ffffff" stroke="none" />
+            </svg>
+          </div>
+          <div className="card-title">
+            <h1>Cal Spread</h1>
+            <p className="subtitle">NSE F&amp;O · spot &amp; 3 monthly futures</p>
+          </div>
+        </div>
+
+        <div className="toolbar">
+          <div className="search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              className="search"
+              type="search"
+              placeholder="Search symbol or company…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <span className={`status status--${status.kind}`}>
+            <span className="status-dot" />
+            {status.label}
+          </span>
+          <span className="count">
+            <strong>{filtered.length.toLocaleString()}</strong> stocks
+          </span>
+          {authenticated ? (
+            <button className="btn" onClick={() => void handleLogout()}>
+              Logout
+            </button>
+          ) : (
+            <a className="btn btn--primary" href={loginUrl}>
+              Connect to Zerodha
+            </a>
+          )}
+        </div>
       </header>
 
       {verifying && <div className="banner">Verifying your Zerodha login…</div>}
-
-      <section className="toolbar">
-        {authenticated ? (
-          <button className="btn" onClick={() => void handleLogout()}>
-            Logout
-          </button>
-        ) : (
-          <a className="btn btn--primary" href={loginUrl}>
-            Connect to Zerodha
-          </a>
-        )}
-        <input
-          className="search"
-          type="search"
-          placeholder="Search symbol or company…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <span className={`live-dot ${live ? "live-dot--on" : ""}`}>
-          {live
-            ? "LIVE"
-            : streamOpen
-              ? "connected · waiting for ticks (market may be closed)"
-              : authenticated
-                ? "connecting…"
-                : "prices: login needed"}
-        </span>
-        <span className="count">{filtered.length.toLocaleString()} stocks</span>
-      </section>
 
       {!authenticated && !verifying && (
         <div className="banner">
@@ -213,21 +234,24 @@ export default function App() {
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      {loading && board.length === 0 && (
-        <div className="empty">Loading F&amp;O stocks…</div>
-      )}
-
       <div className="legend">
-        Premium / Discount = future − spot.{" "}
-        <span className="tag tag--prem">green = premium</span>{" "}
-        <span className="tag tag--disc">red = discount</span>
+        Premium / Discount = future − spot.
+        <span className="tag tag--prem">premium</span>
+        <span className="tag tag--disc">discount</span>
       </div>
 
-      <div className="cards">
-        {filtered.map((item) => (
-          <StockCard key={item.symbol} item={item} ticks={ticks} />
-        ))}
-      </div>
+      {loading && board.length === 0 ? (
+        <div className="empty">
+          <span className="spinner" />
+          Loading F&amp;O stocks…
+        </div>
+      ) : (
+        <div className="cards">
+          {filtered.map((item) => (
+            <StockCard key={item.symbol} item={item} ticks={ticks} />
+          ))}
+        </div>
+      )}
 
       {!loading && filtered.length === 0 && (
         <div className="empty">No F&amp;O stocks match “{query}”.</div>
