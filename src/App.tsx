@@ -24,6 +24,16 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [live, setLive] = useState(false);
   const [streamOpen, setStreamOpen] = useState(false);
+  const [rfRate, setRfRate] = useState<number>(() => {
+    const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
+    return Number.isFinite(saved) ? saved : 6.5;
+  });
+
+  function updateRf(value: string) {
+    const n = parseFloat(value);
+    setRfRate(value === "" ? 0 : n);
+    if (Number.isFinite(n)) localStorage.setItem("cal_spread_rf", String(n));
+  }
 
   const tickBuffer = useRef<TickMap>({});
   const verifyGuard = useRef(false);
@@ -205,6 +215,17 @@ export default function App() {
             <span className="status-dot" />
             {status.label}
           </span>
+          <label className="rf" title="Annual risk-free rate used for fair value">
+            <span>rf</span>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              value={rfRate}
+              onChange={(e) => updateRf(e.target.value)}
+            />
+            <span>%</span>
+          </label>
           <span className="count">
             <strong>{filtered.length.toLocaleString()}</strong> stocks
           </span>
@@ -235,7 +256,11 @@ export default function App() {
       {error && <div className="banner banner--error">{error}</div>}
 
       <div className="legend">
-        Premium / Discount = future − spot.
+        <span>
+          <strong>Fair</strong> = Spot × [1 + rf×(days/365)] · cost-of-carry
+        </span>
+        <span className="legend-sep">•</span>
+        <span>Prem/Disc = future − spot</span>
         <span className="tag tag--prem">premium</span>
         <span className="tag tag--disc">discount</span>
       </div>
@@ -248,7 +273,7 @@ export default function App() {
       ) : (
         <div className="cards">
           {filtered.map((item) => (
-            <StockCard key={item.symbol} item={item} ticks={ticks} />
+            <StockCard key={item.symbol} item={item} ticks={ticks} rf={rfRate} />
           ))}
         </div>
       )}

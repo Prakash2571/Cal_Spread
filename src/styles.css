@@ -535,3 +535,55 @@ body {
     transform: rotate(360deg);
   }
 }
+
+
+/* ---------------- Risk-free rate input ---------------- */
+.rf {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
+.rf input {
+  width: 48px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.rf input:focus {
+  outline: none;
+  color: var(--accent);
+}
+
+/* Hide number-input spinners for a cleaner look */
+.rf input::-webkit-outer-spin-button,
+.rf input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.rf input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Fair-value column */
+.card-table td.fair {
+  color: #b9c2d6;
+}
+
+.legend-sep {
+  color: var(--faint);
+}

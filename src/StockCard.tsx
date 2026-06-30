@@ -1,10 +1,10 @@
 import type { BoardItem, Tick } from "./api.ts";
 import {
   daysToExpiry,
+  fairPrice,
   fmt,
   fmtSigned,
   formatExpiry,
-  pctClass,
   pctText,
   pdClass,
 } from "./format.ts";
@@ -12,9 +12,10 @@ import {
 interface Props {
   item: BoardItem;
   ticks: Record<number, Tick>;
+  rf: number;
 }
 
-export default function StockCard({ item, ticks }: Props) {
+export default function StockCard({ item, ticks, rf }: Props) {
   const spot = ticks[item.spot_token];
   const spotLast = spot?.last_price ?? null;
 
@@ -40,7 +41,7 @@ export default function StockCard({ item, ticks }: Props) {
           <tr>
             <th>Contract</th>
             <th>LTP</th>
-            <th>Chg</th>
+            <th>Fair</th>
             <th>Prem/Disc</th>
           </tr>
         </thead>
@@ -48,28 +49,29 @@ export default function StockCard({ item, ticks }: Props) {
           <tr className="row-spot">
             <td className="contract-name">Spot</td>
             <td className="num mono">{fmt(spotLast)}</td>
-            <td className={`num ${pctClass(spot?.last_price, spot?.close_price)}`}>
-              {pctText(spot?.last_price, spot?.close_price)}
-            </td>
+            <td className="num muted">—</td>
             <td className="num muted">—</td>
           </tr>
 
           {item.futures.map((f) => {
             const t = ticks[f.token];
             const last = t?.last_price ?? null;
+            const days = daysToExpiry(f.expiry);
+            const fair = fairPrice(spotLast, rf, days);
             const premium =
               last !== null && spotLast !== null ? last - spotLast : null;
             return (
               <tr key={f.token}>
                 <td>
                   <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
-                  <span className="contract-meta">
-                    {daysToExpiry(f.expiry)}d
-                  </span>
+                  <span className="contract-meta">{days}d</span>
                 </td>
                 <td className="num mono">{fmt(last)}</td>
-                <td className={`num ${pctClass(t?.last_price, t?.close_price)}`}>
-                  {pctText(t?.last_price, t?.close_price)}
+                <td
+                  className="num mono fair"
+                  title="Theoretical fair value (cost of carry)"
+                >
+                  {fmt(fair)}
                 </td>
                 <td className="num">
                   {premium === null ? (

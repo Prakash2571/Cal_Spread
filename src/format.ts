@@ -60,3 +60,21 @@ export function pdClass(premium: number | null): string {
   if (premium === null) return "muted";
   return premium > 0 ? "prem" : premium < 0 ? "disc" : "";
 }
+
+
+/**
+ * Theoretical futures fair value (cost-of-carry):
+ *   Fair = Spot * [ 1 + rf*(x/365) - d ]
+ * where rf is the annual risk-free rate (as a %), x is days to expiry, and
+ * d is the dividend yield over the period as a fraction (0 when unknown).
+ */
+export function fairPrice(
+  spot: number | null | undefined,
+  rfAnnualPct: number,
+  days: number,
+  divPeriodFraction = 0,
+): number | null {
+  if (spot == null || Number.isNaN(spot)) return null;
+  const rf = (Number.isFinite(rfAnnualPct) ? rfAnnualPct : 0) / 100;
+  return spot * (1 + rf * (days / 365) - divPeriodFraction);
+}
