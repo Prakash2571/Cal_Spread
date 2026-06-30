@@ -168,6 +168,19 @@ export async function fetchQuotes(tokens: number[]): Promise<Tick[]> {
   return body.ticks;
 }
 
+/** Annual dividend yield (%) per stock symbol, from Yahoo Finance (cached). */
+export async function fetchDividends(): Promise<Record<string, number>> {
+  const res = await fetch(`${API_BASE_URL}/api/dividends`);
+  const body = (await res.json()) as {
+    yields?: Record<string, number>;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load dividends (HTTP ${res.status}).`);
+  }
+  return body.yields ?? {};
+}
+
 /** Fetch the list of stocks (defaults to NSE equities on the backend). */
 export async function fetchInstruments(params?: {
   exchange?: string;

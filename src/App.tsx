@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createSession,
+  fetchDividends,
   fetchFnoBoard,
   fetchQuotes,
   getStatus,
@@ -17,6 +18,7 @@ type TickMap = Record<number, Tick>;
 export default function App() {
   const [board, setBoard] = useState<BoardItem[]>([]);
   const [ticks, setTicks] = useState<TickMap>({});
+  const [divYields, setDivYields] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -98,6 +100,10 @@ export default function App() {
     getStatus()
       .then((s) => setAuthenticated(s.authenticated))
       .catch(() => setAuthenticated(false));
+    // Dividend yields come from Yahoo (independent of Zerodha login).
+    fetchDividends()
+      .then(setDivYields)
+      .catch(() => setDivYields({}));
   }, []);
 
   // Open ONE live stream for every token once authenticated + board is ready.
@@ -257,7 +263,8 @@ export default function App() {
 
       <div className="legend">
         <span>
-          <strong>Fair</strong> = Spot × [1 + rf×(days/365)] · cost-of-carry
+          <strong>Fair</strong> = Spot × [1 + (rf − div)×(days/365)] · dividend
+          yields via Yahoo
         </span>
         <span className="legend-sep">•</span>
         <span>Prem/Disc = future − spot</span>
@@ -273,7 +280,13 @@ export default function App() {
       ) : (
         <div className="cards">
           {filtered.map((item) => (
-            <StockCard key={item.symbol} item={item} ticks={ticks} rf={rfRate} />
+            <StockCard
+              key={item.symbol}
+              item={item}
+              ticks={ticks}
+              rf={rfRate}
+              div={divYields[item.symbol] ?? 0}
+            />
           ))}
         </div>
       )}

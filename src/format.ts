@@ -64,17 +64,18 @@ export function pdClass(premium: number | null): string {
 
 /**
  * Theoretical futures fair value (cost-of-carry):
- *   Fair = Spot * [ 1 + rf*(x/365) - d ]
- * where rf is the annual risk-free rate (as a %), x is days to expiry, and
- * d is the dividend yield over the period as a fraction (0 when unknown).
+ *   Fair = Spot * [ 1 + (rf - q) * (x/365) ]
+ * where rf is the annual risk-free rate (%), q is the annual dividend yield (%),
+ * and x is days to expiry. q defaults to 0 when no dividend data is available.
  */
 export function fairPrice(
   spot: number | null | undefined,
   rfAnnualPct: number,
   days: number,
-  divPeriodFraction = 0,
+  divYieldAnnualPct = 0,
 ): number | null {
   if (spot == null || Number.isNaN(spot)) return null;
   const rf = (Number.isFinite(rfAnnualPct) ? rfAnnualPct : 0) / 100;
-  return spot * (1 + rf * (days / 365) - divPeriodFraction);
+  const q = (Number.isFinite(divYieldAnnualPct) ? divYieldAnnualPct : 0) / 100;
+  return spot * (1 + (rf - q) * (days / 365));
 }

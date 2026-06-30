@@ -13,9 +13,10 @@ interface Props {
   item: BoardItem;
   ticks: Record<number, Tick>;
   rf: number;
+  div: number;
 }
 
-export default function StockCard({ item, ticks, rf }: Props) {
+export default function StockCard({ item, ticks, rf, div }: Props) {
   const spot = ticks[item.spot_token];
   const spotLast = spot?.last_price ?? null;
 
@@ -57,7 +58,7 @@ export default function StockCard({ item, ticks, rf }: Props) {
             const t = ticks[f.token];
             const last = t?.last_price ?? null;
             const days = daysToExpiry(f.expiry);
-            const fair = fairPrice(spotLast, rf, days);
+            const fair = fairPrice(spotLast, rf, days, div);
             const premium =
               last !== null && spotLast !== null ? last - spotLast : null;
             return (
@@ -69,7 +70,7 @@ export default function StockCard({ item, ticks, rf }: Props) {
                 <td className="num mono">{fmt(last)}</td>
                 <td
                   className="num mono fair"
-                  title="Theoretical fair value (cost of carry)"
+                  title={`Fair value · rf ${rf}% · dividend ${div.toFixed(2)}%`}
                 >
                   {fmt(fair)}
                 </td>
