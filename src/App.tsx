@@ -280,7 +280,7 @@ export default function App() {
           <span className="count">
             <strong>{filtered.length.toLocaleString()}</strong> stocks
           </span>
-          {adminAuthenticated ? (
+          {adminAuthenticated && (
             <>
               {authenticated ? (
                 <button className="btn" onClick={() => void handleAdminLogout()}>
@@ -292,21 +292,11 @@ export default function App() {
                 </a>
               )}
             </>
-          ) : (
-            <a className="btn btn--primary" href="/admin/verify">
-              Admin Login
-            </a>
           )}
         </div>
       </header>
 
-      {verifying && <div className="banner">Verifying your Zerodha login…</div>}
-
-      {!adminAuthenticated && !verifying && (
-        <div className="banner banner--info">
-          Public view: Showing F&amp;O stock list. <a className="link" href="/admin/verify">Admin login</a> required for live prices and Zerodha integration.
-        </div>
-      )}
+      {verifying && <div className="banner">Verifying your login…</div>}
 
       {adminAuthenticated && !authenticated && !verifying && (
         <div className="banner">

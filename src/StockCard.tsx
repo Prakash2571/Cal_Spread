@@ -30,9 +30,6 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
             <span className="card-symbol">{item.symbol}</span>
             <span className="card-name">{item.name}</span>
           </div>
-          <div className="card-quote">
-            <span className="chip muted">Login for prices</span>
-          </div>
         </header>
 
         <table className="card-table">
