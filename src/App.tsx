@@ -287,7 +287,7 @@ export default function App() {
                   Logout
                 </button>
               ) : (
-                <a className="btn btn--primary" href={loginUrl}>
+                <a className="btn btn--primary" href={loginUrl()}>
                   Connect to Zerodha
                 </a>
               )}
@@ -301,7 +301,7 @@ export default function App() {
       {adminAuthenticated && !authenticated && !verifying && (
         <div className="banner">
           Click{" "}
-          <a className="link" href={loginUrl}>
+          <a className="link" href={loginUrl()}>
             Connect to Zerodha
           </a>{" "}
           to stream live prices &amp; premium/discount.

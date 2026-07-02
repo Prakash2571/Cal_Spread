@@ -85,7 +85,10 @@ export function logoutAdmin(): void {
 }
 
 /** URL the user clicks to start the Zerodha login flow (handled by backend). */
-export const loginUrl = `${API_BASE_URL}/login`;
+export function loginUrl(): string {
+  const url = `${API_BASE_URL}/login`;
+  return adminToken ? `${url}?x-admin-token=${encodeURIComponent(adminToken)}` : url;
+}
 
 /**
  * Exchange the request_token (received at the /zerodha/verify redirect) for an
