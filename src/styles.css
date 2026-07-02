@@ -15,6 +15,11 @@
   --neg: #ff5a6a;
   --neg-soft: rgba(255, 90, 106, 0.13);
   --amber: #f5b441;
+  /* Premium / discount accent colours */
+  --prem: #3d8bfd;
+  --prem-soft: rgba(61, 139, 253, 0.14);
+  --disc: #ff5cba;
+  --disc-soft: rgba(255, 92, 186, 0.14);
   --radius: 14px;
   --shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
 }
@@ -309,13 +314,13 @@ body {
 }
 
 .tag--prem {
-  color: var(--pos);
-  background: var(--pos-soft);
+  color: var(--prem);
+  background: var(--prem-soft);
 }
 
 .tag--disc {
-  color: var(--neg);
-  background: var(--neg-soft);
+  color: var(--disc);
+  background: var(--disc-soft);
 }
 
 /* ---------------- Cards grid ---------------- */
@@ -496,13 +501,13 @@ body {
 }
 
 .chip.prem {
-  color: var(--pos);
-  background: var(--pos-soft);
+  color: var(--prem);
+  background: var(--prem-soft);
 }
 
 .chip.disc {
-  color: var(--neg);
-  background: var(--neg-soft);
+  color: var(--disc);
+  background: var(--disc-soft);
 }
 
 .chip.muted {
