@@ -130,9 +130,27 @@ export default function App() {
       .catch(() => setDivYields({}));
   }, []);
 
-  // Open ONE live stream for every token once authenticated + board is ready.
+  // While no Zerodha session is active, poll the backend so that ANY open
+  // public tab automatically starts showing live data once the admin connects
+  // Zerodha (no manual refresh needed).
   useEffect(() => {
-    if (!adminAuthenticated || !authenticated || board.length === 0) return;
+    if (authenticated) return;
+    const id = setInterval(() => {
+      getStatus()
+        .then((s) => {
+          if (s.authenticated) setAuthenticated(true);
+        })
+        .catch(() => {
+          /* backend unreachable — keep trying */
+        });
+    }, 15000);
+    return () => clearInterval(id);
+  }, [authenticated]);
+
+  // Open ONE live stream for every token once a Zerodha session is active on
+  // the backend (works for ANY visitor, not just the admin who logged in).
+  useEffect(() => {
+    if (!authenticated || board.length === 0) return;
 
     const tokens = board.flatMap((b) => [
       b.spot_token,
@@ -178,7 +196,7 @@ export default function App() {
       setLive(false);
       setStreamOpen(false);
       setAuthenticated(false);
-      setError("Live feed rejected by Zerodha — your session expired. Please Connect again.");
+      setError("Live feed disconnected — the data provider session ended.");
       es.close();
     });
     es.onerror = () => setLive(false);
@@ -188,7 +206,7 @@ export default function App() {
       setStreamOpen(false);
       es.close();
     };
-  }, [adminAuthenticated, authenticated, board]);
+  }, [authenticated, board]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -258,24 +276,24 @@ export default function App() {
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+          {(authenticated || adminAuthenticated) && (
+            <span className={`status status--${status.kind}`}>
+              <span className="status-dot" />
+              {status.label}
+            </span>
+          )}
           {adminAuthenticated && (
-            <>
-              <span className={`status status--${status.kind}`}>
-                <span className="status-dot" />
-                {status.label}
-              </span>
-              <label className="rf" title="Annual risk-free rate used for fair value">
-                <span>rf</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={rfRate}
-                  onChange={(e) => updateRf(e.target.value)}
-                />
-                <span>%</span>
-              </label>
-            </>
+            <label className="rf" title="Annual risk-free rate used for fair value">
+              <span>rf</span>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={rfRate}
+                onChange={(e) => updateRf(e.target.value)}
+              />
+              <span>%</span>
+            </label>
           )}
           <span className="count">
             <strong>{filtered.length.toLocaleString()}</strong> stocks
@@ -310,7 +328,7 @@ export default function App() {
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      {adminAuthenticated && (
+      {authenticated && (
         <div className="legend">
           <span>
             <strong>Fair</strong> = Spot × [1 + (rf − div)×(days/365)] · dividend
@@ -337,7 +355,7 @@ export default function App() {
               ticks={ticks}
               rf={rfRate}
               div={divYields[item.symbol] ?? 0}
-              showPrices={adminAuthenticated}
+              showPrices={authenticated}
             />
           ))}
         </div>
