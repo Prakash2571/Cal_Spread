@@ -14,6 +14,7 @@ import {
   type Tick,
 } from "./api.ts";
 import StockCard from "./StockCard.tsx";
+import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
 
 type TickMap = Record<number, Tick>;
@@ -342,9 +343,10 @@ export default function App() {
       )}
 
       {loading && board.length === 0 ? (
-        <div className="empty">
-          <span className="spinner" />
-          Loading F&amp;O stocks…
+        <div className="cards">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       ) : (
         <div className="cards">
