@@ -1,5 +1,23 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
+/**
+ * Base URL of the backend API.
+ *
+ * IMPORTANT: every endpoint below is prefixed with "/api/...". So
+ * VITE_API_BASE_URL must be the backend ORIGIN only, WITHOUT a trailing
+ * "/api" (e.g. "https://api.calspread.online" or "https://calspread.online").
+ * As a safety net we strip a trailing slash and a trailing "/api" so a
+ * misconfigured value like "https://calspread.online/api" can't produce
+ * doubled "/api/api/..." request URLs.
+ */
+function normalizeBaseUrl(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\/+$/, "") // drop trailing slash(es)
+    .replace(/\/api$/i, ""); // drop a trailing /api (endpoints add it themselves)
+}
+
+const API_BASE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001",
+);
 
 let adminToken: string | null = localStorage.getItem("cal_spread_admin_token");
 
@@ -86,7 +104,7 @@ export function logoutAdmin(): void {
 
 /** URL the user clicks to start the Zerodha login flow (handled by backend). */
 export function loginUrl(): string {
-  const url = `${API_BASE_URL}/login`;
+  const url = `${API_BASE_URL}/api/login`;
   return adminToken ? `${url}?x-admin-token=${encodeURIComponent(adminToken)}` : url;
 }
 
@@ -115,7 +133,7 @@ export async function createSession(
 
 /** Backend health/auth status. */
 export async function getStatus(): Promise<{ authenticated: boolean }> {
-  const res = await fetch(`${API_BASE_URL}/`);
+  const res = await fetch(`${API_BASE_URL}/api/status`);
   if (!res.ok) throw new Error(`Backend not reachable (HTTP ${res.status}).`);
   return res.json();
 }
