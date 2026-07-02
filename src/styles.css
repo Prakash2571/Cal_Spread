@@ -587,3 +587,99 @@ body {
 .legend-sep {
   color: var(--faint);
 }
+
+
+/* ---------------- Admin Page ---------------- */
+.admin-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.admin-card {
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 40px 36px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.admin-card .brand-mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+}
+
+.admin-card .brand-mark svg {
+  width: 28px;
+  height: 28px;
+}
+
+.admin-card h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.admin-subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 32px;
+}
+
+.admin-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.admin-input::placeholder {
+  color: var(--faint);
+}
+
+.admin-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(109, 139, 255, 0.18);
+}
+
+.admin-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-error {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--neg-soft);
+  border: 1px solid rgba(255, 90, 106, 0.4);
+  color: #ffb9c0;
+  font-size: 13.5px;
+}
+
+.btn--full {
+  width: 100%;
+}
+
+.banner--info {
+  background: rgba(109, 139, 255, 0.08);
+  border-color: rgba(109, 139, 255, 0.3);
+  color: #b9c8ff;
+}

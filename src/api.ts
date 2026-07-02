@@ -1,6 +1,31 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
 
+let adminToken: string | null = localStorage.getItem("cal_spread_admin_token");
+
+export function setAdminToken(token: string | null) {
+  adminToken = token;
+  if (token) {
+    localStorage.setItem("cal_spread_admin_token", token);
+  } else {
+    localStorage.removeItem("cal_spread_admin_token");
+  }
+}
+
+export function getAdminToken(): string | null {
+  return adminToken;
+}
+
+function getHeaders(): HeadersInit {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  if (adminToken) {
+    headers["x-admin-token"] = adminToken;
+  }
+  return headers;
+}
+
 export interface Instrument {
   instrument_token: number;
   exchange_token: number;
@@ -23,6 +48,42 @@ export interface InstrumentsResponse {
   instruments: Instrument[];
 }
 
+/** Verify admin secret and get admin token */
+export async function verifyAdminSecret(
+  secret: string,
+): Promise<{ success: boolean; token: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/admin/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret }),
+  });
+  const body = (await res.json()) as {
+    success?: boolean;
+    token?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Admin verification failed (HTTP ${res.status}).`);
+  }
+  return { success: !!body.success, token: body.token ?? "" };
+}
+
+/** Check admin authentication status */
+export async function getAdminStatus(): Promise<{ authenticated: boolean }> {
+  const headers: HeadersInit = {};
+  if (adminToken) {
+    headers["x-admin-token"] = adminToken;
+  }
+  const res = await fetch(`${API_BASE_URL}/api/admin/status`, { headers });
+  if (!res.ok) return { authenticated: false };
+  return res.json();
+}
+
+/** Logout admin session */
+export function logoutAdmin(): void {
+  setAdminToken(null);
+}
+
 /** URL the user clicks to start the Zerodha login flow (handled by backend). */
 export const loginUrl = `${API_BASE_URL}/login`;
 
@@ -35,7 +96,7 @@ export async function createSession(
 ): Promise<{ authenticated: boolean; user_name?: string }> {
   const res = await fetch(`${API_BASE_URL}/api/session`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify({ request_token: requestToken }),
   });
   const body = (await res.json()) as {
@@ -152,7 +213,8 @@ export async function fetchFnoDetail(symbol: string): Promise<FnoDetail> {
 
 /** URL for the live SSE tick stream for the given instrument tokens. */
 export function streamUrl(tokens: number[]): string {
-  return `${API_BASE_URL}/api/stream?tokens=${tokens.join(",")}`;
+  const url = `${API_BASE_URL}/api/stream?tokens=${tokens.join(",")}`;
+  return adminToken ? `${url}&x-admin-token=${encodeURIComponent(adminToken)}` : url;
 }
 
 /**
@@ -160,7 +222,11 @@ export function streamUrl(tokens: number[]): string {
  * Works regardless of market hours, so values/premiums show even after close.
  */
 export async function fetchQuotes(tokens: number[]): Promise<Tick[]> {
-  const res = await fetch(`${API_BASE_URL}/api/quotes?tokens=${tokens.join(",")}`);
+  const headers: HeadersInit = {};
+  if (adminToken) {
+    headers["x-admin-token"] = adminToken;
+  }
+  const res = await fetch(`${API_BASE_URL}/api/quotes?tokens=${tokens.join(",")}`, { headers });
   const body = (await res.json()) as { ticks: Tick[]; error?: string };
   if (!res.ok) {
     throw new Error(body.error ?? `Failed to load quotes (HTTP ${res.status}).`);

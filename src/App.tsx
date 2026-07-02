@@ -8,10 +8,13 @@ import {
   logout,
   loginUrl,
   streamUrl,
+  getAdminStatus,
+  logoutAdmin,
   type BoardItem,
   type Tick,
 } from "./api.ts";
 import StockCard from "./StockCard.tsx";
+import Admin from "./Admin.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -24,6 +27,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [live, setLive] = useState(false);
   const [streamOpen, setStreamOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
@@ -58,6 +62,20 @@ export default function App() {
     setAuthenticated(false);
     setLive(false);
   }
+
+  async function handleAdminLogout() {
+    logoutAdmin();
+    await handleLogout();
+    setAdminAuthenticated(false);
+  }
+
+  // Check for admin route
+  useEffect(() => {
+    if (window.location.pathname === "/admin/verify") {
+      // Don't do anything else, show admin login
+      return;
+    }
+  }, []);
 
   // Handle the Zerodha redirect at /zerodha/verify?request_token=...
   useEffect(() => {
@@ -97,6 +115,12 @@ export default function App() {
   // Load the board + auth status on first open.
   useEffect(() => {
     void loadBoard();
+    
+    // Check admin authentication
+    getAdminStatus()
+      .then((s) => setAdminAuthenticated(s.authenticated))
+      .catch(() => setAdminAuthenticated(false));
+    
     getStatus()
       .then((s) => setAuthenticated(s.authenticated))
       .catch(() => setAuthenticated(false));
@@ -108,7 +132,7 @@ export default function App() {
 
   // Open ONE live stream for every token once authenticated + board is ready.
   useEffect(() => {
-    if (!authenticated || board.length === 0) return;
+    if (!adminAuthenticated || !authenticated || board.length === 0) return;
 
     const tokens = board.flatMap((b) => [
       b.spot_token,
@@ -164,7 +188,7 @@ export default function App() {
       setStreamOpen(false);
       es.close();
     };
-  }, [authenticated, board]);
+  }, [adminAuthenticated, authenticated, board]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -183,6 +207,23 @@ export default function App() {
       : authenticated
         ? { kind: "wait", label: "Connecting…" }
         : { kind: "idle", label: "Login for live" };
+
+  // Handle admin verification route
+  if (window.location.pathname === "/admin/verify") {
+    if (adminAuthenticated) {
+      // Redirect to home after successful admin auth
+      window.history.replaceState({}, "", "/");
+    } else {
+      return (
+        <Admin
+          onAuthenticated={() => {
+            setAdminAuthenticated(true);
+            window.history.replaceState({}, "", "/");
+          }}
+        />
+      );
+    }
+  }
 
   return (
     <div className="app">
@@ -217,31 +258,43 @@ export default function App() {
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <span className={`status status--${status.kind}`}>
-            <span className="status-dot" />
-            {status.label}
-          </span>
-          <label className="rf" title="Annual risk-free rate used for fair value">
-            <span>rf</span>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              value={rfRate}
-              onChange={(e) => updateRf(e.target.value)}
-            />
-            <span>%</span>
-          </label>
+          {adminAuthenticated && (
+            <>
+              <span className={`status status--${status.kind}`}>
+                <span className="status-dot" />
+                {status.label}
+              </span>
+              <label className="rf" title="Annual risk-free rate used for fair value">
+                <span>rf</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={rfRate}
+                  onChange={(e) => updateRf(e.target.value)}
+                />
+                <span>%</span>
+              </label>
+            </>
+          )}
           <span className="count">
             <strong>{filtered.length.toLocaleString()}</strong> stocks
           </span>
-          {authenticated ? (
-            <button className="btn" onClick={() => void handleLogout()}>
-              Logout
-            </button>
+          {adminAuthenticated ? (
+            <>
+              {authenticated ? (
+                <button className="btn" onClick={() => void handleAdminLogout()}>
+                  Logout
+                </button>
+              ) : (
+                <a className="btn btn--primary" href={loginUrl}>
+                  Connect to Zerodha
+                </a>
+              )}
+            </>
           ) : (
-            <a className="btn btn--primary" href={loginUrl}>
-              Connect to Zerodha
+            <a className="btn btn--primary" href="/admin/verify">
+              Admin Login
             </a>
           )}
         </div>
@@ -249,9 +302,15 @@ export default function App() {
 
       {verifying && <div className="banner">Verifying your Zerodha login…</div>}
 
-      {!authenticated && !verifying && (
+      {!adminAuthenticated && !verifying && (
+        <div className="banner banner--info">
+          Public view: Showing F&amp;O stock list. <a className="link" href="/admin/verify">Admin login</a> required for live prices and Zerodha integration.
+        </div>
+      )}
+
+      {adminAuthenticated && !authenticated && !verifying && (
         <div className="banner">
-          Showing the F&amp;O list below. Click{" "}
+          Click{" "}
           <a className="link" href={loginUrl}>
             Connect to Zerodha
           </a>{" "}
@@ -261,16 +320,18 @@ export default function App() {
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      <div className="legend">
-        <span>
-          <strong>Fair</strong> = Spot × [1 + (rf − div)×(days/365)] · dividend
-          yields via Yahoo
-        </span>
-        <span className="legend-sep">•</span>
-        <span>Prem/Disc = future − spot</span>
-        <span className="tag tag--prem">premium</span>
-        <span className="tag tag--disc">discount</span>
-      </div>
+      {adminAuthenticated && (
+        <div className="legend">
+          <span>
+            <strong>Fair</strong> = Spot × [1 + (rf − div)×(days/365)] · dividend
+            yields via Yahoo
+          </span>
+          <span className="legend-sep">•</span>
+          <span>Prem/Disc = future − spot</span>
+          <span className="tag tag--prem">premium</span>
+          <span className="tag tag--disc">discount</span>
+        </div>
+      )}
 
       {loading && board.length === 0 ? (
         <div className="empty">
@@ -286,6 +347,7 @@ export default function App() {
               ticks={ticks}
               rf={rfRate}
               div={divYields[item.symbol] ?? 0}
+              showPrices={adminAuthenticated}
             />
           ))}
         </div>

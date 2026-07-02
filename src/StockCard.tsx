@@ -14,11 +14,60 @@ interface Props {
   ticks: Record<number, Tick>;
   rf: number;
   div: number;
+  showPrices?: boolean;
 }
 
-export default function StockCard({ item, ticks, rf, div }: Props) {
+export default function StockCard({ item, ticks, rf, div, showPrices = true }: Props) {
   const spot = ticks[item.spot_token];
   const spotLast = spot?.last_price ?? null;
+
+  // For public view, hide all pricing data
+  if (!showPrices) {
+    return (
+      <article className="card">
+        <header className="card-head">
+          <div className="card-title">
+            <span className="card-symbol">{item.symbol}</span>
+            <span className="card-name">{item.name}</span>
+          </div>
+          <div className="card-quote">
+            <span className="chip muted">Login for prices</span>
+          </div>
+        </header>
+
+        <table className="card-table">
+          <thead>
+            <tr>
+              <th>Contract</th>
+              <th>LTP</th>
+              <th>Fair</th>
+              <th>Prem/Disc</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="row-spot">
+              <td className="contract-name">Spot</td>
+              <td className="num muted">—</td>
+              <td className="num muted">—</td>
+              <td className="num muted">—</td>
+            </tr>
+
+            {item.futures.map((f) => (
+              <tr key={f.token}>
+                <td>
+                  <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
+                  <span className="contract-meta">{daysToExpiry(f.expiry)}d</span>
+                </td>
+                <td className="num muted">—</td>
+                <td className="num muted">—</td>
+                <td className="num muted">—</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </article>
+    );
+  }
 
   return (
     <article className="card">
