@@ -3,6 +3,7 @@ import {
   daysToExpiry,
   fairPrice,
   fmt,
+  fmtCompact,
   fmtSigned,
   formatExpiry,
   pctText,
@@ -111,6 +112,7 @@ export default function StockCard({
           {item.futures.map((f) => {
             const t = ticks[f.token];
             const last = t?.last_price ? t.last_price : null; // 0 = no trade yet
+            const oi = t?.oi ?? 0;
             const days = daysToExpiry(f.expiry);
             const fair = fairPrice(spotLast, rf, days, div);
             const premium =
@@ -120,6 +122,9 @@ export default function StockCard({
                 <td>
                   <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
                   <span className="contract-meta">{days}d</span>
+                  {oi > 0 && (
+                    <span className="contract-oi">OI {fmtCompact(oi)}</span>
+                  )}
                 </td>
                 <td className="num mono">{fmt(last)}</td>
                 <td

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Tick, Trade } from "./api.ts";
-import { fmt, formatExpiry } from "./format.ts";
+import { fmt, fmtMoney, formatExpiry } from "./format.ts";
 
 interface Props {
   trades: Trade[];
@@ -37,10 +37,10 @@ function pnlClass(pnl: number | null): string {
   return pnl > 0 ? "pnl-pos" : pnl < 0 ? "pnl-neg" : "muted";
 }
 
-function fmtMoney(pnl: number | null): string {
-  if (pnl === null) return "—";
-  const sign = pnl > 0 ? "+" : pnl < 0 ? "−" : "";
-  return `${sign}₹${Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+/** Return on margin as a %, or null if margin unknown. */
+function roiPct(pnl: number | null, margin: number | null): number | null {
+  if (pnl === null || !margin) return null;
+  return (pnl / margin) * 100;
 }
 
 export default function TradesPanel({
@@ -105,11 +105,17 @@ export default function TradesPanel({
                         </span>
                       </div>
                       <div className="trade-meta">
-                        {t.lot_size} qty · {fmtDateTime(t.opened_at)}
+                        {t.lot_size} qty · margin {fmtMoney(t.margin)} ·{" "}
+                        {fmtDateTime(t.opened_at)}
                       </div>
                     </div>
                     <div className="trade-right">
                       <span className={`trade-pnl ${pnlClass(pnl)}`}>{fmtMoney(pnl)}</span>
+                      {roiPct(pnl, t.margin) !== null && (
+                        <span className={`trade-roi ${pnlClass(pnl)}`}>
+                          {roiPct(pnl, t.margin)!.toFixed(2)}% on margin
+                        </span>
+                      )}
                       <button
                         className="btn btn--sm"
                         disabled={closingId === t.id}
@@ -150,7 +156,8 @@ export default function TradesPanel({
                       </span>
                     </div>
                     <div className="trade-meta">
-                      {t.lot_size} qty · opened {fmtDateTime(t.opened_at)}
+                      {t.lot_size} qty · margin {fmtMoney(t.margin)} · opened{" "}
+                      {fmtDateTime(t.opened_at)}
                       {t.closed_at ? ` · closed ${fmtDateTime(t.closed_at)}` : ""}
                     </div>
                   </div>
@@ -158,6 +165,11 @@ export default function TradesPanel({
                     <span className={`trade-pnl ${pnlClass(t.close_pnl)}`}>
                       {fmtMoney(t.close_pnl)}
                     </span>
+                    {roiPct(t.close_pnl, t.margin) !== null && (
+                      <span className={`trade-roi ${pnlClass(t.close_pnl)}`}>
+                        {roiPct(t.close_pnl, t.margin)!.toFixed(2)}% on margin
+                      </span>
+                    )}
                     <span className="trade-closed-tag">closed</span>
                   </div>
                 </div>

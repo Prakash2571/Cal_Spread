@@ -55,6 +55,25 @@ export function pctClass(
   return p > 0 ? "pos" : p < 0 ? "neg" : "";
 }
 
+/** Compact Indian-style number for open interest, e.g. 1.2Cr / 3.4L / 12,345. */
+export function fmtCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value) || value <= 0) {
+    return "—";
+  }
+  if (value >= 1e7) return `${(value / 1e7).toFixed(2)}Cr`;
+  if (value >= 1e5) return `${(value / 1e5).toFixed(2)}L`;
+  return value.toLocaleString("en-IN");
+}
+
+/** ₹ money with sign, e.g. +₹1,234.50 / −₹980. */
+export function fmtMoney(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}₹${Math.abs(value).toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 /** CSS class for a premium/discount value: "prem" / "disc" / "muted". */
 export function pdClass(premium: number | null): string {
   if (premium === null) return "muted";

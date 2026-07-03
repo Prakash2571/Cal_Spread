@@ -124,6 +124,7 @@ export interface Trade {
   close_pnl: number | null;
   buy_close: number | null;
   sell_close: number | null;
+  margin: number | null;
 }
 
 /** Take a 1-lot calendar-spread trade for a symbol (buy discount / sell premium). */
@@ -284,6 +285,7 @@ export interface Tick {
   token: number;
   last_price: number;
   close_price: number;
+  oi?: number; // open interest (F&O only)
 }
 
 /** Fetch the spot + 3 nearest futures for a single F&O stock. */
