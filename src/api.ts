@@ -183,6 +183,7 @@ export interface BoardItem {
   name: string;
   spot_token: number;
   futures: BoardFuture[];
+  is_index?: boolean;
 }
 
 /** Fetch the full F&O board (every stock + its spot + 3 nearest futures). */

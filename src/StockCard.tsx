@@ -27,7 +27,10 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
       <article className="card">
         <header className="card-head">
           <div className="card-title">
-            <span className="card-symbol">{item.symbol}</span>
+            <span className="card-symbol">
+              {item.symbol}
+              {item.is_index && <span className="badge-index">INDEX</span>}
+            </span>
             <span className="card-name">{item.name}</span>
           </div>
         </header>
@@ -63,7 +66,10 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
     <article className="card">
       <header className="card-head">
         <div className="card-title">
-          <span className="card-symbol">{item.symbol}</span>
+          <span className="card-symbol">
+            {item.symbol}
+            {item.is_index && <span className="badge-index">INDEX</span>}
+          </span>
           <span className="card-name">{item.name}</span>
         </div>
         <div className="card-quote">
