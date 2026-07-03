@@ -15,9 +15,23 @@ interface Props {
   rf: number;
   div: number;
   showPrices?: boolean;
+  canTrade?: boolean;
+  tradeBusy?: boolean;
+  hasOpenTrade?: boolean;
+  onTakeTrade?: (symbol: string) => void;
 }
 
-export default function StockCard({ item, ticks, rf, div, showPrices = true }: Props) {
+export default function StockCard({
+  item,
+  ticks,
+  rf,
+  div,
+  showPrices = true,
+  canTrade = false,
+  tradeBusy = false,
+  hasOpenTrade = false,
+  onTakeTrade,
+}: Props) {
   const spot = ticks[item.spot_token];
   // Treat a 0 last price as "no trade yet" (null) rather than a real price, so
   // untraded contracts don't render misleading premiums/discounts.
@@ -128,6 +142,23 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
           })}
         </tbody>
       </table>
+
+      {canTrade && item.futures.length >= 2 && (
+        <div className="card-foot">
+          <button
+            className="btn btn--sm btn--trade"
+            disabled={tradeBusy || hasOpenTrade}
+            onClick={() => onTakeTrade?.(item.symbol)}
+            title="Buy the discount leg, sell the premium leg (current & next month, 1 lot)"
+          >
+            {hasOpenTrade
+              ? "Trade open"
+              : tradeBusy
+                ? "Taking…"
+                : "Take Trade"}
+          </button>
+        </div>
+      )}
     </article>
   );
 }

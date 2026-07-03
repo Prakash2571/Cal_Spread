@@ -10,12 +10,17 @@ import {
   streamUrl,
   getAdminStatus,
   logoutAdmin,
+  createTrade,
+  listTrades,
+  closeTrade,
   type BoardItem,
   type Tick,
+  type Trade,
 } from "./api.ts";
 import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
+import TradesPanel from "./TradesPanel.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -35,6 +40,66 @@ export default function App() {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
     return Number.isFinite(saved) ? saved : 6.5;
   });
+
+  // --- Trades (admin only) ---
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [tradesOpen, setTradesOpen] = useState(false);
+  const [tradesLoading, setTradesLoading] = useState(false);
+  const [tradesError, setTradesError] = useState<string | null>(null);
+  const [takingSymbol, setTakingSymbol] = useState<string | null>(null);
+  const [closingId, setClosingId] = useState<string | null>(null);
+
+  const openTradeSymbols = useMemo(
+    () =>
+      new Set(
+        trades.filter((t) => t.status === "open").map((t) => t.symbol.toUpperCase()),
+      ),
+    [trades],
+  );
+
+  async function refreshTrades() {
+    setTradesLoading(true);
+    setTradesError(null);
+    try {
+      const res = await listTrades();
+      setTrades(res.trades);
+      if (!res.dbEnabled) {
+        setTradesError("Trade storage isn't configured on the server (MONGODB_URI).");
+      }
+    } catch (err) {
+      setTradesError(err instanceof Error ? err.message : "Failed to load trades.");
+    } finally {
+      setTradesLoading(false);
+    }
+  }
+
+  async function handleTakeTrade(symbol: string) {
+    setTakingSymbol(symbol);
+    setTradesError(null);
+    try {
+      const trade = await createTrade(symbol);
+      setTrades((prev) => [trade, ...prev.filter((t) => t.id !== trade.id)]);
+      setTradesOpen(true);
+    } catch (err) {
+      setTradesError(err instanceof Error ? err.message : "Failed to take trade.");
+      setTradesOpen(true);
+    } finally {
+      setTakingSymbol(null);
+    }
+  }
+
+  async function handleCloseTrade(id: string) {
+    setClosingId(id);
+    setTradesError(null);
+    try {
+      const updated = await closeTrade(id);
+      setTrades((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    } catch (err) {
+      setTradesError(err instanceof Error ? err.message : "Failed to close trade.");
+    } finally {
+      setClosingId(null);
+    }
+  }
 
   function updateRf(value: string) {
     const n = parseFloat(value);
@@ -130,6 +195,12 @@ export default function App() {
       .then(setDivYields)
       .catch(() => setDivYields({}));
   }, []);
+
+  // Load trades once the admin is authenticated.
+  useEffect(() => {
+    if (!adminAuthenticated) return;
+    void refreshTrades();
+  }, [adminAuthenticated]);
 
   // While no Zerodha session is active, poll the backend so that ANY open
   // public tab automatically starts showing live data once the admin connects
@@ -301,6 +372,18 @@ export default function App() {
           </span>
           {adminAuthenticated && (
             <>
+              <button
+                className="btn"
+                onClick={() => {
+                  setTradesOpen(true);
+                  void refreshTrades();
+                }}
+              >
+                Trades
+                {openTradeSymbols.size > 0 && (
+                  <span className="btn-badge">{openTradeSymbols.size}</span>
+                )}
+              </button>
               {authenticated ? (
                 <button className="btn" onClick={() => void handleAdminLogout()}>
                   Logout
@@ -352,6 +435,10 @@ export default function App() {
               rf={rfRate}
               div={divYields[item.symbol] ?? 0}
               showPrices={authenticated}
+              canTrade={adminAuthenticated && authenticated}
+              tradeBusy={takingSymbol === item.symbol}
+              hasOpenTrade={openTradeSymbols.has(item.symbol.toUpperCase())}
+              onTakeTrade={handleTakeTrade}
             />
           ))}
         </div>
@@ -359,6 +446,18 @@ export default function App() {
 
       {!loading && filtered.length === 0 && (
         <div className="empty">No F&amp;O stocks match “{query}”.</div>
+      )}
+
+      {tradesOpen && (
+        <TradesPanel
+          trades={trades}
+          ticks={ticks}
+          loading={tradesLoading}
+          error={tradesError}
+          closingId={closingId}
+          onClose={() => setTradesOpen(false)}
+          onCloseTrade={(id) => void handleCloseTrade(id)}
+        />
       )}
     </div>
   );

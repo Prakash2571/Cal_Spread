@@ -102,6 +102,71 @@ export function logoutAdmin(): void {
   setAdminToken(null);
 }
 
+// ---------------- Calendar-spread trades (admin only) ----------------
+
+export interface TradeLeg {
+  token: number;
+  expiry: string;
+  entry: number;
+}
+
+export interface Trade {
+  id: string;
+  symbol: string;
+  name: string;
+  is_index: boolean;
+  lot_size: number;
+  buy: TradeLeg;
+  sell: TradeLeg;
+  status: "open" | "closed";
+  opened_at: string;
+  closed_at: string | null;
+  close_pnl: number | null;
+  buy_close: number | null;
+  sell_close: number | null;
+}
+
+/** Take a 1-lot calendar-spread trade for a symbol (buy discount / sell premium). */
+export async function createTrade(symbol: string): Promise<Trade> {
+  const res = await fetch(`${API_BASE_URL}/api/trades`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ symbol }),
+  });
+  const body = (await res.json()) as { trade?: Trade; error?: string };
+  if (!res.ok || !body.trade) {
+    throw new Error(body.error ?? `Failed to take trade (HTTP ${res.status}).`);
+  }
+  return body.trade;
+}
+
+/** List all trades (open + closed), newest first. */
+export async function listTrades(): Promise<{ dbEnabled: boolean; trades: Trade[] }> {
+  const res = await fetch(`${API_BASE_URL}/api/trades`, { headers: getHeaders() });
+  const body = (await res.json()) as {
+    dbEnabled?: boolean;
+    trades?: Trade[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load trades (HTTP ${res.status}).`);
+  }
+  return { dbEnabled: !!body.dbEnabled, trades: body.trades ?? [] };
+}
+
+/** Close a trade (locks in final P&L). */
+export async function closeTrade(id: string): Promise<Trade> {
+  const res = await fetch(`${API_BASE_URL}/api/trades/${id}/close`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  const body = (await res.json()) as { trade?: Trade; error?: string };
+  if (!res.ok || !body.trade) {
+    throw new Error(body.error ?? `Failed to close trade (HTTP ${res.status}).`);
+  }
+  return body.trade;
+}
+
 /** URL the user clicks to start the Zerodha login flow (handled by backend). */
 export function loginUrl(): string {
   const url = `${API_BASE_URL}/api/login`;
