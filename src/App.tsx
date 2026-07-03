@@ -57,6 +57,16 @@ export default function App() {
     [trades],
   );
 
+  // Live spot last-price per symbol, for the Trades panel header.
+  const spotBySymbol = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const b of board) {
+      const p = ticks[b.spot_token]?.last_price;
+      if (p) m[b.symbol.toUpperCase()] = p;
+    }
+    return m;
+  }, [board, ticks]);
+
   async function refreshTrades() {
     setTradesLoading(true);
     setTradesError(null);
@@ -452,6 +462,7 @@ export default function App() {
         <TradesPanel
           trades={trades}
           ticks={ticks}
+          spotBySymbol={spotBySymbol}
           loading={tradesLoading}
           error={tradesError}
           closingId={closingId}
