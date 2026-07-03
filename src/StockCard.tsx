@@ -19,7 +19,9 @@ interface Props {
 
 export default function StockCard({ item, ticks, rf, div, showPrices = true }: Props) {
   const spot = ticks[item.spot_token];
-  const spotLast = spot?.last_price ?? null;
+  // Treat a 0 last price as "no trade yet" (null) rather than a real price, so
+  // untraded contracts don't render misleading premiums/discounts.
+  const spotLast = spot?.last_price ? spot.last_price : null;
 
   // For public view, hide all pricing data
   if (!showPrices) {
@@ -94,7 +96,7 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
         <tbody>
           {item.futures.map((f) => {
             const t = ticks[f.token];
-            const last = t?.last_price ?? null;
+            const last = t?.last_price ? t.last_price : null; // 0 = no trade yet
             const days = daysToExpiry(f.expiry);
             const fair = fairPrice(spotLast, rf, days, div);
             const premium =
