@@ -20,6 +20,9 @@
   --prem-soft: rgba(61, 139, 253, 0.15);
   --disc: #ffa63d;
   --disc-soft: rgba(255, 166, 61, 0.16);
+  /* Open interest — a distinct cyan accent (not red/green) */
+  --oi: #22d3ee;
+  --oi-soft: rgba(34, 211, 238, 0.14);
   --radius: 16px;
   --radius-sm: 10px;
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
@@ -611,11 +614,16 @@ body {
 }
 
 .contract-oi {
-  display: block;
-  margin-top: 2px;
-  color: var(--faint);
-  font-size: 10.5px;
-  font-weight: 500;
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  color: var(--oi);
+  background: var(--oi-soft);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   white-space: nowrap;
 }
@@ -1127,6 +1135,29 @@ body {
   font-weight: 600;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   opacity: 0.85;
+}
+
+.trade-pnl-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Per-leg P&L breakdown (BUY / SELL) */
+.trade-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 2px 0 5px;
+}
+
+.leg-pnl {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .trade-closed-tag {
