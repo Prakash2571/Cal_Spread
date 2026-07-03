@@ -42,13 +42,6 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
             </tr>
           </thead>
           <tbody>
-            <tr className="row-spot">
-              <td className="contract-name">Spot</td>
-              <td className="num muted">—</td>
-              <td className="num muted">—</td>
-              <td className="num muted">—</td>
-            </tr>
-
             {item.futures.map((f) => (
               <tr key={f.token}>
                 <td>
@@ -93,13 +86,6 @@ export default function StockCard({ item, ticks, rf, div, showPrices = true }: P
           </tr>
         </thead>
         <tbody>
-          <tr className="row-spot">
-            <td className="contract-name">Spot</td>
-            <td className="num mono">{fmt(spotLast)}</td>
-            <td className="num muted">—</td>
-            <td className="num muted">—</td>
-          </tr>
-
           {item.futures.map((f) => {
             const t = ticks[f.token];
             const last = t?.last_price ?? null;

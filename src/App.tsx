@@ -331,12 +331,6 @@ export default function App() {
 
       {authenticated && (
         <div className="legend">
-          <span>
-            <strong>Fair</strong> = Spot × [1 + (rf − div)×(days/365)] · dividend
-            yields via Yahoo
-          </span>
-          <span className="legend-sep">•</span>
-          <span>Prem/Disc = future − spot</span>
           <span className="tag tag--prem">premium</span>
           <span className="tag tag--disc">discount</span>
         </div>
