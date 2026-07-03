@@ -75,7 +75,7 @@ function LegRow({ side, expiry, entry, now, pnl }: LegRowProps) {
       <span className={`leg-tag ${side === "BUY" ? "tag-buy" : "tag-sell"}`}>{side}</span>
       <span className="leg-exp">{formatExpiry(expiry)}</span>
       <span className="leg-cell">@ {fmt(entry)}</span>
-      <span className="leg-cell leg-now">→ {fmt(now)}</span>
+      <span className="leg-cell leg-now">{fmt(now)}</span>
       <span className={`leg-cell leg-pnl ${pnlClass(pnl)}`}>{fmtMoney(pnl)}</span>
     </div>
   );

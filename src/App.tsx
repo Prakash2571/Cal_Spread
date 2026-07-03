@@ -422,13 +422,6 @@ export default function App() {
 
       {error && <div className="banner banner--error">{error}</div>}
 
-      {authenticated && (
-        <div className="legend">
-          <span className="tag tag--prem">premium</span>
-          <span className="tag tag--disc">discount</span>
-        </div>
-      )}
-
       {loading && board.length === 0 ? (
         <div className="cards">
           {Array.from({ length: 9 }).map((_, i) => (
