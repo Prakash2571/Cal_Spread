@@ -214,6 +214,37 @@ export async function fetchOiHistory(symbol: string): Promise<OiHistory> {
   return body;
 }
 
+export interface IntradayPoint {
+  t: string; // full ISO timestamp
+  close: number;
+}
+
+export interface IntradayFutureSeries {
+  token: number;
+  expiry: string;
+  points: IntradayPoint[];
+}
+
+export interface IntradayHistory {
+  symbol: string;
+  name: string;
+  is_index: boolean;
+  futures: IntradayFutureSeries[];
+}
+
+/** Fetch ~1 week of hourly closing price for a symbol's futures. */
+export async function fetchIntradayHistory(symbol: string): Promise<IntradayHistory> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/intraday/${encodeURIComponent(symbol)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as IntradayHistory & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load intraday (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 /** Close a trade (locks in final P&L). */
 export async function closeTrade(id: string): Promise<Trade> {
   const res = await fetch(`${API_BASE_URL}/api/trades/${id}/close`, {

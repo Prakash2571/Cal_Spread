@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { fetchOiHistory, type BoardItem, type OiHistory, type Tick } from "./api.ts";
+import {
+  fetchOiHistory,
+  fetchIntradayHistory,
+  type BoardItem,
+  type OiHistory,
+  type IntradayHistory,
+  type Tick,
+} from "./api.ts";
 import { fmtCompact, formatExpiry } from "./format.ts";
 import StockCard from "./StockCard.tsx";
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
@@ -22,6 +29,19 @@ const EXPIRED_COLOR = "#8d97ac";
 const fmtPrice = (v: number) =>
   v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
+// x-axis label for hourly timestamps, e.g. "02 Jul 10:00".
+const fmtHour = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+};
+
 export default function StockDetail({
   symbol,
   item,
@@ -32,6 +52,7 @@ export default function StockDetail({
   onBack,
 }: Props) {
   const [history, setHistory] = useState<OiHistory | null>(null);
+  const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,9 +60,11 @@ export default function StockDetail({
     let alive = true;
     setLoading(true);
     setError(null);
-    fetchOiHistory(symbol)
-      .then((h) => {
-        if (alive) setHistory(h);
+    Promise.all([fetchOiHistory(symbol), fetchIntradayHistory(symbol)])
+      .then(([h, intr]) => {
+        if (!alive) return;
+        setHistory(h);
+        setIntraday(intr);
       })
       .catch((err: unknown) => {
         if (alive)
@@ -77,6 +100,17 @@ export default function StockDetail({
       dashed: expired,
       points: f.points.map((p) => ({ date: p.date, value: p.oi })),
     });
+  });
+
+  // Hourly closing price (last ~1 week).
+  const hourlySeries: ChartSeries[] = (intraday?.futures ?? []).map((f, i) => {
+    const expired = f.expiry < todayIso;
+    return {
+      label: `${formatExpiry(f.expiry)}${expired ? " (exp)" : ""}`,
+      color: expired ? EXPIRED_COLOR : LINE_COLORS[i % LINE_COLORS.length]!,
+      dashed: expired,
+      points: f.points.map((p) => ({ date: p.t, value: p.close })),
+    };
   });
 
   return (
@@ -131,6 +165,14 @@ export default function StockDetail({
                   <span className="chart-sub">Daily close · last 1 month · 3 futures</span>
                 </div>
                 <LineChart series={priceSeries} format={fmtPrice} />
+              </div>
+
+              <div className="detail-chart">
+                <div className="chart-head">
+                  <h2>Price · Hourly</h2>
+                  <span className="chart-sub">Hourly close · last 1 week · 3 futures</span>
+                </div>
+                <LineChart series={hourlySeries} format={fmtPrice} formatX={fmtHour} />
               </div>
 
               <div className="detail-chart">

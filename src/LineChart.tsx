@@ -11,6 +11,8 @@ interface Props {
   series: ChartSeries[];
   /** Formats a value for the y-axis and tooltip (e.g. price or compact OI). */
   format: (v: number) => string;
+  /** Formats an x-axis key (a date or timestamp) for labels + tooltip title. */
+  formatX?: (key: string) => string;
 }
 
 const W = 760;
@@ -25,7 +27,7 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-export default function LineChart({ series, format }: Props) {
+export default function LineChart({ series, format, formatX = shortDate }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
@@ -87,7 +89,7 @@ export default function LineChart({ series, format }: Props) {
 
         {xLabelIdx.map((i) => (
           <text key={i} x={xAt(i)} y={H - 9} className="chart-xlabel">
-            {shortDate(allDates[i]!)}
+            {formatX(allDates[i]!)}
           </text>
         ))}
 
@@ -132,7 +134,7 @@ export default function LineChart({ series, format }: Props) {
 
       {hover !== null && hoverDate && (
         <div className="chart-tip">
-          <div className="chart-tip-date">{shortDate(hoverDate)}</div>
+          <div className="chart-tip-date">{formatX(hoverDate)}</div>
           {series.map((s) => {
             const p = s.points.find((pt) => pt.date === hoverDate);
             return (
