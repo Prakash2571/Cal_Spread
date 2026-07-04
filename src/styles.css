@@ -657,12 +657,14 @@ body {
 
 .chip.prem {
   color: var(--prem);
-  background: var(--prem-soft);
+  background: transparent;
+  padding: 3px 0;
 }
 
 .chip.disc {
   color: var(--disc);
-  background: var(--disc-soft);
+  background: transparent;
+  padding: 3px 0;
 }
 
 .chip.muted {
