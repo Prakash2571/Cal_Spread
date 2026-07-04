@@ -21,8 +21,9 @@ interface Props {
   onBack: () => void;
 }
 
-// Colours per contract slot (near / next / far).
-const LINE_COLORS = ["#6d8bff", "#22d3ee", "#9b6dff"];
+// Colours per contract slot (near / next / far) — deliberately distinct hues
+// (blue / green / amber) so all three lines are easy to tell apart.
+const LINE_COLORS = ["#4d8bff", "#22c55e", "#f59e0b"];
 // Muted colour for a contract that has already expired.
 const EXPIRED_COLOR = "#8d97ac";
 
