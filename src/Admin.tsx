@@ -1,11 +1,22 @@
 import { useState } from "react";
-import { verifyAdminSecret, setAdminToken } from "./api.ts";
+import { setAdminToken } from "./api.ts";
 
 interface AdminProps {
   onAuthenticated: () => void;
+  /** The verify call for this route (full admin or trade access). */
+  verify: (secret: string) => Promise<{ success: boolean; token: string }>;
+  title?: string;
+  subtitle?: string;
+  placeholder?: string;
 }
 
-export default function Admin({ onAuthenticated }: AdminProps) {
+export default function Admin({
+  onAuthenticated,
+  verify,
+  title = "Admin Verification",
+  subtitle = "Enter the admin secret to access management features",
+  placeholder = "Enter admin secret",
+}: AdminProps) {
   const [secret, setSecret] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -16,12 +27,12 @@ export default function Admin({ onAuthenticated }: AdminProps) {
     setLoading(true);
 
     try {
-      const result = await verifyAdminSecret(secret);
+      const result = await verify(secret);
       if (result.success && result.token) {
         setAdminToken(result.token);
         onAuthenticated();
       } else {
-        setError("Invalid admin secret");
+        setError("Invalid code");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
@@ -63,16 +74,14 @@ export default function Admin({ onAuthenticated }: AdminProps) {
             />
           </svg>
         </div>
-        <h1>Admin Verification</h1>
-        <p className="admin-subtitle">
-          Enter the admin secret to access management features
-        </p>
+        <h1>{title}</h1>
+        <p className="admin-subtitle">{subtitle}</p>
 
         <form onSubmit={handleVerify}>
           <input
             type="password"
             className="admin-input"
-            placeholder="Enter admin secret"
+            placeholder={placeholder}
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
             disabled={loading}

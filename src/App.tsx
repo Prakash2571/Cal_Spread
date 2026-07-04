@@ -10,12 +10,15 @@ import {
   streamUrl,
   getAdminStatus,
   logoutAdmin,
+  verifyAdminSecret,
+  verifyAccessSecret,
   createTrade,
   listTrades,
   closeTrade,
   type BoardItem,
   type Tick,
   type Trade,
+  type AdminRole,
 } from "./api.ts";
 import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
@@ -33,8 +36,11 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
+  const [adminRole, setAdminRole] = useState<AdminRole>(null);
   const [live, setLive] = useState(false);
+
+  const adminAuthenticated = adminRole !== null;
+  const isFullAdmin = adminRole === "full";
   const [streamOpen, setStreamOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
@@ -139,10 +145,17 @@ export default function App() {
     setLive(false);
   }
 
-  async function handleAdminLogout() {
-    logoutAdmin();
+  // Full admin logout: disconnect Zerodha (token still present) then clear it.
+  async function handleFullLogout() {
     await handleLogout();
-    setAdminAuthenticated(false);
+    logoutAdmin();
+    setAdminRole(null);
+  }
+
+  // Trade-access logout: just clear the access token (never touches Zerodha).
+  function handleAccessLogout() {
+    logoutAdmin();
+    setAdminRole(null);
   }
 
   // Check for admin route
@@ -192,10 +205,10 @@ export default function App() {
   useEffect(() => {
     void loadBoard();
     
-    // Check admin authentication
+    // Check admin authentication + role (full vs trade-access)
     getAdminStatus()
-      .then((s) => setAdminAuthenticated(s.authenticated))
-      .catch(() => setAdminAuthenticated(false));
+      .then((s) => setAdminRole(s.role))
+      .catch(() => setAdminRole(null));
     
     getStatus()
       .then((s) => setAuthenticated(s.authenticated))
@@ -206,11 +219,11 @@ export default function App() {
       .catch(() => setDivYields({}));
   }, []);
 
-  // Load trades once the admin is authenticated.
+  // Load trades once any admin (full or trade-access) is authenticated.
   useEffect(() => {
     if (!adminAuthenticated) return;
     void refreshTrades();
-  }, [adminAuthenticated]);
+  }, [adminRole]);
 
   // While no Zerodha session is active, poll the backend so that ANY open
   // public tab automatically starts showing live data once the admin connects
@@ -308,16 +321,39 @@ export default function App() {
         ? { kind: "wait", label: "Connecting…" }
         : { kind: "idle", label: "Login for live" };
 
-  // Handle admin verification route
+  // Full-admin verification route
   if (window.location.pathname === "/admin/verify") {
     if (adminAuthenticated) {
-      // Redirect to home after successful admin auth
       window.history.replaceState({}, "", "/");
     } else {
       return (
         <Admin
+          verify={verifyAdminSecret}
+          title="Admin Verification"
+          subtitle="Enter the admin secret for full access (Zerodha + trades)."
+          placeholder="Enter admin secret"
           onAuthenticated={() => {
-            setAdminAuthenticated(true);
+            setAdminRole("full");
+            window.history.replaceState({}, "", "/");
+          }}
+        />
+      );
+    }
+  }
+
+  // Trade-access route (view & take trades only, no Zerodha controls)
+  if (window.location.pathname === "/admin/access") {
+    if (adminAuthenticated) {
+      window.history.replaceState({}, "", "/");
+    } else {
+      return (
+        <Admin
+          verify={verifyAccessSecret}
+          title="Trade Access"
+          subtitle="Enter the access code to view and take trades."
+          placeholder="Enter access code"
+          onAuthenticated={() => {
+            setAdminRole("trade");
             window.history.replaceState({}, "", "/");
           }}
         />
@@ -364,7 +400,7 @@ export default function App() {
               {status.label}
             </span>
           )}
-          {adminAuthenticated && (
+          {isFullAdmin && (
             <label className="rf" title="Annual risk-free rate used for fair value">
               <span>rf</span>
               <input
@@ -381,36 +417,40 @@ export default function App() {
             <strong>{filtered.length.toLocaleString()}</strong> stocks
           </span>
           {adminAuthenticated && (
-            <>
-              <button
-                className="btn"
-                onClick={() => {
-                  setTradesOpen(true);
-                  void refreshTrades();
-                }}
-              >
-                Trades
-                {openTradeSymbols.size > 0 && (
-                  <span className="btn-badge">{openTradeSymbols.size}</span>
-                )}
-              </button>
-              {authenticated ? (
-                <button className="btn" onClick={() => void handleAdminLogout()}>
-                  Logout
-                </button>
-              ) : (
-                <a className="btn btn--primary" href={loginUrl()}>
-                  Connect to Zerodha
-                </a>
+            <button
+              className="btn"
+              onClick={() => {
+                setTradesOpen(true);
+                void refreshTrades();
+              }}
+            >
+              Trades
+              {openTradeSymbols.size > 0 && (
+                <span className="btn-badge">{openTradeSymbols.size}</span>
               )}
-            </>
+            </button>
           )}
+          {isFullAdmin ? (
+            authenticated ? (
+              <button className="btn" onClick={() => void handleFullLogout()}>
+                Logout
+              </button>
+            ) : (
+              <a className="btn btn--primary" href={loginUrl()}>
+                Connect to Zerodha
+              </a>
+            )
+          ) : adminAuthenticated ? (
+            <button className="btn" onClick={handleAccessLogout}>
+              Logout
+            </button>
+          ) : null}
         </div>
       </header>
 
       {verifying && <div className="banner">Verifying your login…</div>}
 
-      {adminAuthenticated && !authenticated && !verifying && (
+      {isFullAdmin && !authenticated && !verifying && (
         <div className="banner">
           Click{" "}
           <a className="link" href={loginUrl()}>

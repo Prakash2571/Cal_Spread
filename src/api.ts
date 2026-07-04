@@ -66,7 +66,9 @@ export interface InstrumentsResponse {
   instruments: Instrument[];
 }
 
-/** Verify admin secret and get admin token */
+export type AdminRole = "full" | "trade" | null;
+
+/** Verify the FULL admin secret (/admin/verify) and get an admin token. */
 export async function verifyAdminSecret(
   secret: string,
 ): Promise<{ success: boolean; token: string }> {
@@ -86,14 +88,37 @@ export async function verifyAdminSecret(
   return { success: !!body.success, token: body.token ?? "" };
 }
 
-/** Check admin authentication status */
-export async function getAdminStatus(): Promise<{ authenticated: boolean }> {
+/** Verify the TRADE-ACCESS password (/admin/access) and get a trade token. */
+export async function verifyAccessSecret(
+  secret: string,
+): Promise<{ success: boolean; token: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/access/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret }),
+  });
+  const body = (await res.json()) as {
+    success?: boolean;
+    token?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Access verification failed (HTTP ${res.status}).`);
+  }
+  return { success: !!body.success, token: body.token ?? "" };
+}
+
+/** Check admin authentication status + role. */
+export async function getAdminStatus(): Promise<{
+  authenticated: boolean;
+  role: AdminRole;
+}> {
   const headers: HeadersInit = {};
   if (adminToken) {
     headers["x-admin-token"] = adminToken;
   }
   const res = await fetch(`${API_BASE_URL}/api/admin/status`, { headers });
-  if (!res.ok) return { authenticated: false };
+  if (!res.ok) return { authenticated: false, role: null };
   return res.json();
 }
 
@@ -204,9 +229,12 @@ export async function getStatus(): Promise<{ authenticated: boolean }> {
   return res.json();
 }
 
-/** Forget the Kite session on the backend (logout). */
+/** Forget the Kite session on the backend (logout; full admin only). */
 export async function logout(): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/logout`, { method: "POST" }).catch(() => {
+  await fetch(`${API_BASE_URL}/api/logout`, {
+    method: "POST",
+    headers: getHeaders(),
+  }).catch(() => {
     /* ignore network errors on logout */
   });
 }
