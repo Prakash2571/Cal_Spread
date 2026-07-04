@@ -1340,6 +1340,13 @@ body {
   cursor: default;
 }
 
+.detail-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
 .detail-chart {
   border: 1px solid var(--border);
   border-radius: var(--radius);

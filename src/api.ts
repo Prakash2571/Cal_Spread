@@ -185,6 +185,7 @@ export async function listTrades(): Promise<{ dbEnabled: boolean; trades: Trade[
 export interface OiPoint {
   date: string; // YYYY-MM-DD
   oi: number;
+  close: number; // daily close price
 }
 
 export interface OiFutureSeries {
