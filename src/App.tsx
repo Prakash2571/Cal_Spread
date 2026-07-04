@@ -24,6 +24,7 @@ import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
 import TradesPanel from "./TradesPanel.tsx";
+import StockDetail from "./StockDetail.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -54,6 +55,17 @@ export default function App() {
   const [tradesError, setTradesError] = useState<string | null>(null);
   const [takingSymbol, setTakingSymbol] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
+
+  // Client-side route (stock detail page + admin routes).
+  const [route, setRoute] = useState<string>(() => window.location.pathname);
+  function navigate(to: string) {
+    window.history.pushState({}, "", to);
+    setRoute(to);
+  }
+  function goHome() {
+    window.history.replaceState({}, "", "/");
+    setRoute("/");
+  }
 
   const openTradeSymbols = useMemo(
     () =>
@@ -158,13 +170,19 @@ export default function App() {
     setAdminRole(null);
   }
 
-  // Check for admin route
+  // Keep route state in sync with browser back/forward.
   useEffect(() => {
-    if (window.location.pathname === "/admin/verify") {
-      // Don't do anything else, show admin login
-      return;
-    }
+    const onPop = () => setRoute(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  // Once authenticated, leave the admin login routes.
+  useEffect(() => {
+    if (adminAuthenticated && (route === "/admin/verify" || route === "/admin/access")) {
+      goHome();
+    }
+  }, [adminAuthenticated, route]);
 
   // Handle the Zerodha redirect at /zerodha/verify?request_token=...
   useEffect(() => {
@@ -322,43 +340,52 @@ export default function App() {
         : { kind: "idle", label: "Login for live" };
 
   // Full-admin verification route
-  if (window.location.pathname === "/admin/verify") {
-    if (adminAuthenticated) {
-      window.history.replaceState({}, "", "/");
-    } else {
-      return (
-        <Admin
-          verify={verifyAdminSecret}
-          title="Admin Verification"
-          subtitle="Enter the admin secret for full access (Zerodha + trades)."
-          placeholder="Enter admin secret"
-          onAuthenticated={() => {
-            setAdminRole("full");
-            window.history.replaceState({}, "", "/");
-          }}
-        />
-      );
-    }
+  if (route === "/admin/verify" && !adminAuthenticated) {
+    return (
+      <Admin
+        verify={verifyAdminSecret}
+        title="Admin Verification"
+        subtitle="Enter the admin secret for full access (Zerodha + trades)."
+        placeholder="Enter admin secret"
+        onAuthenticated={() => {
+          setAdminRole("full");
+          goHome();
+        }}
+      />
+    );
   }
 
   // Trade-access route (view & take trades only, no Zerodha controls)
-  if (window.location.pathname === "/admin/access") {
-    if (adminAuthenticated) {
-      window.history.replaceState({}, "", "/");
-    } else {
-      return (
-        <Admin
-          verify={verifyAccessSecret}
-          title="Trade Access"
-          subtitle="Enter the access code to view and take trades."
-          placeholder="Enter access code"
-          onAuthenticated={() => {
-            setAdminRole("trade");
-            window.history.replaceState({}, "", "/");
-          }}
-        />
-      );
-    }
+  if (route === "/admin/access" && !adminAuthenticated) {
+    return (
+      <Admin
+        verify={verifyAccessSecret}
+        title="Trade Access"
+        subtitle="Enter the access code to view and take trades."
+        placeholder="Enter access code"
+        onAuthenticated={() => {
+          setAdminRole("trade");
+          goHome();
+        }}
+      />
+    );
+  }
+
+  // Stock detail page with 1-month OI history chart.
+  if (route.startsWith("/stock/")) {
+    const sym = decodeURIComponent(route.slice("/stock/".length));
+    const item = board.find((b) => b.symbol.toUpperCase() === sym.toUpperCase());
+    return (
+      <StockDetail
+        symbol={item?.symbol ?? sym}
+        item={item}
+        ticks={ticks}
+        rf={rfRate}
+        div={divYields[item?.symbol ?? ""] ?? 0}
+        showPrices={authenticated}
+        onBack={() => navigate("/")}
+      />
+    );
   }
 
   return (
@@ -482,6 +509,7 @@ export default function App() {
               tradeBusy={takingSymbol === item.symbol}
               hasOpenTrade={openTradeSymbols.has(item.symbol.toUpperCase())}
               onTakeTrade={handleTakeTrade}
+              onOpen={(sym) => navigate(`/stock/${sym}`)}
             />
           ))}
         </div>

@@ -20,6 +20,7 @@ interface Props {
   tradeBusy?: boolean;
   hasOpenTrade?: boolean;
   onTakeTrade?: (symbol: string) => void;
+  onOpen?: (symbol: string) => void;
 }
 
 export default function StockCard({
@@ -32,6 +33,7 @@ export default function StockCard({
   tradeBusy = false,
   hasOpenTrade = false,
   onTakeTrade,
+  onOpen,
 }: Props) {
   const spot = ticks[item.spot_token];
   // Treat a 0 last price as "no trade yet" (null) rather than a real price, so
@@ -41,7 +43,10 @@ export default function StockCard({
   // For public view, hide all pricing data
   if (!showPrices) {
     return (
-      <article className="card">
+      <article
+        className={`card${onOpen ? " card--clickable" : ""}`}
+        onClick={onOpen ? () => onOpen(item.symbol) : undefined}
+      >
         <header className="card-head">
           <div className="card-title">
             <span className="card-symbol">
@@ -80,7 +85,10 @@ export default function StockCard({
   }
 
   return (
-    <article className="card">
+    <article
+      className={`card${onOpen ? " card--clickable" : ""}`}
+      onClick={onOpen ? () => onOpen(item.symbol) : undefined}
+    >
       <header className="card-head">
         <div className="card-title">
           <span className="card-symbol">
@@ -153,7 +161,10 @@ export default function StockCard({
           <button
             className="btn btn--sm btn--trade"
             disabled={tradeBusy || hasOpenTrade}
-            onClick={() => onTakeTrade?.(item.symbol)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTakeTrade?.(item.symbol);
+            }}
             title="Buy the discount leg, sell the premium leg (current & next month, 1 lot)"
           >
             {hasOpenTrade

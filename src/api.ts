@@ -180,6 +180,39 @@ export async function listTrades(): Promise<{ dbEnabled: boolean; trades: Trade[
   return { dbEnabled: !!body.dbEnabled, trades: body.trades ?? [] };
 }
 
+// ---------------- Historical open interest ----------------
+
+export interface OiPoint {
+  date: string; // YYYY-MM-DD
+  oi: number;
+}
+
+export interface OiFutureSeries {
+  token: number;
+  expiry: string;
+  points: OiPoint[];
+}
+
+export interface OiHistory {
+  symbol: string;
+  name: string;
+  is_index: boolean;
+  futures: OiFutureSeries[];
+}
+
+/** Fetch ~1 month of daily closing open interest for a symbol's futures. */
+export async function fetchOiHistory(symbol: string): Promise<OiHistory> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/history/${encodeURIComponent(symbol)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OiHistory & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load history (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 /** Close a trade (locks in final P&L). */
 export async function closeTrade(id: string): Promise<Trade> {
   const res = await fetch(`${API_BASE_URL}/api/trades/${id}/close`, {
