@@ -176,6 +176,7 @@ export default function TradesPanel({
           </button>
         </header>
 
+        <div className="modal-body">
         {error && <div className="banner banner--error">{error}</div>}
         {loading && trades.length === 0 && (
           <div className="empty">
@@ -227,6 +228,7 @@ export default function TradesPanel({
             </div>
           )}
         </section>
+        </div>
       </div>
     </div>
   );
