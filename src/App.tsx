@@ -361,6 +361,15 @@ export default function App() {
     }
 
     if (arbOnly) {
+      // Mispricing size as a PERCENTAGE of spot (sum of both legs' deviation).
+      const arbPct = (b: BoardItem): number => {
+        const spot = ticks[b.spot_token]?.last_price;
+        const cur = b.futures[0] ? ticks[b.futures[0].token]?.last_price : undefined;
+        const nxt = b.futures[1] ? ticks[b.futures[1].token]?.last_price : undefined;
+        if (!spot || !cur || !nxt) return 0;
+        return ((Math.abs(cur - spot) + Math.abs(nxt - spot)) / spot) * 100;
+      };
+
       list = list.filter((b) => {
         const spot = ticks[b.spot_token]?.last_price;
         const cur = b.futures[0] ? ticks[b.futures[0].token]?.last_price : undefined;
@@ -371,6 +380,9 @@ export default function App() {
         // Arbitrage: the two legs are on opposite sides of spot.
         return (premCur > 0 && premNext < 0) || (premCur < 0 && premNext > 0);
       });
+
+      // Sort by the biggest opportunity in percentage terms (descending).
+      list = [...list].sort((a, b) => arbPct(b) - arbPct(a));
     }
 
     return list;
