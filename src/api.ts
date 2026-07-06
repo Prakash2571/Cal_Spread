@@ -258,6 +258,19 @@ export async function fetchMinuteHistory(symbol: string): Promise<IntradayHistor
   return body;
 }
 
+/** Fetch today's 5-minute closing price (same shape). */
+export async function fetchFiveMinHistory(symbol: string): Promise<IntradayHistory> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/fivemin/${encodeURIComponent(symbol)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as IntradayHistory & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load 5-min data (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 /** Close a trade (locks in final P&L). */
 export async function closeTrade(id: string): Promise<Trade> {
   const res = await fetch(`${API_BASE_URL}/api/trades/${id}/close`, {

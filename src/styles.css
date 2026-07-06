@@ -1438,6 +1438,36 @@ body {
   color: var(--muted);
 }
 
+.chart-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chart-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chart-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.chart-toggle button:not(.active):hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
 .chart-wrap {
   position: relative;
 }

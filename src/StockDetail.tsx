@@ -3,6 +3,7 @@ import {
   fetchOiHistory,
   fetchIntradayHistory,
   fetchMinuteHistory,
+  fetchFiveMinHistory,
   type BoardItem,
   type OiHistory,
   type IntradayHistory,
@@ -67,6 +68,8 @@ export default function StockDetail({
   const [history, setHistory] = useState<OiHistory | null>(null);
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
   const [minute, setMinute] = useState<IntradayHistory | null>(null);
+  const [fiveMin, setFiveMin] = useState<IntradayHistory | null>(null);
+  const [intradayMode, setIntradayMode] = useState<"1m" | "5m">("1m");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,12 +81,14 @@ export default function StockDetail({
       fetchOiHistory(symbol),
       fetchIntradayHistory(symbol),
       fetchMinuteHistory(symbol),
+      fetchFiveMinHistory(symbol),
     ])
-      .then(([h, intr, min]) => {
+      .then(([h, intr, min, five]) => {
         if (!alive) return;
         setHistory(h);
         setIntraday(intr);
         setMinute(min);
+        setFiveMin(five);
       })
       .catch((err: unknown) => {
         if (alive)
@@ -132,23 +137,21 @@ export default function StockDetail({
     };
   });
 
-  // Minute-by-minute closing price (last 2 hours).
-  const minuteSeries: ChartSeries[] = (minute?.futures ?? []).map((f, i) => {
-    const expired = f.expiry < todayIso;
-    return {
-      label: `${formatExpiry(f.expiry)}${expired ? " (exp)" : ""}`,
-      color: expired ? EXPIRED_COLOR : LINE_COLORS[i % LINE_COLORS.length]!,
-      dashed: expired,
-      points: f.points.map((p) => ({ date: p.t, value: p.close })),
-    };
-  });
+  const toIntradaySeries = (src: IntradayHistory | null): ChartSeries[] =>
+    (src?.futures ?? []).map((f, i) => {
+      const expired = f.expiry < todayIso;
+      return {
+        label: `${formatExpiry(f.expiry)}${expired ? " (exp)" : ""}`,
+        color: expired ? EXPIRED_COLOR : LINE_COLORS[i % LINE_COLORS.length]!,
+        dashed: expired,
+        points: f.points.map((p) => ({ date: p.t, value: p.close })),
+      };
+    });
 
-  // Current OI per future (live from ticks) for the left-column panel.
-  const oiRows = (item?.futures ?? []).map((f, i) => ({
-    expiry: f.expiry,
-    color: LINE_COLORS[i % LINE_COLORS.length]!,
-    oi: ticks[f.token]?.oi ?? 0,
-  }));
+  // Minute (last 2 hours) + 5-minute (today) — toggled on one chart.
+  const minuteSeries = toIntradaySeries(minute);
+  const fiveMinSeries = toIntradaySeries(fiveMin);
+  const intradaySeries = intradayMode === "1m" ? minuteSeries : fiveMinSeries;
 
   return (
     <div className="app">
@@ -181,18 +184,6 @@ export default function StockDetail({
             </div>
           )}
 
-          {item && showPrices && oiRows.length > 0 && (
-            <div className="oi-panel">
-              <div className="oi-panel-title">Open Interest</div>
-              {oiRows.map((r) => (
-                <div className="oi-panel-row" key={r.expiry}>
-                  <span className="oi-dot" style={{ background: r.color }} />
-                  <span className="oi-panel-exp">{formatExpiry(r.expiry)}</span>
-                  <span className="oi-panel-val">{fmtCompact(r.oi)}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="detail-charts">
@@ -227,10 +218,29 @@ export default function StockDetail({
 
               <div className="detail-chart">
                 <div className="chart-head">
-                  <h2>Price · Minute</h2>
-                  <span className="chart-sub">Minute close · last 2 hours · 3 futures</span>
+                  <h2>Price · Intraday</h2>
+                  <span className="chart-sub">
+                    {intradayMode === "1m"
+                      ? "1-min close · last 2 hours"
+                      : "5-min close · today"}{" "}
+                    · 3 futures
+                  </span>
+                  <div className="chart-toggle">
+                    <button
+                      className={intradayMode === "1m" ? "active" : ""}
+                      onClick={() => setIntradayMode("1m")}
+                    >
+                      1m
+                    </button>
+                    <button
+                      className={intradayMode === "5m" ? "active" : ""}
+                      onClick={() => setIntradayMode("5m")}
+                    >
+                      5m
+                    </button>
+                  </div>
                 </div>
-                <LineChart series={minuteSeries} format={fmtPrice} formatX={fmtMinute} />
+                <LineChart series={intradaySeries} format={fmtPrice} formatX={fmtMinute} />
               </div>
 
               <div className="detail-chart">
