@@ -45,14 +45,12 @@ function roiPct(pnl: number | null, margin: number | null): number | null {
 function computePnl(t: Trade, ticks: Record<number, Tick>) {
   const buyTick = ticks[t.buy.token];
   const sellTick = ticks[t.sell.token];
+  // Open P&L marks to last traded price (LTP), like a broker's open positions.
+  // The bid-ask (exit) spread is realized when the trade is actually closed.
   const buyNow =
-    t.status === "closed"
-      ? t.buy_close
-      : (buyTick?.bid || buyTick?.last_price || null); // exit long at bid
+    t.status === "closed" ? t.buy_close : (buyTick?.last_price || null);
   const sellNow =
-    t.status === "closed"
-      ? t.sell_close
-      : (sellTick?.ask || sellTick?.last_price || null); // exit short at ask
+    t.status === "closed" ? t.sell_close : (sellTick?.last_price || null);
 
   const buyValid = buyNow && buyNow > 0 ? buyNow : null;
   const sellValid = sellNow && sellNow > 0 ? sellNow : null;
