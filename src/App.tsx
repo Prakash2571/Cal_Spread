@@ -59,6 +59,8 @@ export default function App() {
   const [tradesError, setTradesError] = useState<string | null>(null);
   const [takingSymbol, setTakingSymbol] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
+  // Trade whose entry/exit should be marked on the detail charts.
+  const [detailTrade, setDetailTrade] = useState<Trade | null>(null);
 
   // Client-side route (stock detail page + admin routes).
   const [route, setRoute] = useState<string>(() => window.location.pathname);
@@ -118,6 +120,12 @@ export default function App() {
     } finally {
       setTakingSymbol(null);
     }
+  }
+
+  function openTradeChart(t: Trade) {
+    setDetailTrade(t);
+    setTradesOpen(false);
+    navigate(`/stock/${t.symbol}`);
   }
 
   async function handleCloseTrade(id: string) {
@@ -393,10 +401,14 @@ export default function App() {
     );
   }
 
-  // Stock detail page with 1-month OI history chart.
+  // Stock detail page with price/OI history charts.
   if (route.startsWith("/stock/")) {
     const sym = decodeURIComponent(route.slice("/stock/".length));
     const item = board.find((b) => b.symbol.toUpperCase() === sym.toUpperCase());
+    const tradeForView =
+      detailTrade && detailTrade.symbol.toUpperCase() === sym.toUpperCase()
+        ? detailTrade
+        : null;
     return (
       <StockDetail
         symbol={item?.symbol ?? sym}
@@ -405,6 +417,9 @@ export default function App() {
         rf={rfRate}
         div={divYields[item?.symbol ?? ""] ?? 0}
         showPrices={authenticated}
+        markStart={tradeForView?.opened_at}
+        markEnd={tradeForView?.closed_at ?? undefined}
+        showIntraday={!tradeForView || tradeForView.status === "open"}
         onBack={() => navigate("/")}
       />
     );
@@ -540,7 +555,10 @@ export default function App() {
               tradeBusy={takingSymbol === item.symbol}
               hasOpenTrade={openTradeSymbols.has(item.symbol.toUpperCase())}
               onTakeTrade={handleTakeTrade}
-              onOpen={(sym) => navigate(`/stock/${sym}`)}
+              onOpen={(sym) => {
+                setDetailTrade(null);
+                navigate(`/stock/${sym}`);
+              }}
             />
           ))}
         </div>
@@ -564,6 +582,7 @@ export default function App() {
           closingId={closingId}
           onClose={() => setTradesOpen(false)}
           onCloseTrade={(id) => void handleCloseTrade(id)}
+          onOpenTrade={openTradeChart}
         />
       )}
     </div>

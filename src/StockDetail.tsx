@@ -11,7 +11,7 @@ import {
 } from "./api.ts";
 import { fmtCompact, formatExpiry } from "./format.ts";
 import StockCard from "./StockCard.tsx";
-import LineChart, { type ChartSeries } from "./LineChart.tsx";
+import LineChart, { type ChartSeries, type ChartMarker } from "./LineChart.tsx";
 
 interface Props {
   symbol: string;
@@ -21,6 +21,11 @@ interface Props {
   div: number;
   showPrices: boolean;
   onBack: () => void;
+  /** Trade entry/exit timestamps to mark on the charts (optional). */
+  markStart?: string;
+  markEnd?: string;
+  /** Show the near-real-time 1m/5m chart (hidden for closed/history trades). */
+  showIntraday?: boolean;
 }
 
 // Colours per contract slot (near / next / far) — deliberately distinct hues
@@ -64,6 +69,9 @@ export default function StockDetail({
   div,
   showPrices,
   onBack,
+  markStart,
+  markEnd,
+  showIntraday = true,
 }: Props) {
   const [history, setHistory] = useState<OiHistory | null>(null);
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
@@ -77,18 +85,24 @@ export default function StockDetail({
     let alive = true;
     setLoading(true);
     setError(null);
-    Promise.all([
-      fetchOiHistory(symbol),
-      fetchIntradayHistory(symbol),
-      fetchMinuteHistory(symbol),
-      fetchFiveMinHistory(symbol),
-    ])
-      .then(([h, intr, min, five]) => {
+
+    const core = Promise.all([fetchOiHistory(symbol), fetchIntradayHistory(symbol)]);
+    const intra = showIntraday
+      ? Promise.all([fetchMinuteHistory(symbol), fetchFiveMinHistory(symbol)])
+      : Promise.resolve(null);
+
+    Promise.all([core, intra])
+      .then(([[h, intrH], intraRes]) => {
         if (!alive) return;
         setHistory(h);
-        setIntraday(intr);
-        setMinute(min);
-        setFiveMin(five);
+        setIntraday(intrH);
+        if (intraRes) {
+          setMinute(intraRes[0]);
+          setFiveMin(intraRes[1]);
+        } else {
+          setMinute(null);
+          setFiveMin(null);
+        }
       })
       .catch((err: unknown) => {
         if (alive)
@@ -100,7 +114,7 @@ export default function StockDetail({
     return () => {
       alive = false;
     };
-  }, [symbol]);
+  }, [symbol, showIntraday]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -152,6 +166,15 @@ export default function StockDetail({
   const minuteSeries = toIntradaySeries(minute);
   const fiveMinSeries = toIntradaySeries(fiveMin);
   const intradaySeries = intradayMode === "1m" ? minuteSeries : fiveMinSeries;
+
+  // Trade entry/exit markers (drawn on charts whose window contains them).
+  const markers: ChartMarker[] = [];
+  if (markStart) {
+    markers.push({ at: new Date(markStart).getTime(), color: "#22c55e", label: "Entry" });
+  }
+  if (markEnd) {
+    markers.push({ at: new Date(markEnd).getTime(), color: "#ff5a6a", label: "Exit" });
+  }
 
   return (
     <div className="app">
@@ -205,7 +228,7 @@ export default function StockDetail({
                   <h2>Price</h2>
                   <span className="chart-sub">Daily close · last 1 month · 3 futures</span>
                 </div>
-                <LineChart series={priceSeries} format={fmtPrice} />
+                <LineChart series={priceSeries} format={fmtPrice} markers={markers} />
               </div>
 
               <div className="detail-chart">
@@ -213,42 +236,54 @@ export default function StockDetail({
                   <h2>Price · Hourly</h2>
                   <span className="chart-sub">Hourly close · last 1 week · 3 futures</span>
                 </div>
-                <LineChart series={hourlySeries} format={fmtPrice} formatX={fmtHour} />
+                <LineChart
+                  series={hourlySeries}
+                  format={fmtPrice}
+                  formatX={fmtHour}
+                  markers={markers}
+                />
               </div>
 
-              <div className="detail-chart">
-                <div className="chart-head">
-                  <h2>Price · Intraday</h2>
-                  <span className="chart-sub">
-                    {intradayMode === "1m"
-                      ? "1-min close · last 2 hours"
-                      : "5-min close · today"}{" "}
-                    · 3 futures
-                  </span>
-                  <div className="chart-toggle">
-                    <button
-                      className={intradayMode === "1m" ? "active" : ""}
-                      onClick={() => setIntradayMode("1m")}
-                    >
-                      1m
-                    </button>
-                    <button
-                      className={intradayMode === "5m" ? "active" : ""}
-                      onClick={() => setIntradayMode("5m")}
-                    >
-                      5m
-                    </button>
+              {showIntraday && (
+                <div className="detail-chart">
+                  <div className="chart-head">
+                    <h2>Price · Intraday</h2>
+                    <span className="chart-sub">
+                      {intradayMode === "1m"
+                        ? "1-min close · last 2 hours"
+                        : "5-min close · today"}{" "}
+                      · 3 futures
+                    </span>
+                    <div className="chart-toggle">
+                      <button
+                        className={intradayMode === "1m" ? "active" : ""}
+                        onClick={() => setIntradayMode("1m")}
+                      >
+                        1m
+                      </button>
+                      <button
+                        className={intradayMode === "5m" ? "active" : ""}
+                        onClick={() => setIntradayMode("5m")}
+                      >
+                        5m
+                      </button>
+                    </div>
                   </div>
+                  <LineChart
+                    series={intradaySeries}
+                    format={fmtPrice}
+                    formatX={fmtMinute}
+                    markers={markers}
+                  />
                 </div>
-                <LineChart series={intradaySeries} format={fmtPrice} formatX={fmtMinute} />
-              </div>
+              )}
 
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Open Interest</h2>
                   <span className="chart-sub">Daily closing OI · last 1 month</span>
                 </div>
-                <LineChart series={oiSeries} format={fmtCompact} />
+                <LineChart series={oiSeries} format={fmtCompact} markers={markers} />
               </div>
             </>
           )}

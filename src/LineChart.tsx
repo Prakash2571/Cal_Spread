@@ -7,12 +7,20 @@ export interface ChartSeries {
   points: { date: string; value: number }[];
 }
 
+export interface ChartMarker {
+  at: number; // JS timestamp (ms)
+  color: string;
+  label: string;
+}
+
 interface Props {
   series: ChartSeries[];
   /** Formats a value for the y-axis and tooltip (e.g. price or compact OI). */
   format: (v: number) => string;
   /** Formats an x-axis key (a date or timestamp) for labels + tooltip title. */
   formatX?: (key: string) => string;
+  /** Vertical markers (e.g. trade entry/exit) — only drawn if within range. */
+  markers?: ChartMarker[];
 }
 
 const W = 760;
@@ -27,7 +35,12 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
-export default function LineChart({ series, format, formatX = shortDate }: Props) {
+export default function LineChart({
+  series,
+  format,
+  formatX = shortDate,
+  markers = [],
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
@@ -112,6 +125,55 @@ export default function LineChart({ series, format, formatX = shortDate }: Props
               strokeLinecap="round"
               strokeDasharray={s.dashed ? "5 4" : undefined}
             />
+          );
+        })}
+
+        {/* Trade entry/exit markers (only if within this chart's time span) */}
+        {markers.map((m, mi) => {
+          const first = new Date(
+            allDates[0]!.length <= 10 ? `${allDates[0]}T00:00:00` : allDates[0]!,
+          ).getTime();
+          const last = new Date(
+            allDates[n - 1]!.length <= 10
+              ? `${allDates[n - 1]}T00:00:00`
+              : allDates[n - 1]!,
+          ).getTime();
+          if (m.at < first || m.at > last) return null;
+          let idx = 0;
+          let best = Infinity;
+          for (let i = 0; i < n; i++) {
+            const key = allDates[i]!;
+            const ms = new Date(key.length <= 10 ? `${key}T00:00:00` : key).getTime();
+            const d = Math.abs(ms - m.at);
+            if (d < best) {
+              best = d;
+              idx = i;
+            }
+          }
+          const x = xAt(idx);
+          return (
+            <g key={`m-${mi}`}>
+              <line
+                x1={x}
+                y1={PAD.t}
+                x2={x}
+                y2={PAD.t + plotH}
+                stroke={m.color}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+              <circle cx={x} cy={PAD.t + 5} r={4} fill={m.color} />
+              <text
+                x={x}
+                y={PAD.t - 3}
+                fill={m.color}
+                fontSize="10"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                {m.label}
+              </text>
+            </g>
           );
         })}
 

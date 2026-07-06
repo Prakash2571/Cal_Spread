@@ -11,6 +11,7 @@ interface Props {
   closingId: string | null;
   onClose: () => void;
   onCloseTrade: (id: string) => void;
+  onOpenTrade: (trade: Trade) => void;
 }
 
 function fmtDateTime(iso: string): string {
@@ -87,12 +88,14 @@ function TradeCard({
   spot,
   closingId,
   onCloseTrade,
+  onOpenTrade,
 }: {
   t: Trade;
   ticks: Record<number, Tick>;
   spot: number | undefined;
   closingId: string | null;
   onCloseTrade: (id: string) => void;
+  onOpenTrade: (trade: Trade) => void;
 }) {
   const { buyNow, sellNow, buyPnl, sellPnl, net } = computePnl(t, ticks);
   const netValue = t.status === "closed" ? t.close_pnl : net;
@@ -100,7 +103,11 @@ function TradeCard({
   const closed = t.status === "closed";
 
   return (
-    <div className={`trade-card ${closed ? "trade-card--closed" : ""}`}>
+    <div
+      className={`trade-card trade-card--clickable ${closed ? "trade-card--closed" : ""}`}
+      onClick={() => onOpenTrade(t)}
+      title="Open charts with this trade's entry/exit marked"
+    >
       <div className="trade-head">
         <span className="trade-symbol">
           {t.symbol}
@@ -138,7 +145,10 @@ function TradeCard({
           <button
             className="btn btn--sm"
             disabled={closingId === t.id}
-            onClick={() => onCloseTrade(t.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCloseTrade(t.id);
+            }}
           >
             {closingId === t.id ? "Closing…" : "Close"}
           </button>
@@ -157,6 +167,7 @@ export default function TradesPanel({
   closingId,
   onClose,
   onCloseTrade,
+  onOpenTrade,
 }: Props) {
   const open = trades.filter((t) => t.status === "open");
   const closed = trades.filter((t) => t.status === "closed");
@@ -201,6 +212,7 @@ export default function TradesPanel({
                   spot={spotBySymbol[t.symbol.toUpperCase()]}
                   closingId={closingId}
                   onCloseTrade={onCloseTrade}
+                  onOpenTrade={onOpenTrade}
                 />
               ))}
             </div>
@@ -223,6 +235,7 @@ export default function TradesPanel({
                   spot={spotBySymbol[t.symbol.toUpperCase()]}
                   closingId={closingId}
                   onCloseTrade={onCloseTrade}
+                  onOpenTrade={onOpenTrade}
                 />
               ))}
             </div>

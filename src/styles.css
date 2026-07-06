@@ -1203,6 +1203,16 @@ body {
   opacity: 0.9;
 }
 
+.trade-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.trade-card--clickable:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+}
+
 .trade-head {
   display: flex;
   align-items: center;
