@@ -39,16 +39,20 @@ function roiPct(pnl: number | null, margin: number | null): number | null {
   return (pnl / margin) * 100;
 }
 
-/** Current prices + per-leg / net P&L (live for open, close prices for closed). */
+/** Current prices + per-leg / net P&L (live for open, close prices for closed).
+ * For open trades we mark to the EXIT side (sell the long at bid, buy back the
+ * short at ask) so the shown P&L matches what closing will actually realize. */
 function computePnl(t: Trade, ticks: Record<number, Tick>) {
+  const buyTick = ticks[t.buy.token];
+  const sellTick = ticks[t.sell.token];
   const buyNow =
     t.status === "closed"
       ? t.buy_close
-      : (ticks[t.buy.token]?.last_price ?? null);
+      : (buyTick?.bid || buyTick?.last_price || null); // exit long at bid
   const sellNow =
     t.status === "closed"
       ? t.sell_close
-      : (ticks[t.sell.token]?.last_price ?? null);
+      : (sellTick?.ask || sellTick?.last_price || null); // exit short at ask
 
   const buyValid = buyNow && buyNow > 0 ? buyNow : null;
   const sellValid = sellNow && sellNow > 0 ? sellNow : null;

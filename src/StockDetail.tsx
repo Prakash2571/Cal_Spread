@@ -78,6 +78,9 @@ export default function StockDetail({
   const [minute, setMinute] = useState<IntradayHistory | null>(null);
   const [fiveMin, setFiveMin] = useState<IntradayHistory | null>(null);
   const [intradayMode, setIntradayMode] = useState<"1m" | "5m">("1m");
+  const [spreadMode, setSpreadMode] = useState<"daily" | "hourly" | "5m" | "1m">(
+    "daily",
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -176,6 +179,45 @@ export default function StockDetail({
     markers.push({ at: new Date(markEnd).getTime(), color: "#ff5a6a", label: "Exit" });
   }
 
+  // --- Calendar spread (next month − current month) ---
+  function spreadFrom(
+    futs: { points: { key: string; close: number }[] }[] | undefined,
+  ): ChartSeries[] {
+    if (!futs || futs.length < 2) return [];
+    const near = futs[0]!;
+    const nxt = futs[1]!;
+    const m0 = new Map(near.points.map((p) => [p.key, p.close]));
+    const points: { date: string; value: number }[] = [];
+    for (const p of nxt.points) {
+      const c0 = m0.get(p.key);
+      if (c0 !== undefined && c0 > 0 && p.close > 0) {
+        points.push({ date: p.key, value: p.close - c0 });
+      }
+    }
+    return [{ label: "Spread (next − current)", color: "#6d8bff", points }];
+  }
+
+  const dailyFuts = history?.futures.map((f) => ({
+    points: f.points.map((p) => ({ key: p.date, close: p.close })),
+  }));
+  const hourlyFuts = intraday?.futures.map((f) => ({
+    points: f.points.map((p) => ({ key: p.t, close: p.close })),
+  }));
+  const fiveFuts = fiveMin?.futures.map((f) => ({
+    points: f.points.map((p) => ({ key: p.t, close: p.close })),
+  }));
+  const minFuts = minute?.futures.map((f) => ({
+    points: f.points.map((p) => ({ key: p.t, close: p.close })),
+  }));
+
+  const spreadConfig = {
+    daily: { futs: dailyFuts, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily · last 1 month" },
+    hourly: { futs: hourlyFuts, formatX: fmtHour, sub: "Hourly · last 1 week" },
+    "5m": { futs: fiveFuts, formatX: fmtMinute, sub: "5-min · today" },
+    "1m": { futs: minFuts, formatX: fmtMinute, sub: "1-min · last 2 hours" },
+  }[spreadMode];
+  const spreadSeries = spreadFrom(spreadConfig.futs);
+
   return (
     <div className="app">
       <header className="topbar">
@@ -223,6 +265,46 @@ export default function StockDetail({
             </div>
           ) : (
             <>
+              <div className="detail-chart">
+                <div className="chart-head">
+                  <h2>Spread</h2>
+                  <span className="chart-sub">{spreadConfig.sub} · next − current</span>
+                  <div className="chart-toggle">
+                    <button
+                      className={spreadMode === "daily" ? "active" : ""}
+                      onClick={() => setSpreadMode("daily")}
+                    >
+                      1M
+                    </button>
+                    <button
+                      className={spreadMode === "hourly" ? "active" : ""}
+                      onClick={() => setSpreadMode("hourly")}
+                    >
+                      1W
+                    </button>
+                    <button
+                      className={spreadMode === "5m" ? "active" : ""}
+                      onClick={() => setSpreadMode("5m")}
+                    >
+                      5m
+                    </button>
+                    <button
+                      className={spreadMode === "1m" ? "active" : ""}
+                      onClick={() => setSpreadMode("1m")}
+                    >
+                      1m
+                    </button>
+                  </div>
+                </div>
+                <LineChart
+                  series={spreadSeries}
+                  format={fmtPrice}
+                  formatX={spreadConfig.formatX}
+                  markers={markers}
+                  signed
+                />
+              </div>
+
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Price</h2>

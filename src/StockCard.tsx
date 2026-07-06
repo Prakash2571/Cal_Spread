@@ -40,6 +40,11 @@ export default function StockCard({
   // untraded contracts don't render misleading premiums/discounts.
   const spotLast = spot?.last_price ? spot.last_price : null;
 
+  // Current calendar spread = next month − current month future (live).
+  const curLast = item.futures[0] ? ticks[item.futures[0].token]?.last_price : undefined;
+  const nextLast = item.futures[1] ? ticks[item.futures[1].token]?.last_price : undefined;
+  const spread = curLast && nextLast ? nextLast - curLast : null;
+
   // For public view, hide all pricing data
   if (!showPrices) {
     return (
@@ -104,6 +109,11 @@ export default function StockCard({
           >
             {pctText(spot?.last_price, spot?.close_price)}
           </span>
+          {spread !== null && (
+            <span className={`card-spread ${pdClass(spread)}`}>
+              Spread {fmtSigned(spread)}
+            </span>
+          )}
         </div>
       </header>
 

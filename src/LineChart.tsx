@@ -21,6 +21,8 @@ interface Props {
   formatX?: (key: string) => string;
   /** Vertical markers (e.g. trade entry/exit) — only drawn if within range. */
   markers?: ChartMarker[];
+  /** Allow negative/zero values (e.g. a spread) and draw a zero baseline. */
+  signed?: boolean;
 }
 
 const W = 760;
@@ -40,7 +42,9 @@ export default function LineChart({
   format,
   formatX = shortDate,
   markers = [],
+  signed = false,
 }: Props) {
+  const valid = (v: number) => (signed ? Number.isFinite(v) : v > 0);
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
@@ -51,7 +55,7 @@ export default function LineChart({
 
   const allVals = series
     .flatMap((s) => s.points.map((p) => p.value))
-    .filter((v) => v > 0);
+    .filter(valid);
 
   if (n === 0 || allVals.length === 0) {
     return <div className="chart-empty">No history available.</div>;
@@ -103,6 +107,17 @@ export default function LineChart({
           </g>
         ))}
 
+        {signed && vMin < 0 && vMax > 0 && (
+          <line
+            x1={PAD.l}
+            y1={yAt(0)}
+            x2={W - PAD.r}
+            y2={yAt(0)}
+            stroke="rgba(255,255,255,0.28)"
+            strokeWidth={1}
+          />
+        )}
+
         {xLabelIdx.map((i) => (
           <text key={i} x={xAt(i)} y={H - 9} className="chart-xlabel">
             {formatX(allDates[i]!)}
@@ -111,7 +126,7 @@ export default function LineChart({
 
         {series.map((s) => {
           const pts = s.points
-            .filter((p) => p.value > 0)
+            .filter((p) => valid(p.value))
             .map((p) => `${xAt(allDates.indexOf(p.date))},${yAt(p.value)}`)
             .join(" ");
           return (
@@ -188,7 +203,7 @@ export default function LineChart({
             />
             {series.map((s) => {
               const p = s.points.find((pt) => pt.date === hoverDate);
-              if (!p || p.value <= 0) return null;
+              if (!p || !valid(p.value)) return null;
               return (
                 <circle key={s.label} cx={xAt(hover)} cy={yAt(p.value)} r={3.5} fill={s.color} />
               );

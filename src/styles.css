@@ -558,6 +558,21 @@ body {
   font-weight: 600;
 }
 
+.card-spread {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.card-spread.prem {
+  color: var(--prem);
+}
+
+.card-spread.disc {
+  color: var(--disc);
+}
+
 /* ---------------- Card table ---------------- */
 .card-table {
   width: 100%;

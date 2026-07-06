@@ -417,6 +417,8 @@ export interface Tick {
   last_price: number;
   close_price: number;
   oi?: number; // open interest (F&O only)
+  bid?: number; // best bid
+  ask?: number; // best ask
 }
 
 /** Fetch the spot + 3 nearest futures for a single F&O stock. */
