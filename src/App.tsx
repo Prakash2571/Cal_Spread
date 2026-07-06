@@ -15,6 +15,7 @@ import {
   createTrade,
   listTrades,
   closeTrade,
+  deleteTrade,
   type BoardItem,
   type Tick,
   type Trade,
@@ -59,6 +60,7 @@ export default function App() {
   const [tradesError, setTradesError] = useState<string | null>(null);
   const [takingSymbol, setTakingSymbol] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   // Trade whose entry/exit should be marked on the detail charts.
   const [detailTrade, setDetailTrade] = useState<Trade | null>(null);
 
@@ -119,6 +121,19 @@ export default function App() {
       setTradesOpen(true);
     } finally {
       setTakingSymbol(null);
+    }
+  }
+
+  async function handleDeleteTrade(id: string) {
+    setDeletingId(id);
+    setTradesError(null);
+    try {
+      await deleteTrade(id);
+      setTrades((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      setTradesError(err instanceof Error ? err.message : "Failed to delete trade.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -583,6 +598,8 @@ export default function App() {
           onClose={() => setTradesOpen(false)}
           onCloseTrade={(id) => void handleCloseTrade(id)}
           onOpenTrade={openTradeChart}
+          deletingId={deletingId}
+          onDeleteTrade={(id) => void handleDeleteTrade(id)}
         />
       )}
     </div>

@@ -284,6 +284,18 @@ export async function closeTrade(id: string): Promise<Trade> {
   return body.trade;
 }
 
+/** Delete a closed trade from history. */
+export async function deleteTrade(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/trades/${id}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Failed to delete trade (HTTP ${res.status}).`);
+  }
+}
+
 /** URL the user clicks to start the Zerodha login flow (handled by backend). */
 export function loginUrl(): string {
   const url = `${API_BASE_URL}/api/login`;

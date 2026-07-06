@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Tick, Trade } from "./api.ts";
 import { fmt, fmtMoney, formatExpiry } from "./format.ts";
 
@@ -9,9 +10,11 @@ interface Props {
   loading: boolean;
   error: string | null;
   closingId: string | null;
+  deletingId: string | null;
   onClose: () => void;
   onCloseTrade: (id: string) => void;
   onOpenTrade: (trade: Trade) => void;
+  onDeleteTrade: (id: string) => void;
 }
 
 function fmtDateTime(iso: string): string {
@@ -87,16 +90,21 @@ function TradeCard({
   ticks,
   spot,
   closingId,
+  deletingId,
   onCloseTrade,
   onOpenTrade,
+  onDeleteTrade,
 }: {
   t: Trade;
   ticks: Record<number, Tick>;
   spot: number | undefined;
   closingId: string | null;
+  deletingId: string | null;
   onCloseTrade: (id: string) => void;
   onOpenTrade: (trade: Trade) => void;
+  onDeleteTrade: (id: string) => void;
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { buyNow, sellNow, buyPnl, sellPnl, net } = computePnl(t, ticks);
   const netValue = t.status === "closed" ? t.close_pnl : net;
   const roi = roiPct(netValue, t.margin);
@@ -141,7 +149,7 @@ function TradeCard({
             </span>
           )}
         </div>
-        {!closed && (
+        {!closed ? (
           <button
             className="btn btn--sm"
             disabled={closingId === t.id}
@@ -151,6 +159,30 @@ function TradeCard({
             }}
           >
             {closingId === t.id ? "Closing…" : "Close"}
+          </button>
+        ) : confirmingDelete ? (
+          <div className="trade-del-confirm" onClick={(e) => e.stopPropagation()}>
+            <span>Delete?</span>
+            <button
+              className="btn btn--sm btn--danger"
+              disabled={deletingId === t.id}
+              onClick={() => onDeleteTrade(t.id)}
+            >
+              {deletingId === t.id ? "…" : "Yes"}
+            </button>
+            <button className="btn btn--sm" onClick={() => setConfirmingDelete(false)}>
+              No
+            </button>
+          </div>
+        ) : (
+          <button
+            className="btn btn--sm btn--danger-ghost"
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmingDelete(true);
+            }}
+          >
+            Delete
           </button>
         )}
       </div>
@@ -165,9 +197,11 @@ export default function TradesPanel({
   loading,
   error,
   closingId,
+  deletingId,
   onClose,
   onCloseTrade,
   onOpenTrade,
+  onDeleteTrade,
 }: Props) {
   const open = trades.filter((t) => t.status === "open");
   const closed = trades.filter((t) => t.status === "closed");
@@ -211,8 +245,10 @@ export default function TradesPanel({
                   ticks={ticks}
                   spot={spotBySymbol[t.symbol.toUpperCase()]}
                   closingId={closingId}
+                  deletingId={deletingId}
                   onCloseTrade={onCloseTrade}
                   onOpenTrade={onOpenTrade}
+                  onDeleteTrade={onDeleteTrade}
                 />
               ))}
             </div>
@@ -234,8 +270,10 @@ export default function TradesPanel({
                   ticks={ticks}
                   spot={spotBySymbol[t.symbol.toUpperCase()]}
                   closingId={closingId}
+                  deletingId={deletingId}
                   onCloseTrade={onCloseTrade}
                   onOpenTrade={onOpenTrade}
+                  onDeleteTrade={onDeleteTrade}
                 />
               ))}
             </div>
