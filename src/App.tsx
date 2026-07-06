@@ -453,8 +453,7 @@ export default function App() {
             </svg>
           </div>
           <div className="card-title">
-            <h1>Cal Spread</h1>
-            <p className="subtitle">NSE F&amp;O · spot &amp; 3 monthly futures</p>
+            <h1>Calspread</h1>
           </div>
         </div>
 
