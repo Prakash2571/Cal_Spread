@@ -67,6 +67,9 @@ export default function LineChart({ series, format, formatX = shortDate }: Props
   }
 
   const hoverDate = hover !== null ? allDates[hover] : null;
+  // Put the tooltip on the opposite side of the cursor so it never covers the
+  // point being viewed (hover on the right half -> tooltip on the left).
+  const tipOnLeft = hover !== null && hover > (n - 1) / 2;
 
   return (
     <div className="chart-wrap">
@@ -133,7 +136,14 @@ export default function LineChart({ series, format, formatX = shortDate }: Props
       </svg>
 
       {hover !== null && hoverDate && (
-        <div className="chart-tip">
+        <div
+          className="chart-tip"
+          style={
+            tipOnLeft
+              ? { left: 8, right: "auto" }
+              : { right: 8, left: "auto" }
+          }
+        >
           <div className="chart-tip-date">{formatX(hoverDate)}</div>
           {series.map((s) => {
             const p = s.points.find((pt) => pt.date === hoverDate);
