@@ -245,6 +245,19 @@ export async function fetchIntradayHistory(symbol: string): Promise<IntradayHist
   return body;
 }
 
+/** Fetch the last 2 hours of minute-by-minute closing price (same shape). */
+export async function fetchMinuteHistory(symbol: string): Promise<IntradayHistory> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/minute/${encodeURIComponent(symbol)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as IntradayHistory & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load minute data (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 /** Close a trade (locks in final P&L). */
 export async function closeTrade(id: string): Promise<Trade> {
   const res = await fetch(`${API_BASE_URL}/api/trades/${id}/close`, {

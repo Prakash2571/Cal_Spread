@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   fetchOiHistory,
   fetchIntradayHistory,
+  fetchMinuteHistory,
   type BoardItem,
   type OiHistory,
   type IntradayHistory,
@@ -43,6 +44,17 @@ const fmtHour = (iso: string) => {
   });
 };
 
+// x-axis label for minute timestamps, e.g. "10:15".
+const fmtMinute = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+};
+
 export default function StockDetail({
   symbol,
   item,
@@ -54,6 +66,7 @@ export default function StockDetail({
 }: Props) {
   const [history, setHistory] = useState<OiHistory | null>(null);
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
+  const [minute, setMinute] = useState<IntradayHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,11 +74,16 @@ export default function StockDetail({
     let alive = true;
     setLoading(true);
     setError(null);
-    Promise.all([fetchOiHistory(symbol), fetchIntradayHistory(symbol)])
-      .then(([h, intr]) => {
+    Promise.all([
+      fetchOiHistory(symbol),
+      fetchIntradayHistory(symbol),
+      fetchMinuteHistory(symbol),
+    ])
+      .then(([h, intr, min]) => {
         if (!alive) return;
         setHistory(h);
         setIntraday(intr);
+        setMinute(min);
       })
       .catch((err: unknown) => {
         if (alive)
@@ -114,6 +132,24 @@ export default function StockDetail({
     };
   });
 
+  // Minute-by-minute closing price (last 2 hours).
+  const minuteSeries: ChartSeries[] = (minute?.futures ?? []).map((f, i) => {
+    const expired = f.expiry < todayIso;
+    return {
+      label: `${formatExpiry(f.expiry)}${expired ? " (exp)" : ""}`,
+      color: expired ? EXPIRED_COLOR : LINE_COLORS[i % LINE_COLORS.length]!,
+      dashed: expired,
+      points: f.points.map((p) => ({ date: p.t, value: p.close })),
+    };
+  });
+
+  // Current OI per future (live from ticks) for the left-column panel.
+  const oiRows = (item?.futures ?? []).map((f, i) => ({
+    expiry: f.expiry,
+    color: LINE_COLORS[i % LINE_COLORS.length]!,
+    oi: ticks[f.token]?.oi ?? 0,
+  }));
+
   return (
     <div className="app">
       <header className="topbar">
@@ -142,6 +178,19 @@ export default function StockDetail({
             <div className="empty">
               <span className="spinner" />
               Loading {symbol}…
+            </div>
+          )}
+
+          {item && showPrices && oiRows.length > 0 && (
+            <div className="oi-panel">
+              <div className="oi-panel-title">Open Interest</div>
+              {oiRows.map((r) => (
+                <div className="oi-panel-row" key={r.expiry}>
+                  <span className="oi-dot" style={{ background: r.color }} />
+                  <span className="oi-panel-exp">{formatExpiry(r.expiry)}</span>
+                  <span className="oi-panel-val">{fmtCompact(r.oi)}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -174,6 +223,14 @@ export default function StockDetail({
                   <span className="chart-sub">Hourly close · last 1 week · 3 futures</span>
                 </div>
                 <LineChart series={hourlySeries} format={fmtPrice} formatX={fmtHour} />
+              </div>
+
+              <div className="detail-chart">
+                <div className="chart-head">
+                  <h2>Price · Minute</h2>
+                  <span className="chart-sub">Minute close · last 2 hours · 3 futures</span>
+                </div>
+                <LineChart series={minuteSeries} format={fmtPrice} formatX={fmtMinute} />
               </div>
 
               <div className="detail-chart">
