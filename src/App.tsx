@@ -42,6 +42,10 @@ export default function App() {
 
   const adminAuthenticated = adminRole !== null;
   const isFullAdmin = adminRole === "full";
+
+  // Admin-only: show only stocks with a calendar arbitrage (current & next
+  // month on opposite sides — one at premium, one at discount).
+  const [arbOnly, setArbOnly] = useState(false);
   const [streamOpen, setStreamOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
@@ -322,14 +326,32 @@ export default function App() {
   }, [authenticated, board]);
 
   const filtered = useMemo(() => {
+    let list = board;
+
     const q = query.trim().toLowerCase();
-    if (!q) return board;
-    return board.filter(
-      (b) =>
-        b.symbol.toLowerCase().includes(q) ||
-        b.name.toLowerCase().includes(q),
-    );
-  }, [board, query]);
+    if (q) {
+      list = list.filter(
+        (b) =>
+          b.symbol.toLowerCase().includes(q) ||
+          b.name.toLowerCase().includes(q),
+      );
+    }
+
+    if (arbOnly) {
+      list = list.filter((b) => {
+        const spot = ticks[b.spot_token]?.last_price;
+        const cur = b.futures[0] ? ticks[b.futures[0].token]?.last_price : undefined;
+        const nxt = b.futures[1] ? ticks[b.futures[1].token]?.last_price : undefined;
+        if (!spot || !cur || !nxt) return false;
+        const premCur = cur - spot;
+        const premNext = nxt - spot;
+        // Arbitrage: the two legs are on opposite sides of spot.
+        return (premCur > 0 && premNext < 0) || (premCur < 0 && premNext > 0);
+      });
+    }
+
+    return list;
+  }, [board, query, arbOnly, ticks]);
 
   const status = live
     ? { kind: "live", label: "Live" }
@@ -445,6 +467,15 @@ export default function App() {
           </span>
           {adminAuthenticated && (
             <button
+              className={`btn${arbOnly ? " btn--primary" : ""}`}
+              onClick={() => setArbOnly((v) => !v)}
+              title="Show only stocks where current & next month are on opposite sides (one premium, one discount)"
+            >
+              Arbitrage
+            </button>
+          )}
+          {adminAuthenticated && (
+            <button
               className="btn"
               onClick={() => {
                 setTradesOpen(true);
@@ -516,7 +547,11 @@ export default function App() {
       )}
 
       {!loading && filtered.length === 0 && (
-        <div className="empty">No F&amp;O stocks match “{query}”.</div>
+        <div className="empty">
+          {arbOnly
+            ? "No stocks currently show a calendar arbitrage (one leg premium, one discount)."
+            : `No F&O stocks match “${query}”.`}
+        </div>
       )}
 
       {tradesOpen && (
