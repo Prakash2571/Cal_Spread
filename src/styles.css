@@ -1,32 +1,32 @@
 :root {
-  --bg: #0a0d13;
-  --bg-elev: #0e121b;
-  --panel: #131824;
-  --panel-2: #181e2c;
-  --border: #232b3b;
-  --border-strong: #313d54;
-  --text: #eef1f7;
-  --muted: #8d97ac;
-  --faint: #59627a;
-  --accent: #6d8bff;
-  --accent-2: #9b6dff;
-  --pos: #22ce97;
-  --pos-soft: rgba(34, 206, 151, 0.13);
-  --neg: #ff5a6a;
-  --neg-soft: rgba(255, 90, 106, 0.13);
-  --amber: #f5b441;
-  /* Premium / discount accent colours */
-  --prem: #3d8bfd;
-  --prem-soft: rgba(61, 139, 253, 0.15);
-  --disc: #ffa63d;
-  --disc-soft: rgba(255, 166, 61, 0.16);
-  /* Open interest — a distinct cyan accent (not red/green) */
-  --oi: #22d3ee;
-  --oi-soft: rgba(34, 211, 238, 0.14);
-  --radius: 16px;
-  --radius-sm: 10px;
-  --shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
-  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --bg: #0b0e14;
+  --bg-elev: #111827;
+  --panel: #1a2332;
+  --panel-2: #1f2b3d;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #f0f4fc;
+  --muted: #8b9ab5;
+  --faint: #5a6a85;
+  --accent: #3b82f6;
+  --accent-2: #60a5fa;
+  --pos: #00d4aa;
+  --pos-soft: rgba(0, 212, 170, 0.1);
+  --neg: #ff4757;
+  --neg-soft: rgba(255, 71, 87, 0.1);
+  --amber: #f59e0b;
+  --prem: #00d4aa;
+  --prem-soft: rgba(0, 212, 170, 0.1);
+  --disc: #ff4757;
+  --disc-soft: rgba(255, 71, 87, 0.1);
+  --oi: #06b6d4;
+  --oi-soft: rgba(6, 182, 212, 0.1);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -40,17 +40,17 @@ body {
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(1200px 800px at 8% -15%, rgba(109, 139, 255, 0.13), transparent 55%),
-    radial-gradient(1100px 700px at 105% -5%, rgba(155, 109, 255, 0.11), transparent 50%),
-    radial-gradient(900px 900px at 50% 120%, rgba(61, 139, 253, 0.07), transparent 60%),
-    linear-gradient(180deg, #0b0f17 0%, #0a0d13 40%, #080a10 100%);
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -20%, rgba(59, 130, 246, 0.08), transparent),
+    radial-gradient(ellipse 60% 50% at 100% 0%, rgba(6, 182, 212, 0.05), transparent);
   background-attachment: fixed;
   color: var(--text);
   font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  letter-spacing: 0.1px;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .mono {
@@ -64,7 +64,7 @@ body {
   padding: 0 24px 80px;
 }
 
-/* ---------------- Top bar ---------------- */
+/* ================ Top bar ================ */
 .topbar {
   position: sticky;
   top: 0;
@@ -72,65 +72,62 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   flex-wrap: wrap;
-  padding: 18px 8px 16px;
-  margin-bottom: 10px;
-  background: linear-gradient(to bottom, rgba(10, 13, 19, 0.9), rgba(10, 13, 19, 0.62));
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: rgba(11, 14, 20, 0.85);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   border-bottom: 1px solid var(--border);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 13px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: 0 8px 22px rgba(109, 139, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, var(--accent), #06b6d4);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
   flex: none;
 }
 
 .brand-mark svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .brand h1 {
   margin: 0;
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: -0.4px;
-  background: linear-gradient(180deg, #fff, #c8d0e4);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text);
 }
 
 .subtitle {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: var(--muted);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-/* ---------------- Search ---------------- */
+/* ================ Search ================ */
 .search-wrap {
   position: relative;
   display: flex;
@@ -139,12 +136,12 @@ body {
 
 .search-wrap svg {
   position: absolute;
-  left: 13px;
-  width: 16px;
-  height: 16px;
+  left: 12px;
+  width: 15px;
+  height: 15px;
   color: var(--faint);
   pointer-events: none;
-  transition: color 0.15s;
+  transition: color 0.2s;
 }
 
 .search-wrap:focus-within svg {
@@ -152,16 +149,16 @@ body {
 }
 
 .search {
-  width: 300px;
-  max-width: 60vw;
-  padding: 11px 14px 11px 38px;
+  width: 280px;
+  max-width: 55vw;
+  padding: 10px 12px 10px 36px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(19, 24, 36, 0.8);
+  background: var(--bg-elev);
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .search::placeholder {
@@ -171,28 +168,28 @@ body {
 .search:focus {
   outline: none;
   border-color: var(--accent);
-  background: var(--panel-2);
-  box-shadow: 0 0 0 3px rgba(109, 139, 255, 0.2);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-/* ---------------- Status pill ---------------- */
+/* ================ Status pill ================ */
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--muted);
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--bg-elev);
   border-radius: 999px;
-  padding: 7px 13px;
+  padding: 6px 12px;
   white-space: nowrap;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--faint);
   flex: none;
@@ -200,20 +197,20 @@ body {
 
 .status--live {
   color: var(--pos);
-  border-color: rgba(34, 206, 151, 0.42);
+  border-color: rgba(0, 212, 170, 0.3);
   background: var(--pos-soft);
 }
 
 .status--live .status-dot {
   background: var(--pos);
-  box-shadow: 0 0 0 0 rgba(34, 206, 151, 0.6);
-  animation: pulse 1.6s infinite;
+  box-shadow: 0 0 0 0 rgba(0, 212, 170, 0.6);
+  animation: pulse 1.8s infinite;
 }
 
 .status--wait {
   color: var(--amber);
-  border-color: rgba(245, 180, 65, 0.35);
-  background: rgba(245, 180, 65, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 .status--wait .status-dot {
@@ -221,19 +218,13 @@ body {
 }
 
 @keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(34, 206, 151, 0.55);
-  }
-  70% {
-    box-shadow: 0 0 0 7px rgba(34, 206, 151, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(34, 206, 151, 0);
-  }
+  0% { box-shadow: 0 0 0 0 rgba(0, 212, 170, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 212, 170, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 212, 170, 0); }
 }
 
 .count {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -241,30 +232,31 @@ body {
 
 .count strong {
   color: var(--text);
-  font-weight: 700;
+  font-weight: 600;
 }
 
-/* ---------------- Buttons ---------------- */
+/* ================ Buttons ================ */
 .btn {
   appearance: none;
   border: 1px solid var(--border-strong);
-  background: var(--panel);
+  background: var(--bg-elev);
   color: var(--text);
-  padding: 10px 17px;
+  padding: 9px 16px;
   border-radius: var(--radius-sm);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: transform 0.12s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: all 0.15s ease;
 }
 
 .btn:hover:not(:disabled) {
-  border-color: #45557a;
-  background: var(--panel-2);
+  border-color: var(--accent);
+  background: var(--panel);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .btn:active {
@@ -272,46 +264,46 @@ body {
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: default;
 }
 
 .btn--primary {
   border: none;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  background: var(--accent);
   color: #fff;
-  box-shadow: 0 8px 20px rgba(109, 139, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
 }
 
-.btn--primary:hover {
-  box-shadow: 0 11px 28px rgba(109, 139, 255, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+.btn--primary:hover:not(:disabled) {
+  background: #2563eb;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
 }
 
-/* ---------------- Banners ---------------- */
+/* ================ Banners ================ */
 .banner {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 13px 18px;
+  padding: 12px 16px;
   border-radius: var(--radius-sm);
   margin: 8px 0 16px;
-  font-size: 13.5px;
-  background: var(--panel);
+  font-size: 13px;
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--muted);
-  box-shadow: var(--shadow-soft);
 }
 
 .banner--error {
   background: var(--neg-soft);
-  border-color: rgba(255, 90, 106, 0.4);
-  color: #ffb9c0;
+  border-color: rgba(255, 71, 87, 0.3);
+  color: #ffa0a8;
 }
 
 .banner--info {
-  background: rgba(109, 139, 255, 0.08);
-  border-color: rgba(109, 139, 255, 0.3);
-  color: #b9c8ff;
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
 }
 
 .link {
@@ -324,13 +316,13 @@ body {
   text-decoration: underline;
 }
 
-/* ---------------- Legend ---------------- */
+/* ================ Legend ================ */
 .legend {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   flex-wrap: wrap;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
   margin: 4px 2px 20px;
 }
@@ -338,7 +330,7 @@ body {
 .tag {
   display: inline-flex;
   align-items: center;
-  padding: 3px 11px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
@@ -358,11 +350,11 @@ body {
   color: var(--faint);
 }
 
-/* ---------------- Cards grid ---------------- */
+/* ================ Cards grid ================ */
 .cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 16px;
   align-items: start;
 }
 
@@ -377,13 +369,12 @@ body {
     grid-template-columns: 1fr;
   }
   .app {
-    padding: 0 14px 60px;
+    padding: 0 12px 60px;
   }
   .topbar {
-    gap: 12px;
-    padding: 14px 2px 12px;
+    gap: 10px;
+    padding: 12px 8px;
   }
-  /* Search takes the full width on its own row for easy tapping. */
   .search-wrap {
     order: 3;
     width: 100%;
@@ -393,39 +384,35 @@ body {
     max-width: 100%;
   }
   .toolbar {
-    gap: 10px;
+    gap: 8px;
     width: 100%;
   }
 }
 
-/* Phones: tighten the card layout so the Prem/Disc column never clips. */
 @media (max-width: 480px) {
   .app {
-    padding: 0 10px 52px;
+    padding: 0 8px 48px;
   }
   .brand-mark {
-    width: 38px;
-    height: 38px;
-    border-radius: 11px;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
   }
   .brand h1 {
-    font-size: 18px;
+    font-size: 17px;
   }
   .subtitle {
-    font-size: 11.5px;
+    font-size: 11px;
   }
   .card-head {
-    padding: 12px 12px;
+    padding: 11px 12px;
   }
   .card-symbol {
-    font-size: 14.5px;
+    font-size: 13.5px;
   }
   .card-price {
-    font-size: 15px;
+    font-size: 14px;
   }
-
-  /* Fixed layout with all four columns (Contract | LTP | Fair | Prem/Disc)
-     sized to fit narrow phone screens without truncation. */
   .card-table {
     table-layout: fixed;
     width: 100%;
@@ -433,7 +420,7 @@ body {
   }
   .card-table thead th,
   .card-table td {
-    padding: 9px 4px;
+    padding: 8px 4px;
     white-space: nowrap;
   }
   .card-table thead th {
@@ -461,40 +448,39 @@ body {
   }
   .chip {
     min-width: 0;
-    padding: 3px 6px;
-    font-size: 11px;
+    padding: 2px 5px;
+    font-size: 10.5px;
   }
   .legend {
-    font-size: 11.5px;
-    gap: 7px;
+    font-size: 11px;
+    gap: 6px;
   }
 }
 
+/* ================ Card ================ */
 .card {
   position: relative;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 40%),
-    linear-gradient(180deg, var(--panel-2), var(--panel));
+  background: linear-gradient(180deg, var(--glass) 0%, transparent 100%), var(--panel);
   overflow: hidden;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card::before {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent);
   opacity: 0;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.2s ease;
 }
 
 .card:hover {
-  transform: translateY(-4px);
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.08);
 }
 
 .card:hover::before {
@@ -506,7 +492,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 15px 17px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -517,27 +503,27 @@ body {
 .card-symbol {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 15.5px;
+  gap: 6px;
+  font-size: 14.5px;
   font-weight: 700;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
 }
 
 .badge-index {
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   color: var(--accent);
-  background: rgba(109, 139, 255, 0.15);
-  border: 1px solid rgba(109, 139, 255, 0.35);
-  padding: 2px 6px;
-  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 2px 5px;
+  border-radius: 4px;
   line-height: 1;
 }
 
 .card-name {
   display: block;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -549,18 +535,18 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 3px;
   white-space: nowrap;
 }
 
 .card-price {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .card-spread {
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -573,20 +559,20 @@ body {
   color: var(--disc);
 }
 
-/* ---------------- Card table ---------------- */
+/* ================ Card table ================ */
 .card-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .card-table thead th {
   text-align: right;
-  padding: 9px 17px;
+  padding: 8px 16px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.6px;
   color: var(--faint);
   border-bottom: 1px solid var(--border);
 }
@@ -596,8 +582,8 @@ body {
 }
 
 .card-table td {
-  padding: 10px 17px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  padding: 9px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .card-table tbody tr:last-child td {
@@ -605,32 +591,37 @@ body {
 }
 
 .card-table tbody tr {
-  transition: background 0.12s;
+  transition: background 0.15s;
+}
+
+.card-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .card-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(59, 130, 246, 0.04);
 }
 
 .row-spot {
-  background: rgba(109, 139, 255, 0.07);
+  background: rgba(59, 130, 246, 0.06);
 }
 
 .contract-name {
   font-weight: 600;
+  color: var(--text);
 }
 
 .contract-meta {
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 400;
 }
 
 .contract-oi {
   display: block;
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--oi);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.2px;
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -642,10 +633,10 @@ body {
 }
 
 .card-table td.fair {
-  color: #bcc6da;
+  color: var(--muted);
 }
 
-/* ---------------- Value colours & chips ---------------- */
+/* ================ Value colours & chips ================ */
 .pos {
   color: var(--pos);
 }
@@ -660,11 +651,11 @@ body {
 
 .chip {
   display: inline-block;
-  min-width: 60px;
+  min-width: 56px;
   text-align: center;
-  padding: 3px 10px;
-  border-radius: 8px;
-  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
   font-weight: 600;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
@@ -673,13 +664,13 @@ body {
 .chip.prem {
   color: var(--prem);
   background: transparent;
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 .chip.disc {
   color: var(--disc);
   background: transparent;
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 .chip.muted {
@@ -687,104 +678,98 @@ body {
   background: transparent;
 }
 
-/* ---------------- States ---------------- */
+/* ================ States ================ */
 .empty {
   padding: 60px 20px;
   text-align: center;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .spinner {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
   display: inline-block;
   vertical-align: -3px;
   margin-right: 8px;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
-/* ---------------- Skeleton loading cards ---------------- */
+/* ================ Skeleton loading cards ================ */
 .skeleton {
   pointer-events: none;
 }
 
 .sk {
   display: block;
-  border-radius: 6px;
+  border-radius: 4px;
   background: linear-gradient(
     100deg,
-    rgba(255, 255, 255, 0.045) 30%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.045) 70%
+    rgba(255, 255, 255, 0.04) 30%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 70%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+  animation: shimmer 1.5s ease-in-out infinite;
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .sk-symbol {
-  width: 84px;
-  height: 15px;
-  margin-bottom: 8px;
+  width: 80px;
+  height: 14px;
+  margin-bottom: 6px;
 }
 
 .sk-name {
-  width: 130px;
+  width: 120px;
   height: 10px;
 }
 
 .sk-price {
-  width: 62px;
-  height: 15px;
+  width: 60px;
+  height: 14px;
 }
 
 .sk-row {
-  height: 12px;
+  height: 11px;
 }
 
 .skeleton .card-table td {
-  padding: 12px 17px;
+  padding: 11px 16px;
 }
 
-/* ---------------- Risk-free rate input ---------------- */
+/* ================ Risk-free rate input ================ */
 .rf {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--muted);
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--bg-elev);
   border-radius: var(--radius-sm);
-  padding: 7px 11px;
+  padding: 6px 10px;
 }
 
 .rf input {
-  width: 48px;
+  width: 44px;
   border: none;
   background: transparent;
   color: var(--text);
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   text-align: right;
 }
@@ -805,7 +790,7 @@ body {
   appearance: textfield;
 }
 
-/* ---------------- Admin Page ---------------- */
+/* ================ Admin Page ================ */
 .admin-page {
   min-height: 100vh;
   display: grid;
@@ -815,13 +800,11 @@ body {
 
 .admin-card {
   width: 100%;
-  max-width: 400px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 35%),
-    linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--border);
+  max-width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
-  padding: 42px 38px;
+  padding: 40px 36px;
   text-align: center;
   box-shadow: var(--shadow);
   position: relative;
@@ -832,54 +815,55 @@ body {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), #06b6d4);
 }
 
 .admin-card .brand-mark {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
-  margin: 0 auto 22px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  margin: 0 auto 20px;
 }
 
 .admin-card .brand-mark svg {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
 }
 
 .admin-card h1 {
-  margin: 0 0 8px;
-  font-size: 23px;
-  font-weight: 800;
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
   letter-spacing: -0.3px;
+  color: var(--text);
 }
 
 .admin-subtitle {
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
-  margin: 0 0 30px;
+  margin: 0 0 28px;
 }
 
 .admin-card form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .admin-input {
   width: 100%;
-  padding: 14px 16px;
+  padding: 13px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-elev);
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
   font-family: inherit;
   text-align: center;
   letter-spacing: 2px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .admin-input::placeholder {
@@ -890,30 +874,30 @@ body {
 .admin-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(109, 139, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .admin-input:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .admin-error {
-  padding: 11px 16px;
+  padding: 10px 14px;
   border-radius: var(--radius-sm);
   background: var(--neg-soft);
-  border: 1px solid rgba(255, 90, 106, 0.4);
-  color: #ffb9c0;
+  border: 1px solid rgba(255, 71, 87, 0.3);
+  color: #ffa0a8;
   font-size: 13px;
 }
 
 .btn--full {
   width: 100%;
-  padding: 13px 17px;
-  font-size: 14.5px;
+  padding: 12px 16px;
+  font-size: 14px;
 }
 
-/* Danger (delete) buttons + inline confirm */
+/* Danger buttons */
 .btn--danger {
   border: none;
   background: var(--neg);
@@ -921,16 +905,16 @@ body {
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: #ff4356;
+  background: #e63946;
 }
 
 .btn--danger-ghost {
-  border: 1px solid rgba(255, 90, 106, 0.4);
+  border: 1px solid rgba(255, 71, 87, 0.3);
   background: transparent;
   color: var(--neg);
 }
 
-.btn--danger-ghost:hover {
+.btn--danger-ghost:hover:not(:disabled) {
   background: var(--neg-soft);
   border-color: var(--neg);
 }
@@ -944,54 +928,53 @@ body {
   white-space: nowrap;
 }
 
-
-/* ---------------- Small / trade buttons ---------------- */
+/* ================ Small / trade buttons ================ */
 .btn--sm {
-  padding: 7px 12px;
-  font-size: 12.5px;
-  border-radius: 9px;
+  padding: 6px 11px;
+  font-size: 12px;
+  border-radius: 6px;
 }
 
 .btn--trade {
   width: 100%;
-  border-color: rgba(109, 139, 255, 0.4);
-  color: #c3cffb;
-  background: rgba(109, 139, 255, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .btn--trade:hover:not(:disabled) {
-  background: rgba(109, 139, 255, 0.18);
+  background: rgba(59, 130, 246, 0.15);
   border-color: var(--accent);
 }
 
 .card-foot {
-  padding: 12px 16px 14px;
+  padding: 10px 14px 12px;
   border-top: 1px solid var(--border);
 }
 
 .btn-badge {
   display: inline-grid;
   place-items: center;
-  min-width: 18px;
-  height: 18px;
-  margin-left: 7px;
-  padding: 0 5px;
+  min-width: 17px;
+  height: 17px;
+  margin-left: 6px;
+  padding: 0 4px;
   border-radius: 999px;
   background: var(--accent);
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   vertical-align: middle;
 }
 
-/* ---------------- Trades modal ---------------- */
+/* ================ Trades modal ================ */
 .modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(5, 7, 11, 0.66);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: grid;
   place-items: start center;
   padding: 24px 16px;
@@ -1000,29 +983,27 @@ body {
 
 .modal {
   width: 100%;
-  max-width: 680px;
+  max-width: 660px;
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
 }
 
-/* Fixed header; the ✕ stays visible while the body scrolls. */
 .modal-head {
   flex: none;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 22px 16px;
+  padding: 18px 20px 14px;
   border-bottom: 1px solid var(--border);
 }
 
-/* Only the body scrolls. */
 .modal-body {
   flex: 1;
   min-height: 0;
@@ -1031,26 +1012,26 @@ body {
 
 .modal-head h2 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: -0.3px;
 }
 
 .modal-sub {
-  margin: 3px 0 0;
-  font-size: 12.5px;
+  margin: 2px 0 0;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .modal-x {
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--bg-elev);
   color: var(--muted);
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   flex: none;
   transition: color 0.15s, border-color 0.15s;
 }
@@ -1061,7 +1042,7 @@ body {
 }
 
 .trade-section {
-  padding: 16px 22px 20px;
+  padding: 14px 20px 18px;
 }
 
 .trade-section + .trade-section {
@@ -1069,11 +1050,11 @@ body {
 }
 
 .trade-section-title {
-  margin: 0 0 12px;
-  font-size: 12px;
+  margin: 0 0 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.6px;
   color: var(--faint);
   display: flex;
   align-items: center;
@@ -1083,38 +1064,38 @@ body {
 .pill-count {
   display: inline-grid;
   place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 999px;
-  background: var(--panel-2);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
 }
 
 .trade-empty {
   color: var(--faint);
-  font-size: 13px;
+  font-size: 12.5px;
   margin: 0;
 }
 
 .trade-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .trade-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 13px 15px;
+  gap: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--bg-elev);
 }
 
@@ -1129,20 +1110,20 @@ body {
 .trade-symbol {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   font-weight: 700;
-  font-size: 14.5px;
+  font-size: 14px;
 }
 
 .trade-legs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
-  margin: 5px 0 4px;
+  gap: 5px 10px;
+  margin: 4px 0 3px;
 }
 
 .leg {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -1156,7 +1137,7 @@ body {
 }
 
 .trade-meta {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--faint);
 }
 
@@ -1164,13 +1145,13 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 7px;
+  gap: 6px;
   white-space: nowrap;
   flex: none;
 }
 
 .trade-pnl {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
@@ -1185,37 +1166,36 @@ body {
 }
 
 .trade-roi {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   opacity: 0.85;
 }
 
 .trade-pnl-label {
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.7px;
   text-transform: uppercase;
   color: var(--faint);
 }
 
-/* Per-leg P&L breakdown (BUY / SELL) */
 .trade-breakdown {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  margin: 2px 0 5px;
+  gap: 5px 12px;
+  margin: 2px 0 4px;
 }
 
 .leg-pnl {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
 .trade-closed-tag {
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--faint);
@@ -1223,7 +1203,7 @@ body {
 
 @media (max-width: 480px) {
   .modal-overlay {
-    padding: 16px 8px;
+    padding: 12px 6px;
   }
   .trade-row {
     flex-direction: column;
@@ -1236,17 +1216,16 @@ body {
   }
 }
 
-
-/* ---------------- Structured trade card ---------------- */
+/* ================ Structured trade card ================ */
 .trade-card {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--bg-elev);
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .trade-card--closed {
-  opacity: 0.9;
+  opacity: 0.88;
 }
 
 .trade-card--clickable {
@@ -1255,7 +1234,7 @@ body {
 }
 
 .trade-card--clickable:hover {
-  border-color: var(--border-strong);
+  border-color: rgba(59, 130, 246, 0.2);
   background: var(--panel-2);
 }
 
@@ -1263,12 +1242,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .trade-spot {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1276,34 +1255,34 @@ body {
 .trade-spot strong {
   color: var(--text);
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 13px;
   margin-left: 4px;
 }
 
 .leg-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .leg-line {
   display: grid;
-  grid-template-columns: 44px 58px 1fr 1fr 1fr;
+  grid-template-columns: 42px 54px 1fr 1fr 1fr;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .leg-tag {
   font-family: "Inter", system-ui, sans-serif;
-  font-size: 9.5px;
-  font-weight: 800;
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.5px;
   text-align: center;
   padding: 3px 0;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .tag-buy {
@@ -1330,7 +1309,6 @@ body {
   color: var(--text);
 }
 
-/* Per-leg P&L: right-aligned and coloured red/green (override .leg-cell muted). */
 .leg-line .leg-pnl {
   text-align: right;
   font-weight: 700;
@@ -1351,9 +1329,9 @@ body {
 .trade-foot {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 11px;
-  padding-top: 10px;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 9px;
   border-top: 1px solid var(--border);
 }
 
@@ -1372,17 +1350,16 @@ body {
 
 @media (max-width: 480px) {
   .leg-line {
-    grid-template-columns: 38px 46px 1fr 1fr 1fr;
-    gap: 6px;
-    font-size: 11px;
+    grid-template-columns: 36px 44px 1fr 1fr 1fr;
+    gap: 4px;
+    font-size: 10.5px;
   }
   .trade-foot {
     flex-wrap: wrap;
   }
 }
 
-
-/* ---------------- Clickable card ---------------- */
+/* ================ Clickable card ================ */
 .card--clickable {
   cursor: pointer;
 }
@@ -1391,11 +1368,11 @@ body {
   margin-right: 4px;
 }
 
-/* ---------------- Stock detail page ---------------- */
+/* ================ Stock detail page ================ */
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 400px) 1fr;
-  gap: 20px;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  gap: 16px;
   align-items: start;
   margin-top: 8px;
 }
@@ -1413,34 +1390,34 @@ body {
 .detail-charts {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
 }
 
-/* Open-interest summary panel in the detail-page left column. */
+/* OI panel in the detail-page left column */
 .oi-panel {
-  margin-top: 16px;
+  margin-top: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  padding: 14px 16px;
+  background: var(--panel);
+  padding: 12px 14px;
 }
 
 .oi-panel-title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.6px;
   color: var(--faint);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .oi-panel-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .oi-panel-row:last-child {
@@ -1448,49 +1425,49 @@ body {
 }
 
 .oi-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
   flex: none;
 }
 
 .oi-panel-exp {
   flex: 1;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .oi-panel-val {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--oi);
 }
 
 .detail-chart {
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  padding: 18px 18px 14px;
+  background: linear-gradient(180deg, var(--glass) 0%, transparent 100%), var(--panel);
+  padding: 16px 16px 12px;
   min-width: 0;
 }
 
 .chart-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .chart-head h2 {
   margin: 0;
-  font-size: 17px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: -0.2px;
 }
 
 .chart-sub {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
@@ -1498,7 +1475,7 @@ body {
   margin-left: auto;
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
@@ -1506,9 +1483,9 @@ body {
   border: none;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 5px 12px;
+  padding: 4px 10px;
   cursor: pointer;
   font-family: inherit;
   transition: background 0.15s, color 0.15s;
@@ -1520,7 +1497,7 @@ body {
 }
 
 .chart-toggle button:not(.active):hover {
-  background: var(--panel-2);
+  background: var(--bg-elev);
   color: var(--text);
 }
 
@@ -1535,12 +1512,12 @@ body {
 }
 
 .chart-grid {
-  stroke: rgba(255, 255, 255, 0.06);
+  stroke: rgba(255, 255, 255, 0.05);
   stroke-width: 1;
 }
 
 .chart-guide {
-  stroke: rgba(255, 255, 255, 0.25);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 1;
   stroke-dasharray: 3 3;
 }
@@ -1569,22 +1546,22 @@ body {
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 12px;
-  font-size: 12px;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 11.5px;
   color: var(--muted);
 }
 
 .chart-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .chart-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
   display: inline-block;
 }
 
@@ -1592,26 +1569,26 @@ body {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(10, 13, 19, 0.92);
+  background: rgba(11, 14, 20, 0.95);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  padding: 9px 11px;
-  font-size: 12px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11.5px;
   pointer-events: none;
-  min-width: 130px;
+  min-width: 120px;
   box-shadow: var(--shadow-soft);
 }
 
 .chart-tip-date {
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   color: var(--text);
 }
 
 .chart-tip-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   margin-top: 3px;
 }
 

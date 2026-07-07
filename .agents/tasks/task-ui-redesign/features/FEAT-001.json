@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Complete UI redesign of the Calspread trading dashboard with a new professional dark trading-terminal aesthetic, updated color palette, refined typography, improved card layouts, and full responsive design for small, medium, and large screens. Only CSS and JSX className/structure changes are allowed - NO logic changes.",
+  "status": "in_progress",
+  "steps": [
+    "Create a new branch named 'ui-redesign' from main.",
+    "Rewrite src/styles.css with a completely new professional dark trading-terminal design: (1) New CSS custom properties with a refined dark palette - deep navy/charcoal backgrounds (#0b0e14, #111827, #1a2332), accent colors using teal/cyan (#00d4aa for positive, #ff4757 for negative, #3b82f6 for primary accent, #f59e0b for amber/warning), (2) Updated typography with tighter spacing and better hierarchy, (3) Redesigned card layout with subtle glassmorphism borders, (4) Better data-density - traders need to see many numbers at a glance, (5) Improved table styling with alternating subtle row backgrounds, (6) Professional-looking status indicators and pills, (7) Smooth micro-animations on hover/focus states, (8) Complete responsive breakpoints: large (3-column grid, full toolbar), medium (2-column, collapsed elements), small/phone (single column, stacked toolbar, full-width search, touch-friendly tap targets 44px+ minimum). Keep all existing class names so components continue to work. Ensure the modal (trades panel), detail page grid, chart containers, admin login card, and skeleton loading states all look cohesive.",
+    "Update index.html if needed to adjust the theme-color meta tag to match the new palette, and optionally add/change the Google Fonts link if a different font pairing works better for the trading terminal look (e.g. keep Inter for UI text but consider IBM Plex Mono or Space Mono as the monospace font for numbers).",
+    "Review all TSX component files (App.tsx, StockCard.tsx, StockDetail.tsx, LineChart.tsx, TradesPanel.tsx, SkeletonCard.tsx, Admin.tsx) and make ONLY className or minor structural JSX adjustments (e.g. wrapping elements in a div for layout purposes, adding aria attributes) that improve the layout without changing ANY logic, state, props, event handlers, API calls, or data flow. Do NOT modify api.ts or format.ts at all.",
+    "Ensure the chart SVG styling (LineChart.tsx) works with the new color scheme - update CSS classes like .chart-grid, .chart-guide, .chart-ylabel, .chart-xlabel colors to match the new palette.",
+    "Verify the build passes: run `npx tsc -b && npx vite build` and confirm no errors."
+  ],
+  "acceptance_criteria": [
+    "Running `npx tsc -b` produces zero errors",
+    "Running `npx vite build` produces a successful production bundle",
+    "The styles.css file contains a completely new color palette and design system (not just minor tweaks to existing)",
+    "All existing CSS class names are preserved (components reference them by name)",
+    "Responsive design works at 3 breakpoints: >=1180px (3 columns), 720-1179px (2 columns), <720px (1 column) with appropriate toolbar/search adjustments for each",
+    "No changes to api.ts or format.ts",
+    "No changes to component logic (useState, useEffect, useMemo, event handlers, API calls, conditional rendering logic)",
+    "The design looks like a professional trading terminal/dashboard (dark theme, high contrast numbers, clear data hierarchy)"
+  ],
+  "verification": [
+    "Run `npx tsc -b` and confirm exit code 0",
+    "Run `npx vite build` and confirm successful build output"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
