@@ -47,7 +47,9 @@ export default function App() {
   // Admin-only: show only stocks with a calendar arbitrage (current & next
   // month on opposite sides — one at premium, one at discount).
   const [arbOnly, setArbOnly] = useState(false);
-  const [sortMode, setSortMode] = useState<"oi" | "spread" | "depth" | null>(null);
+  const [sortOi, setSortOi] = useState(false);
+  const [sortSpread, setSortSpread] = useState(false);
+  const [sortDepth, setSortDepth] = useState(false);
   const [streamOpen, setStreamOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
@@ -386,36 +388,42 @@ export default function App() {
       list = [...list].sort((a, b) => arbPct(b) - arbPct(a));
     }
 
-    if (sortMode === "oi") {
+    if (sortOi || sortSpread || sortDepth) {
       list = [...list].sort((a, b) => {
-        const oiA = (a.futures[1] ? ticks[a.futures[1].token]?.oi : undefined) ?? 0;
-        const oiB = (b.futures[1] ? ticks[b.futures[1].token]?.oi : undefined) ?? 0;
-        return oiB - oiA; // descending (high to low)
-      });
-    } else if (sortMode === "spread") {
-      list = [...list].sort((a, b) => {
-        const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
-        const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
-        const spreadA = tickA && tickA.ask && tickA.ask > 0 && tickA.bid && tickA.bid > 0 ? tickA.ask - tickA.bid : Infinity;
-        const spreadB = tickB && tickB.ask && tickB.ask > 0 && tickB.bid && tickB.bid > 0 ? tickB.ask - tickB.bid : Infinity;
-        return spreadA - spreadB; // ascending (tightest first)
-      });
-    } else if (sortMode === "depth") {
-      list = [...list].sort((a, b) => {
-        const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
-        const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
-        const depthA =
-          (tickA?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
-          (tickA?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
-        const depthB =
-          (tickB?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
-          (tickB?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
-        return depthB - depthA; // descending (most orders first)
+        let cmp = 0;
+
+        if (sortOi && cmp === 0) {
+          const oiA = (a.futures[1] ? ticks[a.futures[1].token]?.oi : undefined) ?? 0;
+          const oiB = (b.futures[1] ? ticks[b.futures[1].token]?.oi : undefined) ?? 0;
+          cmp = oiB - oiA; // descending (high to low)
+        }
+
+        if (sortSpread && cmp === 0) {
+          const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
+          const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
+          const spreadA = tickA && tickA.ask && tickA.ask > 0 && tickA.bid && tickA.bid > 0 ? tickA.ask - tickA.bid : Infinity;
+          const spreadB = tickB && tickB.ask && tickB.ask > 0 && tickB.bid && tickB.bid > 0 ? tickB.ask - tickB.bid : Infinity;
+          cmp = spreadA - spreadB; // ascending (tightest first)
+        }
+
+        if (sortDepth && cmp === 0) {
+          const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
+          const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
+          const depthA =
+            (tickA?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+            (tickA?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
+          const depthB =
+            (tickB?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+            (tickB?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
+          cmp = depthB - depthA; // descending (most orders first)
+        }
+
+        return cmp;
       });
     }
 
     return list;
-  }, [board, query, arbOnly, sortMode, ticks]);
+  }, [board, query, arbOnly, sortOi, sortSpread, sortDepth, ticks]);
 
   const status = live
     ? { kind: "live", label: "Live" }
@@ -546,8 +554,8 @@ export default function App() {
           )}
           {adminAuthenticated && (
             <button
-              className={`btn${sortMode === "oi" ? " btn--primary" : ""}`}
-              onClick={() => setSortMode((v) => (v === "oi" ? null : "oi"))}
+              className={`btn${sortOi ? " btn--primary" : ""}`}
+              onClick={() => setSortOi((v) => !v)}
               title="Sort by mid-month futures OI (high to low)"
             >
               OI
@@ -555,8 +563,8 @@ export default function App() {
           )}
           {adminAuthenticated && (
             <button
-              className={`btn${sortMode === "spread" ? " btn--primary" : ""}`}
-              onClick={() => setSortMode((v) => (v === "spread" ? null : "spread"))}
+              className={`btn${sortSpread ? " btn--primary" : ""}`}
+              onClick={() => setSortSpread((v) => !v)}
               title="Sort by bid-ask spread for 2nd month future (tightest first)"
             >
               Spread
@@ -564,8 +572,8 @@ export default function App() {
           )}
           {adminAuthenticated && (
             <button
-              className={`btn${sortMode === "depth" ? " btn--primary" : ""}`}
-              onClick={() => setSortMode((v) => (v === "depth" ? null : "depth"))}
+              className={`btn${sortDepth ? " btn--primary" : ""}`}
+              onClick={() => setSortDepth((v) => !v)}
               title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
             >
               Depth
