@@ -396,8 +396,8 @@ export default function App() {
       list = [...list].sort((a, b) => {
         const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
         const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
-        const spreadA = tickA && tickA.ask && tickA.bid ? tickA.ask - tickA.bid : Infinity;
-        const spreadB = tickB && tickB.ask && tickB.bid ? tickB.ask - tickB.bid : Infinity;
+        const spreadA = tickA && tickA.ask && tickA.ask > 0 && tickA.bid && tickA.bid > 0 ? tickA.ask - tickA.bid : Infinity;
+        const spreadB = tickB && tickB.ask && tickB.ask > 0 && tickB.bid && tickB.bid > 0 ? tickB.ask - tickB.bid : Infinity;
         return spreadA - spreadB; // ascending (tightest first)
       });
     } else if (sortMode === "depth") {
@@ -405,11 +405,11 @@ export default function App() {
         const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
         const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
         const depthA =
-          (tickA?.bids?.reduce((sum, l) => sum + l.orders, 0) ?? 0) +
-          (tickA?.asks?.reduce((sum, l) => sum + l.orders, 0) ?? 0);
+          (tickA?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+          (tickA?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
         const depthB =
-          (tickB?.bids?.reduce((sum, l) => sum + l.orders, 0) ?? 0) +
-          (tickB?.asks?.reduce((sum, l) => sum + l.orders, 0) ?? 0);
+          (tickB?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+          (tickB?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
         return depthB - depthA; // descending (most orders first)
       });
     }
