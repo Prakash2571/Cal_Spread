@@ -485,6 +485,10 @@ export default function App() {
         markEnd={tradeForView?.closed_at ?? undefined}
         showIntraday={!tradeForView || tradeForView.status === "open"}
         onBack={() => navigate("/")}
+        canTrade={adminAuthenticated && authenticated}
+        tradeBusy={takingSymbol === sym}
+        hasOpenTrade={openTradeSymbols.has(sym.toUpperCase())}
+        onTakeTrade={handleTakeTrade}
       />
     );
   }

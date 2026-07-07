@@ -26,6 +26,14 @@ interface Props {
   markEnd?: string;
   /** Show the near-real-time 1m/5m chart (hidden for closed/history trades). */
   showIntraday?: boolean;
+  /** Whether the user can initiate a trade. */
+  canTrade?: boolean;
+  /** True while the take-trade request is in flight. */
+  tradeBusy?: boolean;
+  /** True if the symbol already has an open trade. */
+  hasOpenTrade?: boolean;
+  /** Callback to initiate a trade on this symbol. */
+  onTakeTrade?: (symbol: string) => void;
 }
 
 // Colours per contract slot (near / next / far) — deliberately distinct hues
@@ -72,6 +80,10 @@ export default function StockDetail({
   markStart,
   markEnd,
   showIntraday = true,
+  canTrade,
+  tradeBusy,
+  hasOpenTrade,
+  onTakeTrade,
 }: Props) {
   const [history, setHistory] = useState<OiHistory | null>(null);
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
@@ -246,6 +258,18 @@ export default function StockDetail({
             <div className="empty">
               <span className="spinner" />
               Loading {symbol}…
+            </div>
+          )}
+
+          {canTrade && item && item.futures.length >= 2 && (
+            <div className="card-foot">
+              <button
+                className="btn btn--sm btn--trade"
+                disabled={tradeBusy || hasOpenTrade}
+                onClick={() => onTakeTrade?.(symbol)}
+              >
+                {hasOpenTrade ? "Trade open" : tradeBusy ? "Taking..." : "Take Trade"}
+              </button>
             </div>
           )}
 
