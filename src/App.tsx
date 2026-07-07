@@ -47,6 +47,7 @@ export default function App() {
   // Admin-only: show only stocks with a calendar arbitrage (current & next
   // month on opposite sides — one at premium, one at discount).
   const [arbOnly, setArbOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<"oi" | "spread" | "depth" | null>(null);
   const [streamOpen, setStreamOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
@@ -385,8 +386,36 @@ export default function App() {
       list = [...list].sort((a, b) => arbPct(b) - arbPct(a));
     }
 
+    if (sortMode === "oi") {
+      list = [...list].sort((a, b) => {
+        const oiA = (a.futures[1] ? ticks[a.futures[1].token]?.oi : undefined) ?? 0;
+        const oiB = (b.futures[1] ? ticks[b.futures[1].token]?.oi : undefined) ?? 0;
+        return oiB - oiA; // descending (high to low)
+      });
+    } else if (sortMode === "spread") {
+      list = [...list].sort((a, b) => {
+        const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
+        const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
+        const spreadA = tickA && tickA.ask && tickA.bid ? tickA.ask - tickA.bid : Infinity;
+        const spreadB = tickB && tickB.ask && tickB.bid ? tickB.ask - tickB.bid : Infinity;
+        return spreadA - spreadB; // ascending (tightest first)
+      });
+    } else if (sortMode === "depth") {
+      list = [...list].sort((a, b) => {
+        const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
+        const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
+        const depthA =
+          (tickA?.bids?.reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+          (tickA?.asks?.reduce((sum, l) => sum + l.orders, 0) ?? 0);
+        const depthB =
+          (tickB?.bids?.reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+          (tickB?.asks?.reduce((sum, l) => sum + l.orders, 0) ?? 0);
+        return depthB - depthA; // descending (most orders first)
+      });
+    }
+
     return list;
-  }, [board, query, arbOnly, ticks]);
+  }, [board, query, arbOnly, sortMode, ticks]);
 
   const status = live
     ? { kind: "live", label: "Live" }
@@ -513,6 +542,33 @@ export default function App() {
               title="Show only stocks where current & next month are on opposite sides (one premium, one discount)"
             >
               Arbitrage
+            </button>
+          )}
+          {adminAuthenticated && (
+            <button
+              className={`btn${sortMode === "oi" ? " btn--primary" : ""}`}
+              onClick={() => setSortMode((v) => (v === "oi" ? null : "oi"))}
+              title="Sort by mid-month futures OI (high to low)"
+            >
+              OI
+            </button>
+          )}
+          {adminAuthenticated && (
+            <button
+              className={`btn${sortMode === "spread" ? " btn--primary" : ""}`}
+              onClick={() => setSortMode((v) => (v === "spread" ? null : "spread"))}
+              title="Sort by bid-ask spread for 2nd month future (tightest first)"
+            >
+              Spread
+            </button>
+          )}
+          {adminAuthenticated && (
+            <button
+              className={`btn${sortMode === "depth" ? " btn--primary" : ""}`}
+              onClick={() => setSortMode((v) => (v === "depth" ? null : "depth"))}
+              title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
+            >
+              Depth
             </button>
           )}
           {adminAuthenticated && (
