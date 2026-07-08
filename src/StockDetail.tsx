@@ -4,9 +4,11 @@ import {
   fetchIntradayHistory,
   fetchMinuteHistory,
   fetchFiveMinHistory,
+  fetchSpreadHistory,
   type BoardItem,
   type OiHistory,
   type IntradayHistory,
+  type SpreadHistory,
   type Tick,
   type Trade,
 } from "./api.ts";
@@ -96,6 +98,7 @@ export default function StockDetail({
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
   const [minute, setMinute] = useState<IntradayHistory | null>(null);
   const [fiveMin, setFiveMin] = useState<IntradayHistory | null>(null);
+  const [spreadHistory, setSpreadHistory] = useState<SpreadHistory | null>(null);
   const [intradayMode, setIntradayMode] = useState<"1m" | "5m">("1m");
   const [spreadMode, setSpreadMode] = useState<"daily" | "hourly" | "5m" | "1m">(
     "daily",
@@ -112,12 +115,14 @@ export default function StockDetail({
     const intra = showIntraday
       ? Promise.all([fetchMinuteHistory(symbol), fetchFiveMinHistory(symbol)])
       : Promise.resolve(null);
+    const spreadHist = fetchSpreadHistory(symbol).catch(() => null);
 
-    Promise.all([core, intra])
-      .then(([[h, intrH], intraRes]) => {
+    Promise.all([core, intra, spreadHist])
+      .then(([[h, intrH], intraRes, sh]) => {
         if (!alive) return;
         setHistory(h);
         setIntraday(intrH);
+        setSpreadHistory(sh);
         if (intraRes) {
           setMinute(intraRes[0]);
           setFiveMin(intraRes[1]);
@@ -296,6 +301,68 @@ export default function StockDetail({
             </div>
           ) : (
             <>
+              {spreadHistory && spreadHistory.points.length > 0 && (() => {
+                const pts = spreadHistory.points;
+                const stats = spreadHistory.stats;
+                const firstDate = pts[0]!.date;
+                const lastDate = pts[pts.length - 1]!.date;
+                const spreadHistSeries: ChartSeries[] = [
+                  {
+                    label: "Spread",
+                    color: "#6d8bff",
+                    points: pts.map((p) => ({ date: p.date, value: p.spread })),
+                  },
+                  {
+                    label: "Mean",
+                    color: "#94a3b8",
+                    dashed: true,
+                    points: [
+                      { date: firstDate, value: stats.mean },
+                      { date: lastDate, value: stats.mean },
+                    ],
+                  },
+                  {
+                    label: "Max",
+                    color: "#22c55e",
+                    dashed: true,
+                    points: [
+                      { date: firstDate, value: stats.max },
+                      { date: lastDate, value: stats.max },
+                    ],
+                  },
+                  {
+                    label: "Min",
+                    color: "#ef4444",
+                    dashed: true,
+                    points: [
+                      { date: firstDate, value: stats.min },
+                      { date: lastDate, value: stats.min },
+                    ],
+                  },
+                ];
+                return (
+                  <div className="detail-chart">
+                    <div className="chart-head">
+                      <h2>Spread History</h2>
+                      <span className="chart-sub">
+                        Daily spread (all available data) · next − current month
+                      </span>
+                    </div>
+                    <LineChart
+                      series={spreadHistSeries}
+                      format={fmtPrice}
+                      signed
+                    />
+                    <div style={{ display: 'flex', gap: '1.5rem', padding: '0.5rem 0', fontSize: '0.85rem' }}>
+                      <span>Mean: <strong>{fmtPrice(stats.mean)}</strong></span>
+                      <span style={{ color: '#22c55e' }}>Max: <strong>{fmtPrice(stats.max)}</strong></span>
+                      <span style={{ color: '#ef4444' }}>Min: <strong>{fmtPrice(stats.min)}</strong></span>
+                      <span>Count: <strong>{stats.count}</strong></span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Spread</h2>

@@ -458,6 +458,42 @@ export async function fetchQuotes(tokens: number[]): Promise<Tick[]> {
   return body.ticks;
 }
 
+// ---------------- Historical spread (2-year daily) ----------------
+
+export interface SpreadHistoryPoint {
+  date: string;
+  spread: number;
+}
+
+export interface SpreadHistoryStats {
+  mean: number;
+  max: number;
+  min: number;
+  count: number;
+}
+
+export interface SpreadHistory {
+  symbol: string;
+  name: string;
+  is_index: boolean;
+  dataRange: { from: string; to: string };
+  points: SpreadHistoryPoint[];
+  stats: SpreadHistoryStats;
+}
+
+/** Fetch up to 2 years of daily spread history for a symbol. */
+export async function fetchSpreadHistory(symbol: string): Promise<SpreadHistory> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/spread-history/${encodeURIComponent(symbol)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as SpreadHistory & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load spread history (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
 /** Annual dividend yield (%) per stock symbol, from Yahoo Finance (cached). */
 export async function fetchDividends(): Promise<Record<string, number>> {
   const res = await fetch(`${API_BASE_URL}/api/dividends`);
