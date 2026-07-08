@@ -16,19 +16,20 @@ interface DataPoint {
 }
 
 /**
- * 3D PnL graph showing PnL (Z-axis) vs Time (X-axis) vs OI (Y-axis).
+ * 3D PnL graph showing PnL (Y-axis, vertical) vs Time (X-axis) vs OI (Z-axis, depth).
  * Supports orbit controls for rotation, pan, and zoom.
  */
 export default function PnlGraph3D({ trade, history }: Props) {
   const { points, xRange, yRange, zRange } = useMemo(() => {
     const openDate = trade.opened_at.slice(0, 10);
+    const closeDate = trade.closed_at ? trade.closed_at.slice(0, 10) : null;
 
     // Find buy-leg and sell-leg futures in the OI history
     const buyFuture = history.futures.find((f) => f.token === trade.buy.token);
     const sellFuture = history.futures.find((f) => f.token === trade.sell.token);
 
     if (!buyFuture || !sellFuture) {
-      return { points: [] as DataPoint[], xRange: [0, 1], yRange: [0, 1], zRange: [-1, 1] };
+      return { points: [] as DataPoint[], xRange: [0, 1], yRange: [-1, 1], zRange: [0, 1] };
     }
 
     // Build date-indexed maps for quick lookup
@@ -36,9 +37,14 @@ export default function PnlGraph3D({ trade, history }: Props) {
     const sellMap = new Map(sellFuture.points.map((p) => [p.date, p]));
 
     // Get all dates from the buy future that are on or after the trade open date
+    // For closed trades, cap at closed_at date
     const dates = buyFuture.points
       .map((p) => p.date)
-      .filter((d) => d >= openDate)
+      .filter((d) => {
+        if (d < openDate) return false;
+        if (closeDate && d > closeDate) return false;
+        return true;
+      })
       .sort();
 
     const pts: DataPoint[] = [];
@@ -47,26 +53,31 @@ export default function PnlGraph3D({ trade, history }: Props) {
       const sellPoint = sellMap.get(date);
       if (!buyPoint || !sellPoint) return;
 
+      // For closed trades on the close date, use exit prices if available
+      const isCloseDate = closeDate && date === closeDate;
+      const buyClose = isCloseDate && trade.buy_close != null ? trade.buy_close : buyPoint.close;
+      const sellClose = isCloseDate && trade.sell_close != null ? trade.sell_close : sellPoint.close;
+
       const pnl =
         trade.lot_size *
-        ((buyPoint.close - trade.buy.entry) + (trade.sell.entry - sellPoint.close));
+        ((buyClose - trade.buy.entry) + (trade.sell.entry - sellClose));
       const oi = buyPoint.oi + sellPoint.oi;
 
       pts.push({ timeIndex: idx, oi, pnl });
     });
 
     if (pts.length === 0) {
-      return { points: [] as DataPoint[], xRange: [0, 1], yRange: [0, 1], zRange: [-1, 1] };
+      return { points: [] as DataPoint[], xRange: [0, 1], yRange: [-1, 1], zRange: [0, 1] };
     }
 
     const xMin = 0;
     const xMax = Math.max(pts[pts.length - 1]!.timeIndex, 1);
-    const oiValues = pts.map((p) => p.oi);
-    const yMin = Math.min(...oiValues);
-    const yMax = Math.max(...oiValues);
     const pnlValues = pts.map((p) => p.pnl);
-    const zMin = Math.min(...pnlValues, 0);
-    const zMax = Math.max(...pnlValues, 0);
+    const yMin = Math.min(...pnlValues, 0);
+    const yMax = Math.max(...pnlValues, 0);
+    const oiValues = pts.map((p) => p.oi);
+    const zMin = Math.min(...oiValues);
+    const zMax = Math.max(...oiValues);
 
     return {
       points: pts,
@@ -96,11 +107,11 @@ export default function PnlGraph3D({ trade, history }: Props) {
     return ((val - min) / range) * scaleSize * 2 - scaleSize;
   };
 
-  // Create line segments colored by PnL sign
+  // Create line segments: X = time, Y = PnL (vertical), Z = OI (depth)
   const linePoints: [number, number, number][] = points.map((p) => [
     normalize(p.timeIndex, xRange[0], xRange[1]),
-    normalize(p.oi, yRange[0], yRange[1]),
-    normalize(p.pnl, zRange[0], zRange[1]),
+    normalize(p.pnl, yRange[0], yRange[1]),
+    normalize(p.oi, zRange[0], zRange[1]),
   ]);
 
   const lineColors: [number, number, number][] = points.map((p) => {
@@ -108,11 +119,14 @@ export default function PnlGraph3D({ trade, history }: Props) {
     return [1.0, 0.35, 0.42]; // red
   });
 
+  // Zero-PnL plane Y position
+  const zeroPnlY = normalize(0, yRange[0], yRange[1]);
+
   return (
     <div className="detail-chart" style={{ height: 500 }}>
       <div className="chart-head">
         <h2>3D PnL Surface</h2>
-        <span className="chart-sub">Time (X) x OI (Y) x PnL (Z) - drag to rotate, scroll to zoom</span>
+        <span className="chart-sub">Time (X) x PnL (Y) x OI (Z) - drag to rotate, scroll to zoom</span>
       </div>
       <Canvas
         camera={{ position: [8, 6, 8], fov: 50 }}
@@ -147,17 +161,14 @@ export default function PnlGraph3D({ trade, history }: Props) {
           Time
         </Text>
         <Text position={[-scaleSize - 0.8, 0, -scaleSize]} fontSize={0.5} color="#9ca3af" rotation={[0, 0, Math.PI / 2]}>
-          OI
-        </Text>
-        <Text position={[-scaleSize, -scaleSize - 0.8, 0]} fontSize={0.5} color="#9ca3af">
           PnL
         </Text>
+        <Text position={[-scaleSize, -scaleSize - 0.8, 0]} fontSize={0.5} color="#9ca3af">
+          OI
+        </Text>
 
-        {/* Zero PnL plane (faint grid) */}
-        <mesh
-          position={[0, 0, normalize(0, zRange[0], zRange[1])]}
-          rotation={[Math.PI / 2, 0, 0]}
-        >
+        {/* Zero PnL plane - horizontal at the y-level where PnL = 0 */}
+        <mesh position={[0, zeroPnlY, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[scaleSize * 2, scaleSize * 2]} />
           <meshBasicMaterial
             color="#4b5563"
@@ -171,7 +182,6 @@ export default function PnlGraph3D({ trade, history }: Props) {
         <gridHelper
           args={[scaleSize * 2, 10, "#374151", "#374151"]}
           position={[0, -scaleSize, 0]}
-          rotation={[0, 0, 0]}
         />
       </Canvas>
     </div>

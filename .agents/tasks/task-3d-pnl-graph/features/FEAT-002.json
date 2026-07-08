@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Fix 3D PnL graph issues: swap axis mapping (PnL=Y, OI=Z), fix zero-plane orientation, cap PnL for closed trades.",
+  "status": "in_progress",
+  "steps": [
+    "Swap axis mapping in PnlGraph3D.tsx so PnL is Y (vertical/up) and OI is Z (depth)",
+    "Fix the zero-PnL plane to be horizontal at y = normalize(0, pnlRange) with no rotation",
+    "Cap PnL calculation for closed trades: filter dates to <= closed_at, or use buy_close/sell_close for post-close dates",
+    "Update axis labels and subtitle to reflect the new mapping",
+    "Verify tsc -b and vite build pass"
+  ],
+  "acceptance_criteria": [
+    "PnL is on the Y-axis (vertical/up in Three.js)",
+    "OI is on the Z-axis (depth in Three.js)",
+    "Zero-PnL plane is horizontal at the correct Y position",
+    "Closed trades do not show PnL movements after closed_at",
+    "tsc -b compiles without errors",
+    "vite build produces a bundle without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/Cal_Spread && npx tsc -b",
+    "cd /projects/sandbox/Cal_Spread && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}
