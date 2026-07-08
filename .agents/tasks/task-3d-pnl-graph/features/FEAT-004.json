@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-004",
+  "type": "fix",
+  "description": "Fix 3D PnL graph showing 'Not enough data' for open trades by resolving timestamp matching and single-point rendering issues.",
+  "status": "completed",
+  "steps": [
+    "Replace exact string key matching in intraday modes with binary-search nearest-match using 5-min tolerance to handle Kite API timestamp format variations",
+    "Change 'not enough data' threshold from points.length < 2 to points.length === 0 so single data points render",
+    "Only render Line component when 2+ points exist; single points still show as spheres",
+    "Verify tsc -b and vite build pass"
+  ],
+  "acceptance_criteria": [
+    "Intraday modes (1W, 5m, 1m) match buy/sell timestamps within 5-min tolerance instead of exact string match",
+    "Graph renders with even a single data point (as a sphere in 3D space)",
+    "Line is only drawn when 2+ points exist",
+    "tsc -b compiles without errors",
+    "vite build produces a bundle without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/Cal_Spread && npx tsc -b",
+    "cd /projects/sandbox/Cal_Spread && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": "The root cause was that Kite historical API returns timestamps with varying formats (e.g. '+05:30' vs '+0530' vs space-separated) so exact string-based Map lookups always failed. Binary search on parsed numeric timestamps with 5-min tolerance resolves this. Additionally, trades opened recently may only have 1-2 data points in daily mode, so the threshold was too strict at < 2."
+}
