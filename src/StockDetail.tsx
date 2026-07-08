@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import {
   fetchOiHistory,
   fetchIntradayHistory,
@@ -13,7 +13,9 @@ import {
 import { fmtCompact, formatExpiry } from "./format.ts";
 import StockCard from "./StockCard.tsx";
 import LineChart, { type ChartSeries, type ChartMarker } from "./LineChart.tsx";
-import PnlGraph3D from "./PnlGraph3D.tsx";
+// Lazy-loaded so the heavy Three.js stack is split into a separate async chunk
+// (keeps the main bundle small and avoids OOM during the build/deploy step).
+const PnlGraph3D = lazy(() => import("./PnlGraph3D.tsx"));
 
 interface Props {
   symbol: string;
@@ -398,13 +400,21 @@ export default function StockDetail({
               </div>
 
               {trade && history && (
-                <PnlGraph3D
-                  trade={trade}
-                  history={history}
-                  intraday={intraday ?? undefined}
-                  fiveMin={fiveMin ?? undefined}
-                  minute={minute ?? undefined}
-                />
+                <Suspense
+                  fallback={
+                    <div className="detail-chart">
+                      <div className="empty">Loading 3D chart…</div>
+                    </div>
+                  }
+                >
+                  <PnlGraph3D
+                    trade={trade}
+                    history={history}
+                    intraday={intraday ?? undefined}
+                    fiveMin={fiveMin ?? undefined}
+                    minute={minute ?? undefined}
+                  />
+                </Suspense>
               )}
             </>
           )}
