@@ -1,8 +1,25 @@
-import { useMemo, useState } from "react";
+import { Component, useMemo, useState, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Text, Line } from "@react-three/drei";
 import * as THREE from "three";
 import type { Trade, OiHistory, IntradayHistory } from "./api.ts";
+
+/* ---------- Error Boundary for Three.js Canvas ---------- */
+interface EBProps { children: ReactNode; fallback: ReactNode }
+interface EBState { hasError: boolean; error: string }
+
+class ChartErrorBoundary extends Component<EBProps, EBState> {
+  state: EBState = { hasError: false, error: "" };
+  static getDerivedStateFromError(err: unknown) {
+    return { hasError: true, error: err instanceof Error ? err.message : String(err) };
+  }
+  componentDidCatch(err: unknown) {
+    console.error("[PnlGraph3D] Canvas error caught by boundary:", err);
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
 
 type TimeMode = "1M" | "1W" | "5m" | "1m";
 
@@ -149,8 +166,13 @@ export default function PnlGraph3D({ trade, history, intraday, fiveMin, minute }
 
   const modeLabel = mode === "1M" ? "Daily" : mode === "1W" ? "Hourly" : mode === "5m" ? "5-min" : "1-min";
 
+  console.log("[PnlGraph3D] Rendering with", points.length, "points, mode:", mode);
+
   return (
-    <div className="detail-chart" style={{ height: 500 }}>
+    <div
+      className="detail-chart"
+      style={{ height: 520, border: "1px solid #3b82f6", borderRadius: 10, background: "#0f1218" }}
+    >
       <div className="chart-head">
         <h2>3D PnL Surface</h2>
         <span className="chart-sub">
@@ -173,9 +195,27 @@ export default function PnlGraph3D({ trade, history, intraday, fiveMin, minute }
       </div>
 
       {points.length === 0 ? (
-        <div className="empty">Not enough data for this timeframe.</div>
+        <div className="empty" style={{ padding: "2rem", color: "#f59e0b", fontWeight: 500 }}>
+          Not enough data for {modeLabel} timeframe.
+          <br />
+          <span style={{ fontSize: "0.85em", color: "#9ca3af" }}>
+            Mode: {mode} | Source available: {mode === "1M" ? "history" : mode === "1W" ? (intraday ? "yes" : "no") : mode === "5m" ? (fiveMin ? "yes" : "no") : (minute ? "yes" : "no")}
+          </span>
+        </div>
       ) : (
-        <Graph3DCanvas points={points} xRange={xRange} yRange={yRange} zRange={zRange} />
+        <ChartErrorBoundary
+          fallback={
+            <div className="empty" style={{ padding: "2rem", color: "#ef4444", fontWeight: 500 }}>
+              3D rendering failed - WebGL may not be available in this browser.
+              <br />
+              <span style={{ fontSize: "0.85em", color: "#9ca3af" }}>
+                Check the browser console for details.
+              </span>
+            </div>
+          }
+        >
+          <Graph3DCanvas points={points} xRange={xRange} yRange={yRange} zRange={zRange} />
+        </ChartErrorBoundary>
       )}
     </div>
   );

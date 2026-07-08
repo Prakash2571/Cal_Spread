@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-005",
+  "type": "fix",
+  "description": "Add React Error Boundary around Three.js Canvas to catch silent WebGL crashes, add debug logging, and improve visual prominence of the 3D chart section so rendering issues are diagnosable.",
+  "status": "in_progress",
+  "steps": [
+    "Add a ChartErrorBoundary class component in PnlGraph3D.tsx that catches errors from the Canvas and shows a fallback message",
+    "Wrap the Canvas component with the error boundary",
+    "Add console.log at the top of PnlGraph3D render for debugging",
+    "Improve the 'Not enough data' message to show context (mode, available data)",
+    "Add a visible border/background to the 3D chart container so it is impossible to miss",
+    "Verify tsc -b and vite build pass"
+  ],
+  "acceptance_criteria": [
+    "ChartErrorBoundary class component exists and wraps the Canvas",
+    "If WebGL/Three.js crashes, a visible fallback message appears instead of silent failure",
+    "console.log outputs render info (points count and mode) for debugging",
+    "The 3D chart section has a noticeable border/background distinguishing it visually",
+    "tsc -b compiles without errors",
+    "vite build produces a bundle without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/Cal_Spread && npx tsc -b",
+    "cd /projects/sandbox/Cal_Spread && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}
