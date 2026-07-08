@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Install three.js ecosystem dependencies and create a 3D PnL graph component that shows PnL (Z-axis) vs Time (X-axis) vs OI (Y-axis) with orbit controls for rotation/pan/zoom. Integrate it into StockDetail when viewing a trade.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Install dependencies: three, @react-three/fiber, @react-three/drei, @types/three",
     "Pass the full Trade object from App.tsx to StockDetail.tsx. Currently App.tsx only passes markStart/markEnd. Add a 'trade' prop (type Trade | null) to StockDetail's Props interface. In App.tsx where StockDetail is rendered (around line 265), add trade={tradeForView}.",
@@ -25,5 +25,5 @@
     "cd /projects/sandbox/Cal_Spread && npx vite build"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Used @react-three/fiber@^8.17.10 and @react-three/drei@^9 instead of latest (v9.x) because the project uses React 18 and latest fiber requires React 19. Build produces a large chunk (1.2MB) due to three.js - could consider code-splitting in the future. tsc -b and vite build both pass clean."
 }
