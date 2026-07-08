@@ -61,7 +61,7 @@ export default function PnlGraph3D({ trade, history }: Props) {
       const pnl =
         trade.lot_size *
         ((buyClose - trade.buy.entry) + (trade.sell.entry - sellClose));
-      const oi = buyPoint.oi + sellPoint.oi;
+      const oi = buyPoint.oi;
 
       pts.push({ timeIndex: idx, oi, pnl });
     });
@@ -164,7 +164,7 @@ export default function PnlGraph3D({ trade, history }: Props) {
           PnL
         </Text>
         <Text position={[-scaleSize, -scaleSize - 0.8, 0]} fontSize={0.5} color="#9ca3af">
-          OI
+          OI (2nd Month)
         </Text>
 
         {/* Zero PnL plane - horizontal at the y-level where PnL = 0 */}
