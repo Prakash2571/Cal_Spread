@@ -1,0 +1,26 @@
+{
+  "project_type": "React 18 + TypeScript + Vite SPA - calendar spread trading dashboard",
+  "language": "TypeScript/TSX",
+  "build_system": "Vite 5 with @vitejs/plugin-react, TypeScript compiler (tsc -b)",
+  "test_framework": "None (no tests exist)",
+  "build_command": "npx tsc -b && npx vite build",
+  "test_command": "npx tsc -b",
+  "verification_instructions": "Run `npx tsc -b` to type-check, then `npx vite build` to confirm production bundle builds without errors",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/Cal_Spread && npm install",
+  "environment_constraints": "Internet available for npm installs. No test suite exists, so verification is type-check + build only.",
+  "contribution_requirements": "DO NOT touch any logic (api.ts, format.ts, any state/hooks/data-flow in components). Only restyle/redesign the UI.",
+  "key_patterns": "Single styles.css file with CSS custom properties (--bg, --text, --accent, etc). Components use className strings referencing those CSS classes. Fonts loaded via Google Fonts in index.html (Inter + JetBrains Mono). No CSS modules, no Tailwind, no UI library.",
+  "relevant_files": [
+    "src/styles.css",
+    "src/App.tsx",
+    "src/StockCard.tsx",
+    "src/StockDetail.tsx",
+    "src/LineChart.tsx",
+    "src/TradesPanel.tsx",
+    "src/SkeletonCard.tsx",
+    "src/Admin.tsx",
+    "index.html"
+  ],
+  "directory_structure": "Root: package.json, index.html, vite.config.ts, tsconfig.json. src/: App.tsx (main app with routing), StockCard.tsx (card per stock), StockDetail.tsx (detail view with charts), LineChart.tsx (SVG chart), TradesPanel.tsx (modal with trades), SkeletonCard.tsx (loading placeholder), Admin.tsx (login page), api.ts (API calls - DO NOT TOUCH), format.ts (formatters - DO NOT TOUCH), styles.css (all styling), main.tsx (entry point)."
+}

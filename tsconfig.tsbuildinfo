@@ -1,0 +1,1 @@
+{"root":["./src/Admin.tsx","./src/App.tsx","./src/LineChart.tsx","./src/SkeletonCard.tsx","./src/StockCard.tsx","./src/StockDetail.tsx","./src/TradesPanel.tsx","./src/api.ts","./src/format.ts","./src/main.tsx","./src/vite-env.d.ts"],"version":"5.9.3"}
