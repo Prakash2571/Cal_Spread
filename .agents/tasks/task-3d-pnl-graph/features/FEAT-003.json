@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-003",
+  "type": "fix",
+  "description": "Rewrite PnlGraph3D to support toggleable timeframes (1M daily, 1W hourly, 5m, 1m) with toggle buttons, passing all data sources from StockDetail.",
+  "status": "completed",
+  "steps": [
+    "Rewrite PnlGraph3D to accept all data sources as props (history, intraday, fiveMin, minute)",
+    "Add toggle buttons (1M, 1W, 5m, 1m) using the same chart-toggle CSS as the spread chart",
+    "Default to 1W (hourly) mode for better granularity on recent trades",
+    "For 1M mode use daily OI history with per-point OI; for intraday modes use latest daily OI as constant",
+    "Show 'Not enough data for this timeframe' if selected mode has < 2 points but keep toggle visible",
+    "Update StockDetail to pass intraday, fiveMin, and minute props to PnlGraph3D",
+    "Verify tsc -b passes"
+  ],
+  "acceptance_criteria": [
+    "PnlGraph3D accepts history, intraday, fiveMin, minute props",
+    "Toggle buttons rendered in chart-toggle div with active class styling",
+    "Default mode is 1W (hourly)",
+    "1M mode uses daily close + OI from history.futures",
+    "Intraday modes (1W, 5m, 1m) use constant OI from latest daily history",
+    "Shows message when < 2 data points but toggles remain visible",
+    "StockDetail passes all data sources to PnlGraph3D",
+    "tsc -b compiles without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/Cal_Spread && npx tsc -b"
+  ],
+  "blocked_reason": null,
+  "findings": "Build passes cleanly. The 3D canvas rendering logic is preserved in a separate Graph3DCanvas subcomponent for clarity."
+}

@@ -398,7 +398,13 @@ export default function StockDetail({
               </div>
 
               {trade && history && (
-                <PnlGraph3D trade={trade} history={history} />
+                <PnlGraph3D
+                  trade={trade}
+                  history={history}
+                  intraday={intraday ?? undefined}
+                  fiveMin={fiveMin ?? undefined}
+                  minute={minute ?? undefined}
+                />
               )}
             </>
           )}
