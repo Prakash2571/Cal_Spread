@@ -1,0 +1,29 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Install three.js ecosystem dependencies and create a 3D PnL graph component that shows PnL (Z-axis) vs Time (X-axis) vs OI (Y-axis) with orbit controls for rotation/pan/zoom. Integrate it into StockDetail when viewing a trade.",
+  "status": "in_progress",
+  "steps": [
+    "Install dependencies: three, @react-three/fiber, @react-three/drei, @types/three",
+    "Pass the full Trade object from App.tsx to StockDetail.tsx. Currently App.tsx only passes markStart/markEnd. Add a 'trade' prop (type Trade | null) to StockDetail's Props interface. In App.tsx where StockDetail is rendered (around line 265), add trade={tradeForView}.",
+    "Create src/PnlGraph3D.tsx component that accepts: trade (Trade), history (OiHistory), lotSize (number). This component computes 3D data points from the OI history: for each day since trade.opened_at, find the buy-leg future's close price and sell-leg future's close price at that date, compute cumulative PnL = lotSize * ((buyClose - buyEntry) + (sellEntry - sellClose)). Also get the net OI at that date (sum of both legs' OI or use buy-leg OI). The 3D axes are: X = time (index or days since open), Y = OI, Z = PnL.",
+    "Inside PnlGraph3D.tsx, render a @react-three/fiber Canvas with OrbitControls from @react-three/drei. Draw: (1) A 3D line/tube connecting the data points in order. (2) Axis labels using drei's Text component (X: Time, Y: OI, Z: PnL). (3) A grid plane or axis lines for orientation. Color the line green when PnL > 0, red when PnL < 0.",
+    "In StockDetail.tsx, import PnlGraph3D. After the existing charts section, conditionally render PnlGraph3D when the trade prop is provided and history is loaded. Wrap it in a detail-chart div with a chart-head showing '3D PnL Surface'. Give it a fixed height (e.g. 500px).",
+    "Verify that tsc -b passes with no errors and vite build succeeds."
+  ],
+  "acceptance_criteria": [
+    "npm install succeeds with three, @react-three/fiber, @react-three/drei added to package.json dependencies",
+    "A new PnlGraph3D.tsx component exists in src/",
+    "StockDetail renders the 3D graph when a trade is active (markStart is defined and trade prop is provided)",
+    "The 3D graph has orbit controls allowing rotation, pan, and zoom",
+    "The axes represent Time (X), OI (Y), and PnL (Z)",
+    "tsc -b compiles without errors",
+    "vite build produces a bundle without errors"
+  ],
+  "verification": [
+    "cd /projects/sandbox/Cal_Spread && npx tsc -b",
+    "cd /projects/sandbox/Cal_Spread && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -8,10 +8,12 @@ import {
   type OiHistory,
   type IntradayHistory,
   type Tick,
+  type Trade,
 } from "./api.ts";
 import { fmtCompact, formatExpiry } from "./format.ts";
 import StockCard from "./StockCard.tsx";
 import LineChart, { type ChartSeries, type ChartMarker } from "./LineChart.tsx";
+import PnlGraph3D from "./PnlGraph3D.tsx";
 
 interface Props {
   symbol: string;
@@ -21,6 +23,8 @@ interface Props {
   div: number;
   showPrices: boolean;
   onBack: () => void;
+  /** The full Trade object (if viewing a trade). */
+  trade?: Trade | null;
   /** Trade entry/exit timestamps to mark on the charts (optional). */
   markStart?: string;
   markEnd?: string;
@@ -77,6 +81,7 @@ export default function StockDetail({
   div,
   showPrices,
   onBack,
+  trade,
   markStart,
   markEnd,
   showIntraday = true,
@@ -391,6 +396,10 @@ export default function StockDetail({
                 </div>
                 <LineChart series={oiSeries} format={fmtCompact} markers={markers} />
               </div>
+
+              {trade && history && (
+                <PnlGraph3D trade={trade} history={history} />
+              )}
             </>
           )}
         </div>

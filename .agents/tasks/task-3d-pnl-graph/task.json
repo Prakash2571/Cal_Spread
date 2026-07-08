@@ -1,0 +1,7 @@
+{
+  "task_id": "task-3d-pnl-graph",
+  "task_description": "Add an interactive 3D graph to the StockDetail page showing PnL vs Time vs OI when viewing a trade. Users can rotate, pan, and zoom the 3D visualization using orbit controls.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

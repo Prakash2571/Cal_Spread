@@ -1,0 +1,23 @@
+{
+  "project_type": "React + TypeScript SPA with Vite",
+  "language": "TypeScript/TSX",
+  "build_system": "Vite with tsc for type-checking",
+  "test_framework": "None (no test files present)",
+  "build_command": "cd /projects/sandbox/Cal_Spread && npx tsc -b && npx vite build",
+  "test_command": "cd /projects/sandbox/Cal_Spread && npx tsc -b",
+  "verification_instructions": "Run tsc -b to verify no type errors, then vite build to confirm bundle compiles",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/Cal_Spread && npm install",
+  "environment_constraints": "Full internet access. No test suite exists - verification is via TypeScript compilation and Vite build.",
+  "contribution_requirements": "No CONTRIBUTING.md present. Follow existing code patterns.",
+  "key_patterns": "Components are single-file TSX in src/. No routing library - uses manual window.history + state. Props interfaces defined inline. api.ts exports all types and fetch functions. LineChart is a custom SVG chart component. StockDetail receives data via props from App.tsx.",
+  "relevant_files": [
+    "src/StockDetail.tsx",
+    "src/App.tsx",
+    "src/api.ts",
+    "src/LineChart.tsx",
+    "package.json",
+    "tsconfig.json"
+  ],
+  "directory_structure": "src/ contains all source: App.tsx (root), StockDetail.tsx (detail page), api.ts (API layer + types), LineChart.tsx (2D chart), TradesPanel.tsx (trades modal), StockCard.tsx, format.ts. No subdirectories."
+}

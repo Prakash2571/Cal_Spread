@@ -481,6 +481,7 @@ export default function App() {
         rf={rfRate}
         div={divYields[item?.symbol ?? ""] ?? 0}
         showPrices={authenticated}
+        trade={tradeForView}
         markStart={tradeForView?.opened_at}
         markEnd={tradeForView?.closed_at ?? undefined}
         showIntraday={!tradeForView || tradeForView.status === "open"}
