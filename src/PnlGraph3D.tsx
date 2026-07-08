@@ -97,8 +97,32 @@ export default function PnlGraph3D({ trade, history, intraday, fiveMin, minute }
       return { points: [] as DataPoint[], xRange: [0, 1], yRange: [-1, 1], zRange: [0, 1] };
     }
 
-    // Build timestamp-keyed maps for the sell leg
-    const sellMap = new Map(sellFuture.points.map((p) => [p.t, p.close]));
+    // Build sorted sell-leg entries with numeric timestamps for nearest-match lookup.
+    // Kite API timestamps may vary in format (e.g. "+05:30" vs "+0530" vs space-separated),
+    // so exact string matching fails. Use numeric comparison with 5-min tolerance instead.
+    const sellEntries = sellFuture.points
+      .map((p) => ({ ts: new Date(p.t).getTime(), close: p.close }))
+      .sort((a, b) => a.ts - b.ts);
+
+    const findSellClose = (buyTs: number): number | undefined => {
+      // Binary search for nearest sell entry within 5-minute tolerance
+      let lo = 0;
+      let hi = sellEntries.length - 1;
+      let best: number | undefined;
+      let bestDiff = Infinity;
+      while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        const diff = Math.abs(sellEntries[mid].ts - buyTs);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = mid;
+        }
+        if (sellEntries[mid].ts < buyTs) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      if (best !== undefined && bestDiff < 300_000) return sellEntries[best].close;
+      return undefined;
+    };
 
     // Filter points on or after trade open and build data
     const pts: DataPoint[] = [];
@@ -109,7 +133,7 @@ export default function PnlGraph3D({ trade, history, intraday, fiveMin, minute }
       // For closed trades, skip points after close date
       if (closeDate && bp.t.slice(0, 10) > closeDate) continue;
 
-      const sellClose = sellMap.get(bp.t);
+      const sellClose = findSellClose(ptTs);
       if (sellClose === undefined) continue;
 
       const pnl =
@@ -148,7 +172,7 @@ export default function PnlGraph3D({ trade, history, intraday, fiveMin, minute }
         </div>
       </div>
 
-      {points.length < 2 ? (
+      {points.length === 0 ? (
         <div className="empty">Not enough data for this timeframe.</div>
       ) : (
         <Graph3DCanvas points={points} xRange={xRange} yRange={yRange} zRange={zRange} />
@@ -223,8 +247,10 @@ function Graph3DCanvas({
       <pointLight position={[10, 10, 10]} intensity={0.8} />
       <OrbitControls enableDamping dampingFactor={0.1} />
 
-      {/* Data line */}
-      <Line points={linePoints} vertexColors={lineColors} lineWidth={3} />
+      {/* Data line - only render if we have 2+ points */}
+      {linePoints.length >= 2 && (
+        <Line points={linePoints} vertexColors={lineColors} lineWidth={3} />
+      )}
 
       {/* Data point spheres */}
       {points.map((p, i) => (
