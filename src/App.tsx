@@ -470,9 +470,14 @@ export default function App() {
     const sym = decodeURIComponent(route.slice("/stock/".length));
     const item = board.find((b) => b.symbol.toUpperCase() === sym.toUpperCase());
     const tradeForView =
-      detailTrade && detailTrade.symbol.toUpperCase() === sym.toUpperCase()
+      (detailTrade && detailTrade.symbol.toUpperCase() === sym.toUpperCase()
         ? detailTrade
-        : null;
+        : null) ??
+      trades.find(
+        (t) => t.symbol.toUpperCase() === sym.toUpperCase() && t.status === "open",
+      ) ??
+      trades.find((t) => t.symbol.toUpperCase() === sym.toUpperCase()) ??
+      null;
     return (
       <StockDetail
         symbol={item?.symbol ?? sym}

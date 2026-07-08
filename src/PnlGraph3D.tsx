@@ -43,7 +43,7 @@ interface DataPoint {
  * Toggle between 1M (daily), 1W (hourly), 5m, and 1m timeframes.
  */
 export default function PnlGraph3D({ trade, history, intraday, fiveMin, minute }: Props) {
-  const [mode, setMode] = useState<TimeMode>("1W");
+  const [mode, setMode] = useState<TimeMode>("1M");
 
   // Get the latest known OI from daily history for the buy-leg future.
   // Used as constant OI for intraday modes where per-point OI is unavailable.
