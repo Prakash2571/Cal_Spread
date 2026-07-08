@@ -2,7 +2,7 @@
   "id": "FEAT-005",
   "type": "fix",
   "description": "Add React Error Boundary around Three.js Canvas to catch silent WebGL crashes, add debug logging, and improve visual prominence of the 3D chart section so rendering issues are diagnosable.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Add a ChartErrorBoundary class component in PnlGraph3D.tsx that catches errors from the Canvas and shows a fallback message",
     "Wrap the Canvas component with the error boundary",
@@ -24,5 +24,5 @@
     "cd /projects/sandbox/Cal_Spread && npx vite build"
   ],
   "blocked_reason": null,
-  "findings": null
+  "findings": "Error boundary added as a class component wrapping the Canvas. tsc -b and vite build both pass. The error boundary will catch WebGL context failures and React render errors from Three.js and display a visible message. The console.log will help diagnose whether the component mounts at all. If the user still sees no graph after this fix, it means the conditional render (trade && history) is evaluating to false - meaning either trade or history is null/undefined at render time."
 }
