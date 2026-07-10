@@ -495,6 +495,7 @@ export default function App() {
         tradeBusy={takingSymbol === sym}
         hasOpenTrade={openTradeSymbols.has(sym.toUpperCase())}
         onTakeTrade={handleTakeTrade}
+        isAdmin={adminAuthenticated}
       />
     );
   }

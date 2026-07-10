@@ -5,10 +5,12 @@ import {
   fetchMinuteHistory,
   fetchFiveMinHistory,
   fetchSpreadHistory,
+  fetchSpreadStats,
   type BoardItem,
   type OiHistory,
   type IntradayHistory,
   type SpreadHistory,
+  type SpreadStats,
   type Tick,
   type Trade,
 } from "./api.ts";
@@ -40,6 +42,8 @@ interface Props {
   hasOpenTrade?: boolean;
   /** Callback to initiate a trade on this symbol. */
   onTakeTrade?: (symbol: string) => void;
+  /** Whether the user is authenticated as admin (full or trade-access). */
+  isAdmin?: boolean;
 }
 
 // Colours per contract slot (near / next / far) — deliberately distinct hues
@@ -91,12 +95,14 @@ export default function StockDetail({
   tradeBusy,
   hasOpenTrade,
   onTakeTrade,
+  isAdmin,
 }: Props) {
   const [history, setHistory] = useState<OiHistory | null>(null);
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
   const [minute, setMinute] = useState<IntradayHistory | null>(null);
   const [fiveMin, setFiveMin] = useState<IntradayHistory | null>(null);
   const [spreadHistory, setSpreadHistory] = useState<SpreadHistory | null>(null);
+  const [spreadStats, setSpreadStats] = useState<SpreadStats | null>(null);
   const [intradayMode, setIntradayMode] = useState<"1m" | "5m">("1m");
   const [spreadMode, setSpreadMode] = useState<"daily" | "hourly" | "5m" | "1m">(
     "daily",
@@ -114,13 +120,15 @@ export default function StockDetail({
       ? Promise.all([fetchMinuteHistory(symbol), fetchFiveMinHistory(symbol)])
       : Promise.resolve(null);
     const spreadHist = fetchSpreadHistory(symbol).catch(() => null);
+    const statsP = fetchSpreadStats(symbol).catch(() => null);
 
-    Promise.all([core, intra, spreadHist])
-      .then(([[h, intrH], intraRes, sh]) => {
+    Promise.all([core, intra, spreadHist, statsP])
+      .then(([[h, intrH], intraRes, sh, ss]) => {
         if (!alive) return;
         setHistory(h);
         setIntraday(intrH);
         setSpreadHistory(sh);
+        setSpreadStats(ss);
         if (intraRes) {
           setMinute(intraRes[0]);
           setFiveMin(intraRes[1]);
@@ -284,6 +292,112 @@ export default function StockDetail({
           )}
 
         </div>
+
+        {/* Spread Analytics panel — admin only, requires stats + live ticks for both futures */}
+        {(() => {
+          if (!isAdmin || !spreadStats || !item || item.futures.length < 2) return null;
+          const curTick = ticks[item.futures[0]!.token];
+          const nxtTick = ticks[item.futures[1]!.token];
+          if (!curTick?.last_price || !nxtTick?.last_price) return null;
+
+          const currentSpread = nxtTick.last_price - curTick.last_price;
+          const lotSize = item.futures[0]!.lot_size;
+          const stats = spreadStats;
+
+          const varUpside = stats.max_spread - currentSpread;
+          const varDownside = currentSpread - stats.min_spread;
+          const meanReversionProb = stats.mean_reversion_probability;
+          const expectedProfit = Math.abs(currentSpread - stats.mean_spread) * lotSize;
+          const expectedMaxLoss = Math.abs(stats.percentile_95 - currentSpread) * lotSize;
+          const belowMean = currentSpread < stats.mean_spread;
+          const zScore = stats.std_dev_spread !== 0
+            ? (currentSpread - stats.mean_spread) / stats.std_dev_spread
+            : 0;
+
+          const green = "#22c55e";
+          const red = "#ef4444";
+
+          const metrics: { label: string; value: string; color: string }[] = [
+            {
+              label: "VaR Upside (Max - Current)",
+              value: `${varUpside >= 0 ? "+" : ""}${fmtPrice(varUpside)}`,
+              color: varUpside >= 0 ? green : red,
+            },
+            {
+              label: "VaR Downside (Current - Min)",
+              value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`,
+              color: varDownside >= 0 ? green : red,
+            },
+            {
+              label: "Mean Reversion Probability",
+              value: `${(meanReversionProb * 100).toFixed(1)}%`,
+              color: meanReversionProb >= 0.5 ? green : red,
+            },
+            {
+              label: "Expected Profit to Mean",
+              value: `₹${fmtPrice(expectedProfit)}`,
+              color: green,
+            },
+            {
+              label: "Expected Max Loss (to 95th %ile)",
+              value: `₹${fmtPrice(expectedMaxLoss)}`,
+              color: red,
+            },
+            {
+              label: "Percentile Rank",
+              value: belowMean ? "Below Mean" : "Above Mean",
+              color: belowMean ? green : red,
+            },
+            {
+              label: "Z-Score",
+              value: zScore.toFixed(2),
+              color: zScore < 0 ? green : red,
+            },
+            {
+              label: "Current Spread",
+              value: fmtPrice(currentSpread),
+              color: currentSpread < stats.mean_spread ? green : red,
+            },
+          ];
+
+          return (
+            <div
+              className="detail-card"
+              style={{ gridColumn: "1 / -1" }}
+            >
+              <div style={{ padding: "1rem" }}>
+                <h2 style={{ margin: "0 0 0.75rem", fontSize: "1.1rem" }}>
+                  Spread Analytics
+                </h2>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                    gap: "0.75rem",
+                  }}
+                >
+                  {metrics.map((m) => (
+                    <div
+                      key={m.label}
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        borderRadius: "8px",
+                        padding: "0.6rem 0.8rem",
+                      }}
+                    >
+                      <div style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.25rem" }}>
+                        {m.label}
+                      </div>
+                      <div style={{ fontSize: "1.1rem", fontWeight: 600, color: m.color }}>
+                        {m.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="detail-charts">
           {loading ? (
