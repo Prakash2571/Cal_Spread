@@ -291,113 +291,105 @@ export default function StockDetail({
             </div>
           )}
 
-        </div>
+          {/* Spread Analytics — admin only, in left column below the card */}
+          {(() => {
+            if (!isAdmin || !spreadStats || !item || item.futures.length < 2) return null;
+            const curTick = ticks[item.futures[0]!.token];
+            const nxtTick = ticks[item.futures[1]!.token];
+            if (!curTick?.last_price || !nxtTick?.last_price) return null;
 
-        {/* Spread Analytics panel — admin only, requires stats + live ticks for both futures */}
-        {(() => {
-          if (!isAdmin || !spreadStats || !item || item.futures.length < 2) return null;
-          const curTick = ticks[item.futures[0]!.token];
-          const nxtTick = ticks[item.futures[1]!.token];
-          if (!curTick?.last_price || !nxtTick?.last_price) return null;
+            const currentSpread = nxtTick.last_price - curTick.last_price;
+            const lotSize = item.futures[0]!.lot_size;
+            const stats = spreadStats;
 
-          const currentSpread = nxtTick.last_price - curTick.last_price;
-          const lotSize = item.futures[0]!.lot_size;
-          const stats = spreadStats;
+            const varUpside = stats.max_spread - currentSpread;
+            const varDownside = currentSpread - stats.min_spread;
+            const meanReversionProb = stats.mean_reversion_probability;
+            const expectedProfit = Math.abs(currentSpread - stats.mean_spread) * lotSize;
+            const expectedMaxLoss = Math.abs(stats.percentile_95 - currentSpread) * lotSize;
+            const belowMean = currentSpread < stats.mean_spread;
+            const zScore = stats.std_dev_spread !== 0
+              ? (currentSpread - stats.mean_spread) / stats.std_dev_spread
+              : 0;
 
-          const varUpside = stats.max_spread - currentSpread;
-          const varDownside = currentSpread - stats.min_spread;
-          const meanReversionProb = stats.mean_reversion_probability;
-          const expectedProfit = Math.abs(currentSpread - stats.mean_spread) * lotSize;
-          const expectedMaxLoss = Math.abs(stats.percentile_95 - currentSpread) * lotSize;
-          const belowMean = currentSpread < stats.mean_spread;
-          const zScore = stats.std_dev_spread !== 0
-            ? (currentSpread - stats.mean_spread) / stats.std_dev_spread
-            : 0;
+            const green = "#22c55e";
+            const red = "#ef4444";
 
-          const green = "#22c55e";
-          const red = "#ef4444";
+            const metrics: { label: string; value: string; color: string }[] = [
+              {
+                label: "Current Spread",
+                value: fmtPrice(currentSpread),
+                color: currentSpread < stats.mean_spread ? green : red,
+              },
+              {
+                label: "Max Profit (to Mean)",
+                value: `₹${fmtPrice(expectedProfit)}`,
+                color: green,
+              },
+              {
+                label: "Max Loss (to 95th %ile)",
+                value: `₹${fmtPrice(expectedMaxLoss)}`,
+                color: red,
+              },
+              {
+                label: "VaR Upside (Max − Current)",
+                value: `${varUpside >= 0 ? "+" : ""}${fmtPrice(varUpside)}`,
+                color: varUpside >= 0 ? green : red,
+              },
+              {
+                label: "VaR Downside (Current − Min)",
+                value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`,
+                color: varDownside >= 0 ? green : red,
+              },
+              {
+                label: "Mean Reversion %",
+                value: `${meanReversionProb.toFixed(1)}%`,
+                color: meanReversionProb >= 50 ? green : red,
+              },
+              {
+                label: "Percentile Rank",
+                value: belowMean ? "Below Mean" : "Above Mean",
+                color: belowMean ? green : red,
+              },
+              {
+                label: "Z-Score",
+                value: zScore.toFixed(2),
+                color: zScore < 0 ? green : red,
+              },
+            ];
 
-          const metrics: { label: string; value: string; color: string }[] = [
-            {
-              label: "VaR Upside (Max - Current)",
-              value: `${varUpside >= 0 ? "+" : ""}${fmtPrice(varUpside)}`,
-              color: varUpside >= 0 ? green : red,
-            },
-            {
-              label: "VaR Downside (Current - Min)",
-              value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`,
-              color: varDownside >= 0 ? green : red,
-            },
-            {
-              label: "Mean Reversion Probability",
-              value: `${meanReversionProb.toFixed(1)}%`,
-              color: meanReversionProb >= 50 ? green : red,
-            },
-            {
-              label: "Expected Profit to Mean",
-              value: `₹${fmtPrice(expectedProfit)}`,
-              color: green,
-            },
-            {
-              label: "Expected Max Loss (to 95th %ile)",
-              value: `₹${fmtPrice(expectedMaxLoss)}`,
-              color: red,
-            },
-            {
-              label: "Percentile Rank",
-              value: belowMean ? "Below Mean" : "Above Mean",
-              color: belowMean ? green : red,
-            },
-            {
-              label: "Z-Score",
-              value: zScore.toFixed(2),
-              color: zScore < 0 ? green : red,
-            },
-            {
-              label: "Current Spread",
-              value: fmtPrice(currentSpread),
-              color: currentSpread < stats.mean_spread ? green : red,
-            },
-          ];
-
-          return (
-            <div
-              className="detail-card"
-              style={{ gridColumn: "1 / -1" }}
-            >
-              <div style={{ padding: "1rem" }}>
-                <h2 style={{ margin: "0 0 0.75rem", fontSize: "1.1rem" }}>
+            return (
+              <div style={{ marginTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "0.75rem" }}>
+                <h3 style={{ margin: "0 0 0.6rem", fontSize: "0.9rem", fontWeight: 700, letterSpacing: "-0.2px" }}>
                   Spread Analytics
-                </h2>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                    gap: "0.75rem",
-                  }}
-                >
+                </h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {metrics.map((m) => (
                     <div
                       key={m.label}
                       style={{
-                        background: "rgba(255,255,255,0.04)",
-                        borderRadius: "8px",
-                        padding: "0.6rem 0.8rem",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        background: "rgba(255,255,255,0.03)",
+                        borderRadius: "6px",
+                        padding: "0.5rem 0.7rem",
                       }}
                     >
-                      <div style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.25rem" }}>
+                      <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>
                         {m.label}
-                      </div>
-                      <div style={{ fontSize: "1.1rem", fontWeight: 600, color: m.color }}>
+                      </span>
+                      <span style={{ fontSize: "0.9rem", fontWeight: 600, color: m.color }}>
                         {m.value}
-                      </div>
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
+
+        </div>
 
         <div className="detail-charts">
           {loading ? (
