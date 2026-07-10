@@ -339,7 +339,7 @@ export default function StockDetail({
               {
                 label: "VaR Downside (Current − Min)",
                 value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`,
-                color: varDownside >= 0 ? green : red,
+                color: currentSpread < stats.min_spread ? green : red,
               },
               {
                 label: "Mean Reversion %",
@@ -348,7 +348,14 @@ export default function StockDetail({
               },
               {
                 label: "Percentile Rank",
-                value: belowMean ? "Below Mean" : "Above Mean",
+                value: (() => {
+                  // Approximate percentile from Z-score using normal CDF approximation
+                  const t = 1 / (1 + 0.2316419 * Math.abs(zScore));
+                  const d = 0.3989422804 * Math.exp(-zScore * zScore / 2);
+                  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+                  const percentile = zScore > 0 ? (1 - p) * 100 : p * 100;
+                  return `${percentile.toFixed(1)}% ${belowMean ? "(Below Mean)" : "(Above Mean)"}`;
+                })(),
                 color: belowMean ? green : red,
               },
               {

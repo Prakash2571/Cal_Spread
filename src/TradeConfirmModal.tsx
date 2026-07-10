@@ -90,7 +90,7 @@ export default function TradeConfirmModal({
                   { label: "Max Profit (spread → mean)", value: `₹${fmtPrice(expectedProfit)}`, color: green },
                   { label: "Max Loss (spread → 95th %ile)", value: `₹${fmtPrice(expectedMaxLoss)}`, color: red },
                   { label: "VaR Upside (Max − Current)", value: `${varUpside >= 0 ? "+" : ""}${fmtPrice(varUpside)}`, color: varUpside >= 0 ? green : red },
-                  { label: "VaR Downside (Current − Min)", value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`, color: varDownside >= 0 ? green : red },
+                  { label: "VaR Downside (Current − Min)", value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`, color: cs < stats.min_spread ? green : red },
                   { label: "Mean Reversion %", value: `${stats.mean_reversion_probability.toFixed(1)}%`, color: stats.mean_reversion_probability >= 50 ? green : red },
                   { label: "Z-Score", value: zScore.toFixed(2), color: zScore < 0 ? green : red },
                   { label: "Mean Spread", value: fmtPrice(stats.mean_spread), color: muted },
