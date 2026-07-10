@@ -25,6 +25,7 @@ import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
 import TradesPanel from "./TradesPanel.tsx";
+import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
 
 type TickMap = Record<number, Tick>;
@@ -62,6 +63,7 @@ export default function App() {
   const [tradesLoading, setTradesLoading] = useState(false);
   const [tradesError, setTradesError] = useState<string | null>(null);
   const [takingSymbol, setTakingSymbol] = useState<string | null>(null);
+  const [confirmSymbol, setConfirmSymbol] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // Trade whose entry/exit should be marked on the detail charts.
@@ -112,7 +114,7 @@ export default function App() {
     }
   }
 
-  async function handleTakeTrade(symbol: string) {
+  async function executeTrade(symbol: string) {
     setTakingSymbol(symbol);
     setTradesError(null);
     try {
@@ -124,7 +126,12 @@ export default function App() {
       setTradesOpen(true);
     } finally {
       setTakingSymbol(null);
+      setConfirmSymbol(null);
     }
+  }
+
+  function handleTakeTrade(symbol: string) {
+    setConfirmSymbol(symbol);
   }
 
   async function handleDeleteTrade(id: string) {
@@ -688,6 +695,21 @@ export default function App() {
           onDeleteTrade={(id) => void handleDeleteTrade(id)}
         />
       )}
+
+      {confirmSymbol && (() => {
+        const confirmItem = board.find((b) => b.symbol === confirmSymbol);
+        if (!confirmItem) return null;
+        return (
+          <TradeConfirmModal
+            symbol={confirmSymbol}
+            item={confirmItem}
+            ticks={ticks}
+            busy={takingSymbol === confirmSymbol}
+            onConfirm={() => void executeTrade(confirmSymbol)}
+            onCancel={() => setConfirmSymbol(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
