@@ -330,8 +330,8 @@ export default function StockDetail({
             },
             {
               label: "Mean Reversion Probability",
-              value: `${(meanReversionProb * 100).toFixed(1)}%`,
-              color: meanReversionProb >= 0.5 ? green : red,
+              value: `${meanReversionProb.toFixed(1)}%`,
+              color: meanReversionProb >= 50 ? green : red,
             },
             {
               label: "Expected Profit to Mean",
