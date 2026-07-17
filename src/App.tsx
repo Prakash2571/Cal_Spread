@@ -48,6 +48,7 @@ export default function App() {
   // Admin-only: show only stocks with a calendar arbitrage (current & next
   // month on opposite sides — one at premium, one at discount).
   const [arbOnly, setArbOnly] = useState(false);
+  const [sortMinArb, setSortMinArb] = useState(false);
   const [sortOi, setSortOi] = useState(false);
   const [sortSpread, setSortSpread] = useState(false);
   const [sortDepth, setSortDepth] = useState(false);
@@ -391,8 +392,11 @@ export default function App() {
         return (premCur > 0 && premNext < 0) || (premCur < 0 && premNext > 0);
       });
 
-      // Sort by the biggest opportunity in percentage terms (descending).
-      list = [...list].sort((a, b) => arbPct(b) - arbPct(a));
+      // Sort by the biggest opportunity in percentage terms (descending),
+      // unless sortMinArb is active — then ascending (smallest diff first).
+      list = [...list].sort((a, b) =>
+        sortMinArb ? arbPct(a) - arbPct(b) : arbPct(b) - arbPct(a),
+      );
     }
 
     if (sortOi || sortSpread || sortDepth) {
@@ -430,7 +434,7 @@ export default function App() {
     }
 
     return list;
-  }, [board, query, arbOnly, sortOi, sortSpread, sortDepth, ticks]);
+  }, [board, query, arbOnly, sortMinArb, sortOi, sortSpread, sortDepth, ticks]);
 
   const status = live
     ? { kind: "live", label: "Live" }
@@ -568,6 +572,15 @@ export default function App() {
               title="Show only stocks where current & next month are on opposite sides (one premium, one discount)"
             >
               Arbitrage
+            </button>
+          )}
+          {arbOnly && (
+            <button
+              className={`btn${sortMinArb ? " btn--primary" : ""}`}
+              onClick={() => setSortMinArb((v) => !v)}
+              title="Sort by minimum percentage difference between current and next month futures (smallest first)"
+            >
+              Min Arb
             </button>
           )}
           {adminAuthenticated && (
