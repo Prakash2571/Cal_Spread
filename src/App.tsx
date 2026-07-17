@@ -397,21 +397,54 @@ export default function App() {
       // sortMinArb = ascending (smallest diff first)
       // sortMaxArb = descending (biggest diff first)
       // neither = keep original (unsorted/random) order
-      if (sortMinArb || sortMaxArb) {
-        list = [...list].sort((a, b) =>
-          sortMinArb ? arbPct(a) - arbPct(b) : arbPct(b) - arbPct(a),
-        );
-      }
-    }
+      if (sortMinArb || sortMaxArb || sortOi || sortSpread || sortDepth) {
+        list = [...list].sort((a, b) => {
+          let cmp = 0;
 
-    if (sortOi || sortSpread || sortDepth) {
+          // Primary: arb percentage sort (if active)
+          if ((sortMinArb || sortMaxArb) && cmp === 0) {
+            cmp = sortMinArb ? arbPct(a) - arbPct(b) : arbPct(b) - arbPct(a);
+          }
+
+          // Secondary: OI, Spread, Depth (tiebreakers when arb is active, primary otherwise)
+          if (sortOi && cmp === 0) {
+            const oiA = (a.futures[1] ? ticks[a.futures[1].token]?.oi : undefined) ?? 0;
+            const oiB = (b.futures[1] ? ticks[b.futures[1].token]?.oi : undefined) ?? 0;
+            cmp = oiB - oiA; // descending (high to low)
+          }
+
+          if (sortSpread && cmp === 0) {
+            const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
+            const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
+            const spreadA = tickA && tickA.ask && tickA.ask > 0 && tickA.bid && tickA.bid > 0 ? tickA.ask - tickA.bid : Infinity;
+            const spreadB = tickB && tickB.ask && tickB.ask > 0 && tickB.bid && tickB.bid > 0 ? tickB.ask - tickB.bid : Infinity;
+            cmp = spreadA - spreadB; // ascending (tightest first)
+          }
+
+          if (sortDepth && cmp === 0) {
+            const tickA = a.futures[1] ? ticks[a.futures[1].token] : undefined;
+            const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
+            const depthA =
+              (tickA?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+              (tickA?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
+            const depthB =
+              (tickB?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
+              (tickB?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
+            cmp = depthB - depthA; // descending (most orders first)
+          }
+
+          return cmp;
+        });
+      }
+    } else if (sortOi || sortSpread || sortDepth) {
+      // When arbOnly is not active, OI/Spread/Depth still work as primary sorts
       list = [...list].sort((a, b) => {
         let cmp = 0;
 
         if (sortOi && cmp === 0) {
           const oiA = (a.futures[1] ? ticks[a.futures[1].token]?.oi : undefined) ?? 0;
           const oiB = (b.futures[1] ? ticks[b.futures[1].token]?.oi : undefined) ?? 0;
-          cmp = oiB - oiA; // descending (high to low)
+          cmp = oiB - oiA;
         }
 
         if (sortSpread && cmp === 0) {
@@ -419,7 +452,7 @@ export default function App() {
           const tickB = b.futures[1] ? ticks[b.futures[1].token] : undefined;
           const spreadA = tickA && tickA.ask && tickA.ask > 0 && tickA.bid && tickA.bid > 0 ? tickA.ask - tickA.bid : Infinity;
           const spreadB = tickB && tickB.ask && tickB.ask > 0 && tickB.bid && tickB.bid > 0 ? tickB.ask - tickB.bid : Infinity;
-          cmp = spreadA - spreadB; // ascending (tightest first)
+          cmp = spreadA - spreadB;
         }
 
         if (sortDepth && cmp === 0) {
@@ -431,7 +464,7 @@ export default function App() {
           const depthB =
             (tickB?.bids?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0) +
             (tickB?.asks?.slice(0, 5).reduce((sum, l) => sum + l.orders, 0) ?? 0);
-          cmp = depthB - depthA; // descending (most orders first)
+          cmp = depthB - depthA;
         }
 
         return cmp;
@@ -609,9 +642,6 @@ export default function App() {
               onClick={() => {
                 setSortMinArb((v) => !v);
                 setSortMaxArb(false);
-                setSortOi(false);
-                setSortSpread(false);
-                setSortDepth(false);
               }}
               title="Sort by minimum percentage difference between current and next month futures (smallest first)"
             >
@@ -624,9 +654,6 @@ export default function App() {
               onClick={() => {
                 setSortMaxArb((v) => !v);
                 setSortMinArb(false);
-                setSortOi(false);
-                setSortSpread(false);
-                setSortDepth(false);
               }}
               title="Sort by maximum percentage difference between current and next month futures (largest first)"
             >
@@ -638,8 +665,6 @@ export default function App() {
               className={`btn${sortOi ? " btn--primary" : ""}`}
               onClick={() => {
                 setSortOi((v) => !v);
-                setSortMinArb(false);
-                setSortMaxArb(false);
               }}
               title="Sort by mid-month futures OI (high to low)"
             >
@@ -651,8 +676,6 @@ export default function App() {
               className={`btn${sortSpread ? " btn--primary" : ""}`}
               onClick={() => {
                 setSortSpread((v) => !v);
-                setSortMinArb(false);
-                setSortMaxArb(false);
               }}
               title="Sort by bid-ask spread for 2nd month future (tightest first)"
             >
@@ -664,8 +687,6 @@ export default function App() {
               className={`btn${sortDepth ? " btn--primary" : ""}`}
               onClick={() => {
                 setSortDepth((v) => !v);
-                setSortMinArb(false);
-                setSortMaxArb(false);
               }}
               title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
             >
