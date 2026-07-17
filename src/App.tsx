@@ -49,6 +49,7 @@ export default function App() {
   // month on opposite sides — one at premium, one at discount).
   const [arbOnly, setArbOnly] = useState(false);
   const [sortMinArb, setSortMinArb] = useState(false);
+  const [sortMaxArb, setSortMaxArb] = useState(false);
   const [sortOi, setSortOi] = useState(false);
   const [sortSpread, setSortSpread] = useState(false);
   const [sortDepth, setSortDepth] = useState(false);
@@ -392,11 +393,15 @@ export default function App() {
         return (premCur > 0 && premNext < 0) || (premCur < 0 && premNext > 0);
       });
 
-      // Sort by the biggest opportunity in percentage terms (descending),
-      // unless sortMinArb is active — then ascending (smallest diff first).
-      list = [...list].sort((a, b) =>
-        sortMinArb ? arbPct(a) - arbPct(b) : arbPct(b) - arbPct(a),
-      );
+      // Sort only when an explicit sort button is active:
+      // sortMinArb = ascending (smallest diff first)
+      // sortMaxArb = descending (biggest diff first)
+      // neither = keep original (unsorted/random) order
+      if (sortMinArb || sortMaxArb) {
+        list = [...list].sort((a, b) =>
+          sortMinArb ? arbPct(a) - arbPct(b) : arbPct(b) - arbPct(a),
+        );
+      }
     }
 
     if (sortOi || sortSpread || sortDepth) {
@@ -434,7 +439,7 @@ export default function App() {
     }
 
     return list;
-  }, [board, query, arbOnly, sortMinArb, sortOi, sortSpread, sortDepth, ticks]);
+  }, [board, query, arbOnly, sortMinArb, sortMaxArb, sortOi, sortSpread, sortDepth, ticks]);
 
   const status = live
     ? { kind: "live", label: "Live" }
@@ -490,24 +495,40 @@ export default function App() {
       trades.find((t) => t.symbol.toUpperCase() === sym.toUpperCase()) ??
       null;
     return (
-      <StockDetail
-        symbol={item?.symbol ?? sym}
-        item={item}
-        ticks={ticks}
-        rf={rfRate}
-        div={divYields[item?.symbol ?? ""] ?? 0}
-        showPrices={authenticated}
-        trade={tradeForView}
-        markStart={tradeForView?.opened_at}
-        markEnd={tradeForView?.closed_at ?? undefined}
-        showIntraday={!tradeForView || tradeForView.status === "open"}
-        onBack={() => navigate("/")}
-        canTrade={adminAuthenticated && authenticated}
-        tradeBusy={takingSymbol === sym}
-        hasOpenTrade={openTradeSymbols.has(sym.toUpperCase())}
-        onTakeTrade={handleTakeTrade}
-        isAdmin={adminAuthenticated}
-      />
+      <>
+        <StockDetail
+          symbol={item?.symbol ?? sym}
+          item={item}
+          ticks={ticks}
+          rf={rfRate}
+          div={divYields[item?.symbol ?? ""] ?? 0}
+          showPrices={authenticated}
+          trade={tradeForView}
+          markStart={tradeForView?.opened_at}
+          markEnd={tradeForView?.closed_at ?? undefined}
+          showIntraday={!tradeForView || tradeForView.status === "open"}
+          onBack={() => navigate("/")}
+          canTrade={adminAuthenticated && authenticated}
+          tradeBusy={takingSymbol === sym}
+          hasOpenTrade={openTradeSymbols.has(sym.toUpperCase())}
+          onTakeTrade={handleTakeTrade}
+          isAdmin={adminAuthenticated}
+        />
+        {confirmSymbol && (() => {
+          const confirmItem = board.find((b) => b.symbol === confirmSymbol);
+          if (!confirmItem) return null;
+          return (
+            <TradeConfirmModal
+              symbol={confirmSymbol}
+              item={confirmItem}
+              ticks={ticks}
+              busy={takingSymbol === confirmSymbol}
+              onConfirm={() => void executeTrade(confirmSymbol)}
+              onCancel={() => setConfirmSymbol(null)}
+            />
+          );
+        })()}
+      </>
     );
   }
 
@@ -570,7 +591,10 @@ export default function App() {
               className={`btn${arbOnly ? " btn--primary" : ""}`}
               onClick={() => {
                 setArbOnly((v) => {
-                  if (v) setSortMinArb(false);
+                  if (v) {
+                    setSortMinArb(false);
+                    setSortMaxArb(false);
+                  }
                   return !v;
                 });
               }}
@@ -584,6 +608,7 @@ export default function App() {
               className={`btn${sortMinArb ? " btn--primary" : ""}`}
               onClick={() => {
                 setSortMinArb((v) => !v);
+                setSortMaxArb(false);
                 setSortOi(false);
                 setSortSpread(false);
                 setSortDepth(false);
@@ -593,12 +618,28 @@ export default function App() {
               Min Arb
             </button>
           )}
+          {arbOnly && (
+            <button
+              className={`btn${sortMaxArb ? " btn--primary" : ""}`}
+              onClick={() => {
+                setSortMaxArb((v) => !v);
+                setSortMinArb(false);
+                setSortOi(false);
+                setSortSpread(false);
+                setSortDepth(false);
+              }}
+              title="Sort by maximum percentage difference between current and next month futures (largest first)"
+            >
+              Max Arb
+            </button>
+          )}
           {adminAuthenticated && (
             <button
               className={`btn${sortOi ? " btn--primary" : ""}`}
               onClick={() => {
                 setSortOi((v) => !v);
                 setSortMinArb(false);
+                setSortMaxArb(false);
               }}
               title="Sort by mid-month futures OI (high to low)"
             >
@@ -611,6 +652,7 @@ export default function App() {
               onClick={() => {
                 setSortSpread((v) => !v);
                 setSortMinArb(false);
+                setSortMaxArb(false);
               }}
               title="Sort by bid-ask spread for 2nd month future (tightest first)"
             >
@@ -623,6 +665,7 @@ export default function App() {
               onClick={() => {
                 setSortDepth((v) => !v);
                 setSortMinArb(false);
+                setSortMaxArb(false);
               }}
               title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
             >
