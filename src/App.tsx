@@ -568,7 +568,12 @@ export default function App() {
           {adminAuthenticated && (
             <button
               className={`btn${arbOnly ? " btn--primary" : ""}`}
-              onClick={() => setArbOnly((v) => !v)}
+              onClick={() => {
+                setArbOnly((v) => {
+                  if (v) setSortMinArb(false);
+                  return !v;
+                });
+              }}
               title="Show only stocks where current & next month are on opposite sides (one premium, one discount)"
             >
               Arbitrage
@@ -577,7 +582,12 @@ export default function App() {
           {arbOnly && (
             <button
               className={`btn${sortMinArb ? " btn--primary" : ""}`}
-              onClick={() => setSortMinArb((v) => !v)}
+              onClick={() => {
+                setSortMinArb((v) => !v);
+                setSortOi(false);
+                setSortSpread(false);
+                setSortDepth(false);
+              }}
               title="Sort by minimum percentage difference between current and next month futures (smallest first)"
             >
               Min Arb
@@ -586,7 +596,10 @@ export default function App() {
           {adminAuthenticated && (
             <button
               className={`btn${sortOi ? " btn--primary" : ""}`}
-              onClick={() => setSortOi((v) => !v)}
+              onClick={() => {
+                setSortOi((v) => !v);
+                setSortMinArb(false);
+              }}
               title="Sort by mid-month futures OI (high to low)"
             >
               OI
@@ -595,7 +608,10 @@ export default function App() {
           {adminAuthenticated && (
             <button
               className={`btn${sortSpread ? " btn--primary" : ""}`}
-              onClick={() => setSortSpread((v) => !v)}
+              onClick={() => {
+                setSortSpread((v) => !v);
+                setSortMinArb(false);
+              }}
               title="Sort by bid-ask spread for 2nd month future (tightest first)"
             >
               Spread
@@ -604,7 +620,10 @@ export default function App() {
           {adminAuthenticated && (
             <button
               className={`btn${sortDepth ? " btn--primary" : ""}`}
-              onClick={() => setSortDepth((v) => !v)}
+              onClick={() => {
+                setSortDepth((v) => !v);
+                setSortMinArb(false);
+              }}
               title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
             >
               Depth
