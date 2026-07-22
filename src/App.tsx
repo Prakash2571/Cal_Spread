@@ -27,6 +27,7 @@ import Admin from "./Admin.tsx";
 import TradesPanel from "./TradesPanel.tsx";
 import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
+import AccessTokenModal from "./AccessTokenModal.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -54,6 +55,7 @@ export default function App() {
   const [sortSpread, setSortSpread] = useState(false);
   const [sortDepth, setSortDepth] = useState(false);
   const [streamOpen, setStreamOpen] = useState(false);
+  const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
     return Number.isFinite(saved) ? saved : 6.5;
@@ -707,6 +709,15 @@ export default function App() {
               )}
             </button>
           )}
+          {isFullAdmin && authenticated && (
+            <button
+              className="btn"
+              onClick={() => setTokenModalOpen(true)}
+              title="View & copy today's Zerodha access token"
+            >
+              Access Token
+            </button>
+          )}
           {isFullAdmin ? (
             authenticated ? (
               <button className="btn" onClick={() => void handleFullLogout()}>
@@ -774,6 +785,10 @@ export default function App() {
             ? "No stocks currently show a calendar arbitrage (one leg premium, one discount)."
             : `No F&O stocks match “${query}”.`}
         </div>
+      )}
+
+      {tokenModalOpen && (
+        <AccessTokenModal onClose={() => setTokenModalOpen(false)} />
       )}
 
       {tradesOpen && (

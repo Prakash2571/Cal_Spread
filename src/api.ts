@@ -325,6 +325,34 @@ export async function createSession(
   return { authenticated: !!body.authenticated, user_name: body.user_name };
 }
 
+export interface KiteAccessToken {
+  api_key: string;
+  access_token: string;
+  login_date: string;
+}
+
+/**
+ * Fetch the current Zerodha access token (full admin only). Requires an active
+ * Zerodha session on the backend. Throws with the server error message on 409
+ * (no session) or 403 (not a full admin).
+ */
+export async function fetchKiteAccessToken(): Promise<KiteAccessToken> {
+  const res = await fetch(`${API_BASE_URL}/api/kite/access-token`, {
+    headers: getHeaders(),
+  });
+  const body = (await res.json()) as Partial<KiteAccessToken> & { error?: string };
+  if (!res.ok || !body.access_token) {
+    throw new Error(
+      body.error ?? `Failed to fetch access token (HTTP ${res.status}).`,
+    );
+  }
+  return {
+    api_key: body.api_key ?? "",
+    access_token: body.access_token,
+    login_date: body.login_date ?? "",
+  };
+}
+
 /** Backend health/auth status. */
 export async function getStatus(): Promise<{ authenticated: boolean }> {
   const res = await fetch(`${API_BASE_URL}/api/status`);
