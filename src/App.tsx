@@ -16,6 +16,7 @@ import {
   listTrades,
   closeTrade,
   deleteTrade,
+  setRfRate as syncRf,
   type BoardItem,
   type Tick,
   type Trade,
@@ -173,7 +174,11 @@ export default function App() {
   function updateRf(value: string) {
     const n = parseFloat(value);
     setRfRate(value === "" ? 0 : n);
-    if (Number.isFinite(n)) localStorage.setItem("cal_spread_rf", String(n));
+    if (Number.isFinite(n)) {
+      localStorage.setItem("cal_spread_rf", String(n));
+      // Full admin only: sync to backend so it can be read via GET /api/rf.
+      if (isFullAdmin) void syncRf(n).catch(() => {});
+    }
   }
 
   const tickBuffer = useRef<TickMap>({});
@@ -283,6 +288,14 @@ export default function App() {
     if (!adminAuthenticated) return;
     void refreshTrades();
   }, [adminRole]);
+
+  // Full admin: push the current rf to the backend on login so GET /api/rf has
+  // a value even before the admin edits the field this session.
+  useEffect(() => {
+    if (isFullAdmin && Number.isFinite(rfRate)) {
+      void syncRf(rfRate).catch(() => {});
+    }
+  }, [isFullAdmin]);
 
   // While no Zerodha session is active, poll the backend so that ANY open
   // public tab automatically starts showing live data once the admin connects

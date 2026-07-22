@@ -353,6 +353,22 @@ export async function fetchKiteAccessToken(): Promise<KiteAccessToken> {
   };
 }
 
+/**
+ * Sync the admin's risk-free rate (%) to the backend (full admin only) so it
+ * can be read back over the API. Best-effort: callers typically ignore errors.
+ */
+export async function setRfRate(rf: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/rf`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ rf }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Failed to sync rf (HTTP ${res.status}).`);
+  }
+}
+
 /** Backend health/auth status. */
 export async function getStatus(): Promise<{ authenticated: boolean }> {
   const res = await fetch(`${API_BASE_URL}/api/status`);
