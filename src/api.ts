@@ -354,6 +354,21 @@ export async function fetchKiteAccessToken(): Promise<KiteAccessToken> {
 }
 
 /**
+ * Read the current admin-set risk-free rate (%) from the backend (public).
+ * Returns null when the admin hasn't set one yet, so callers keep their default.
+ */
+export async function getRfRate(): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/rf/current`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { rf?: number | null };
+    return typeof body.rf === "number" ? body.rf : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Sync the admin's risk-free rate (%) to the backend (full admin only) so it
  * can be read back over the API. Best-effort: callers typically ignore errors.
  */

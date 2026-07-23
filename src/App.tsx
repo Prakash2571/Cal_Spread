@@ -17,6 +17,7 @@ import {
   closeTrade,
   deleteTrade,
   setRfRate as syncRf,
+  getRfRate,
   type BoardItem,
   type Tick,
   type Trade,
@@ -281,6 +282,18 @@ export default function App() {
     fetchDividends()
       .then(setDivYields)
       .catch(() => setDivYields({}));
+    // The backend is the source of truth for the risk-free rate. Load the
+    // admin-set value so every browser/visitor shows the same latest number.
+    getRfRate()
+      .then((rf) => {
+        if (rf !== null) {
+          setRfRate(rf);
+          localStorage.setItem("cal_spread_rf", String(rf));
+        }
+      })
+      .catch(() => {
+        /* keep local default */
+      });
   }, []);
 
   // Load trades once any admin (full or trade-access) is authenticated.
@@ -288,14 +301,6 @@ export default function App() {
     if (!adminAuthenticated) return;
     void refreshTrades();
   }, [adminRole]);
-
-  // Full admin: push the current rf to the backend on login so GET /api/rf has
-  // a value even before the admin edits the field this session.
-  useEffect(() => {
-    if (isFullAdmin && Number.isFinite(rfRate)) {
-      void syncRf(rfRate).catch(() => {});
-    }
-  }, [isFullAdmin]);
 
   // While no Zerodha session is active, poll the backend so that ANY open
   // public tab automatically starts showing live data once the admin connects
