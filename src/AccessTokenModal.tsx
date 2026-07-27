@@ -56,7 +56,7 @@ export default function AccessTokenModal({ onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <div>
             <h2>Zerodha Access Token</h2>
@@ -94,7 +94,7 @@ export default function AccessTokenModal({ onClose }: Props) {
                   onCopy={() => void copy(data.api_key, "key")}
                 />
               )}
-              <p style={{ fontSize: "0.72rem", color: "#9ca3af", margin: 0 }}>
+              <p className="token-note">
                 Zerodha issues one access token per API key each day. It expires
                 overnight, so copy a fresh one after each login.
               </p>
@@ -119,29 +119,11 @@ function TokenField({
 }) {
   return (
     <div>
-      <div
-        style={{
-          fontSize: "0.72rem",
-          color: "#9ca3af",
-          marginBottom: 6,
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
+      <div className="token-label">
         {label}
       </div>
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "stretch" }}>
-        <code
-          style={{
-            flex: 1,
-            padding: "0.6rem 0.75rem",
-            background: "rgba(255,255,255,0.05)",
-            borderRadius: 8,
-            fontSize: "0.85rem",
-            wordBreak: "break-all",
-            userSelect: "all",
-          }}
-        >
+        <code className="token-field token-value" style={{ flex: 1 }}>
           {value}
         </code>
         <button

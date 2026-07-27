@@ -48,7 +48,7 @@ export default function Admin({
           <svg
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#6366f1"
+            stroke="#ffffff"
             strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -60,7 +60,7 @@ export default function Admin({
               width="6"
               height="9"
               rx="1.2"
-              fill="#6366f1"
+              fill="#ffffff"
               stroke="none"
             />
             <rect
@@ -69,7 +69,7 @@ export default function Admin({
               width="6"
               height="8"
               rx="1.2"
-              fill="#6366f1"
+              fill="#ffffff"
               stroke="none"
             />
           </svg>

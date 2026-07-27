@@ -46,9 +46,9 @@ interface Props {
 
 // Colours per contract slot (near / next / far) — deliberately distinct hues
 // (blue / green / amber) so all three lines are easy to tell apart.
-const LINE_COLORS = ["#4d8bff", "#22c55e", "#f59e0b"];
+const LINE_COLORS = ["#58a6ff", "#3fb950", "#d29922"];
 // Muted colour for a contract that has already expired.
-const EXPIRED_COLOR = "#8d97ac";
+const EXPIRED_COLOR = "#6e7681";
 
 const fmtPrice = (v: number) =>
   v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -198,10 +198,10 @@ export default function StockDetail({
   // Trade entry/exit markers (drawn on charts whose window contains them).
   const markers: ChartMarker[] = [];
   if (markStart) {
-    markers.push({ at: new Date(markStart).getTime(), color: "#22c55e", label: "Entry" });
+    markers.push({ at: new Date(markStart).getTime(), color: "#3fb950", label: "Entry" });
   }
   if (markEnd) {
-    markers.push({ at: new Date(markEnd).getTime(), color: "#ff5a6a", label: "Exit" });
+    markers.push({ at: new Date(markEnd).getTime(), color: "#f85149", label: "Exit" });
   }
 
   // --- Calendar spread (next month − current month) ---
@@ -219,7 +219,7 @@ export default function StockDetail({
         points.push({ date: p.key, value: p.close - c0 });
       }
     }
-    return [{ label: "Spread (next − current)", color: "#6d8bff", points }];
+    return [{ label: "Spread (next − current)", color: "#58a6ff", points }];
   }
 
   const dailyFuts = history?.futures.map((f) => ({
@@ -307,8 +307,8 @@ export default function StockDetail({
               ? (currentSpread - stats.mean_spread) / stats.std_dev_spread
               : 0;
 
-            const green = "#22c55e";
-            const red = "#ef4444";
+            const green = "#3fb950";
+            const red = "#f85149";
 
             const metrics: { label: string; value: string; color: string }[] = [
               {
@@ -361,7 +361,7 @@ export default function StockDetail({
               {
                 label: "Mean Spread",
                 value: fmtPrice(stats.mean_spread),
-                color: "#94a3b8",
+                color: "#9ba3af",
               },
               {
                 label: "Max Spread",
@@ -376,27 +376,17 @@ export default function StockDetail({
             ];
 
             return (
-              <div style={{ marginTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "0.75rem" }}>
-                <h3 style={{ margin: "0 0 0.6rem", fontSize: "0.9rem", fontWeight: 700, letterSpacing: "-0.2px" }}>
+              <div className="metric-panel">
+                <h3 className="metric-panel-title">
                   Spread Analytics
                 </h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div className="metric-list">
                   {metrics.map((m) => (
-                    <div
-                      key={m.label}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        background: "rgba(255,255,255,0.03)",
-                        borderRadius: "6px",
-                        padding: "0.5rem 0.7rem",
-                      }}
-                    >
-                      <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>
+                    <div key={m.label} className="metric-row">
+                      <span className="metric-label">
                         {m.label}
                       </span>
-                      <span style={{ fontSize: "0.9rem", fontWeight: 600, color: m.color }}>
+                      <span className="metric-value" style={{ color: m.color }}>
                         {m.value}
                       </span>
                     </div>

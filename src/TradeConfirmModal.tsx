@@ -40,13 +40,13 @@ export default function TradeConfirmModal({
       : null;
   const lotSize = item.futures[0]?.lot_size ?? 1;
 
-  const green = "#22c55e";
-  const red = "#ef4444";
-  const muted = "#9ca3af";
+  const green = "#3fb950";
+  const red = "#f85149";
+  const muted = "#9ba3af";
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+      <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <div>
             <h2>Confirm Trade</h2>
@@ -59,12 +59,12 @@ export default function TradeConfirmModal({
 
         <div className="modal-body" style={{ padding: "1rem 1.25rem" }}>
           {currentSpread !== null && (
-            <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "rgba(255,255,255,0.04)", borderRadius: 8, textAlign: "center" }}>
-              <div style={{ fontSize: "0.75rem", color: muted, marginBottom: 4 }}>Current Spread</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, color: currentSpread < 0 ? red : green }}>
+            <div className="confirm-hero">
+              <div className="confirm-hero-label">Current Spread</div>
+              <div className="confirm-hero-value" style={{ color: currentSpread < 0 ? red : green }}>
                 {fmtPrice(currentSpread)}
               </div>
-              <div style={{ fontSize: "0.7rem", color: muted, marginTop: 4 }}>
+              <div className="metric-label">
                 Lot: {lotSize} qty
               </div>
             </div>
@@ -75,7 +75,7 @@ export default function TradeConfirmModal({
               <span className="spinner" /> Loading spread stats...
             </div>
           ) : stats ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div className="metric-list">
               {(() => {
                 const cs = currentSpread ?? 0;
                 const expectedProfit = Math.abs(cs - stats.mean_spread) * lotSize;
@@ -98,19 +98,9 @@ export default function TradeConfirmModal({
                 ];
 
                 return rows.map((r) => (
-                  <div
-                    key={r.label}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "0.4rem 0.6rem",
-                      background: "rgba(255,255,255,0.03)",
-                      borderRadius: 6,
-                    }}
-                  >
-                    <span style={{ fontSize: "0.75rem", color: muted }}>{r.label}</span>
-                    <span style={{ fontSize: "0.9rem", fontWeight: 600, color: r.color }}>{r.value}</span>
+                  <div key={r.label} className="metric-row">
+                    <span className="metric-label">{r.label}</span>
+                    <span className="metric-value" style={{ color: r.color }}>{r.value}</span>
                   </div>
                 ));
               })()}
