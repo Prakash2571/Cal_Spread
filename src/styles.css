@@ -178,7 +178,6 @@ body {
   padding: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-4);
   background: var(--surface-0);
-  border-bottom: 1px solid var(--border);
 }
 
 .brand {
