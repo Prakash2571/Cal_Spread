@@ -34,7 +34,7 @@ These requirements are derived from the approved design document and are scoped 
 1. THE Stylesheet SHALL contain zero occurrences of `backdrop-filter`, zero occurrences of `-webkit-backdrop-filter`, zero occurrences of `filter: blur(`, and zero occurrences of `conic-gradient`.
 2. THE Stylesheet SHALL contain zero occurrences of `radial-gradient`.
 3. THE Stylesheet SHALL restrict `linear-gradient` to the `.sk` skeleton shimmer rule set, yielding exactly one gradient consumer in the Stylesheet, and THE `.sk` gradient SHALL express its stops as opaque Surface_Token values in place of the current `rgba(255,255,255,0.04)` and `rgba(255,255,255,0.08)` stops.
-4. THE `.topbar` selector SHALL declare an opaque `var(--surface-0)` background and a `1px solid var(--border)` bottom border.
+4. THE `.topbar` selector SHALL declare an opaque `var(--surface-0)` background, SHALL contain zero `border-bottom` declarations, and SHALL retain the existing `var(--sp-4)` bottom margin so that the vertical gap between the topbar and the cards grid is unchanged.
 5. THE `.modal-overlay` selector SHALL declare a solid `var(--scrim)` background and no filter declaration.
 6. THE `body` selector SHALL declare a flat `var(--surface-0)` background and omit the `background-attachment` declaration.
 7. THE `.brand-mark` selector SHALL declare a flat `var(--accent)` background, a white glyph color, and no `box-shadow`.
@@ -50,7 +50,7 @@ These requirements are derived from the approved design document and are scoped 
 
 1. THE Token_Block SHALL define exactly four Surface_Tokens covering the app background, the card and panel level, the table-row and input level, and the interaction level.
 2. THE Stylesheet SHALL fill the background of every visible component with a single Surface_Token reference.
-3. THE Stylesheet SHALL separate adjacent surfaces with a `1px solid` border token reference.
+3. THE Stylesheet SHALL separate adjacent surfaces with a `1px solid` border token reference, excepting the `.topbar`-to-content boundary, which THE Stylesheet SHALL separate by the `var(--sp-4)` bottom margin of criterion 1.4 in place of a hairline.
 4. WHERE one component is nested inside another component whose surface index is below 3, THE nested component SHALL declare a Surface_Token whose surface index is greater than the surface index of the containing component.
 5. THE Stylesheet SHALL apply an Elevation_Token only within the `.modal`, `.chart-tip`, and `.admin-card` rule sets.
 6. THE `.card`, `.panel`, `.detail-chart`, and `.trade-card` selectors SHALL omit the `box-shadow` declaration.

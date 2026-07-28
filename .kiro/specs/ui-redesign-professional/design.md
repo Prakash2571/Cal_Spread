@@ -47,7 +47,7 @@ Each step is a **solid** fill separated by a `1px solid var(--border)` hairline.
 
 | Current glass technique | Location | Replacement |
 |---|---|---|
-| `backdrop-filter: blur(20px) saturate(150%)` | `.topbar` | Opaque `var(--surface-0)` + `1px solid var(--border)` bottom hairline |
+| `backdrop-filter: blur(20px) saturate(150%)` | `.topbar` | Opaque `var(--surface-0)` fill, **no** bottom hairline — the boundary is spacing-only |
 | `backdrop-filter: blur(6px)` | `.modal-overlay` | Solid scrim `rgba(6,8,10,0.72)`, no filter |
 | Body `radial-gradient` ×2, `background-attachment: fixed` | `body` | Flat `var(--surface-0)` |
 | `linear-gradient(180deg, var(--glass), transparent)` overlay | `.card`, `.detail-chart` | Flat `var(--surface-1)` |
@@ -214,7 +214,9 @@ interface InteractionStates {
 
 ### 2. Topbar — `.topbar`, `.brand`, `.brand-mark`, `.subtitle`, `.toolbar`
 
-- Sticky, `background: var(--surface-0)` (opaque — this is the single most important de-glassing change since the blurred bar smears scrolling numbers), `border-bottom: 1px solid var(--border)`, padding `--sp-3 --sp-4`.
+- Sticky, `background: var(--surface-0)` (opaque — this is the single most important de-glassing change since the blurred bar smears scrolling numbers), padding `--sp-3 --sp-4`. **No bottom border.** The topbar carries no `border-bottom` at all; its separation from the board below is expressed purely by the existing `margin-bottom: var(--sp-4)`, which is retained unchanged so the gap to the first card row neither shifts nor tightens.
+
+**Consequence of the borderless topbar (documented, accepted).** Because `body` and `.topbar` both resolve to `--surface-0`, removing the hairline leaves no visual distinction between the sticky header and the page background — board rows will clip at an invisible edge as they scroll under it, with nothing marking where the header ends. Documented fallback if that reads as broken in review: shift `.topbar` to `var(--surface-1)`, one elevation step lighter, which keeps the header distinguishable from the page without reintroducing a line. This is a fallback only, not the chosen approach — the chosen approach is `--surface-0` with no border.
 - `.brand-mark`: 32px, `--r-md`, flat `var(--accent)`, white glyph, **no** gradient and **no** glow. Grows to 40px on the admin card only.
 - `.brand h1`: `--fs-7`, `--fw-semibold`, no negative tracking.
 - `.toolbar`: `gap: var(--sp-2)`.
@@ -456,7 +458,7 @@ The existing 1180/720/480 breakpoints are kept and 860px (already used by `.deta
 
 ### Property 6: Elevation monotonicity
 
-*For all* parent/child component pairs, the child's surface index is strictly greater than the parent's, except at the ceiling: *for all* pairs whose parent is already `--surface-3`, the child also takes `--surface-3` and separates itself with a `1px solid var(--border-strong)` border. Adjacent surfaces are separated by a `1px solid` border token, and `box-shadow` elevation appears only on `.modal`, `.chart-tip`, `.admin-card`.
+*For all* parent/child component pairs, the child's surface index is strictly greater than the parent's, except at the ceiling: *for all* pairs whose parent is already `--surface-3`, the child also takes `--surface-3` and separates itself with a `1px solid var(--border-strong)` border. Adjacent surfaces are separated by a `1px solid` border token (except the topbar boundary, which Property 13 covers as spacing-only), and `box-shadow` elevation appears only on `.modal`, `.chart-tip`, `.admin-card`.
 
 **Validates: Requirements 2.4, 2.5, 2.6, 2.9**
 
@@ -498,7 +500,7 @@ The existing 1180/720/480 breakpoints are kept and 860px (already used by `.deta
 
 ### Property 13: Opaque token-driven fills
 
-*For all* visible components, the background resolves to a single opaque Surface_Token (or semantic surface token) reference — `body` and `.topbar` to `--surface-0`, `.card`/`.detail-chart` to `--surface-1`, rows and inputs to `--surface-2` — with no gradient overlay, no `::before` accent rule, no `background-attachment`, no translucent border, and marker emphasis expressed as an inset rail rather than a glow.
+*For all* visible components, the background resolves to a single opaque Surface_Token (or semantic surface token) reference — `body` and `.topbar` to `--surface-0`, `.card`/`.detail-chart` to `--surface-1`, rows and inputs to `--surface-2` — with no gradient overlay, no `::before` accent rule, no `background-attachment`, no translucent border, and marker emphasis expressed as an inset rail rather than a glow. Adjacent surfaces are separated by a `1px solid` border token, with one exception: the `.topbar` rule set declares zero `border-bottom` declarations and separates itself from the content below by its retained `var(--sp-4)` bottom margin alone.
 
 **Validates: Requirements 1.4, 1.5, 1.6, 1.7, 1.8, 1.10, 2.1, 2.2, 2.3, 2.7, 2.8, 3.1**
 

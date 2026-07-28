@@ -87,10 +87,11 @@ Anything outside the stated class — adding/removing/altering a hook call, an e
 - [x] 3. Phase 3 — Shell (topbar, buttons, inputs, status, banners)
 
   - [x] 3.1 De-blur the topbar and flatten the brand mark in `src/styles.css`
-    - `.topbar` (68–84): delete `backdrop-filter` (80) and `-webkit-backdrop-filter` (81); set `background: var(--surface-0)`, `border-bottom: 1px solid var(--border)`, padding `var(--sp-3) var(--sp-4)`.
+    - `.topbar` (68–84): delete `backdrop-filter` (80) and `-webkit-backdrop-filter` (81); delete the `border-bottom: 1px solid var(--border)` declaration (82) entirely so the rule set carries no bottom border at all; set `background: var(--surface-0)`, padding `var(--sp-3) var(--sp-4)`.
+    - Retain `margin-bottom` (78), expressed as `margin-bottom: var(--sp-4)` (the token equal to the current `16px`), so the gap between the topbar and the first stock-card row is preserved and the board does not shift up. Add no replacement divider — pseudo-element, `box-shadow`, or otherwise.
     - `.brand-mark` (92–102): replace `background: linear-gradient(135deg, var(--accent), #06b6d4)` (98) with `background: var(--accent)`; delete the `box-shadow` glow; 32px square, `border-radius: var(--r-md)`. `.brand-mark svg` (103): stroke/fill inherit the white glyph.
     - `.brand h1` (108): `font-size: var(--fs-7)`, `font-weight: var(--fw-semibold)`. `.subtitle` (116): `var(--fs-2)` / `var(--text-2)`. `.toolbar` (123): `gap: var(--sp-2)`.
-    - _Requirements: 1.1, 1.4, 1.7, 4.8_
+    - _Requirements: 1.1, 1.4, 1.7, 2.3, 4.8_
     - _Satisfies: Property 1, Property 13, Property 18_
 
   - [x] 3.2 Unify button geometry and the four variants in `src/styles.css`
@@ -120,11 +121,12 @@ Anything outside the stated class — adding/removing/altering a hook call, an e
   - [x] 3.5 Phase 3 verification
     - Run `npx tsc -b` (exit 0) and `npx vite build` (bundle emitted).
     - Assert `grep -cE 'backdrop-filter|-webkit-backdrop-filter' src/styles.css` returns 0.
+    - Assert the `.topbar` rule set contains zero `border-bottom` declarations, and that it still declares `margin-bottom: var(--sp-4)`.
     - Assert no `:hover` rule in the migrated shell selectors declares `transform`, `box-shadow`, `filter`, or `opacity`.
     - Re-run the `var()` closure grep; add any missing token before closing the phase.
     - Confirm every screen renders; report to the user for visual confirmation.
-    - _Requirements: 1.1, 1.9, 3.7, 11.4, 12.1, 12.2, 12.3, 12.6_
-    - _Satisfies: Property 11, Property 14_
+    - _Requirements: 1.1, 1.4, 1.9, 3.7, 11.4, 12.1, 12.2, 12.3, 12.6_
+    - _Satisfies: Property 11, Property 13, Property 14_
 
 - [ ] 4. Checkpoint — shell review
   - Ensure the build is green and the shell (topbar, buttons, inputs, banners) renders on both the board and the admin screen; ask the user if questions arise.
