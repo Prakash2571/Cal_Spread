@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f1216" />
+    <script>
+      // Apply the saved theme before first paint to avoid a flash of the
+      // wrong theme. Dark is the default when nothing is saved.
+      (function () {
+        try {
+          var t = localStorage.getItem("cal_spread_theme");
+          var theme = t === "light" ? "light" : "dark";
+          document.documentElement.dataset.theme = theme;
+          if (theme === "light") {
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute("content", "#f2f4f7");
+          }
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

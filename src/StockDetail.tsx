@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { resolveChartColors, type Theme } from "./theme.ts";
 import {
   fetchOiHistory,
   fetchIntradayHistory,
@@ -15,6 +16,7 @@ import {
 import { fmtCompact, formatExpiry } from "./format.ts";
 import StockCard from "./StockCard.tsx";
 import LineChart, { type ChartSeries, type ChartMarker } from "./LineChart.tsx";
+import ThemeToggle from "./ThemeToggle.tsx";
 
 
 interface Props {
@@ -42,13 +44,11 @@ interface Props {
   onTakeTrade?: (symbol: string) => void;
   /** Whether the user is authenticated as admin (full or trade-access). */
   isAdmin?: boolean;
+  /** Active colour theme — drives chart line/marker colours. */
+  theme: Theme;
+  /** Toggle between day/dark mode (rendered in the header). */
+  onToggleTheme: () => void;
 }
-
-// Colours per contract slot (near / next / far) — deliberately distinct hues
-// (blue / green / amber) so all three lines are easy to tell apart.
-const LINE_COLORS = ["#58a6ff", "#3fb950", "#d29922"];
-// Muted colour for a contract that has already expired.
-const EXPIRED_COLOR = "#6e7681";
 
 const fmtPrice = (v: number) =>
   v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -94,7 +94,15 @@ export default function StockDetail({
   hasOpenTrade,
   onTakeTrade,
   isAdmin,
+  theme,
+  onToggleTheme,
 }: Props) {
+  // Chart line/marker colours resolved from the active theme's CSS tokens.
+  // (SVG presentation attributes can't read CSS var(), so we resolve to hex.)
+  const chartColors = useMemo(() => resolveChartColors(theme), [theme]);
+  const LINE_COLORS = chartColors.series;
+  const EXPIRED_COLOR = chartColors.expired;
+
   const [history, setHistory] = useState<OiHistory | null>(null);
   const [intraday, setIntraday] = useState<IntradayHistory | null>(null);
   const [minute, setMinute] = useState<IntradayHistory | null>(null);
@@ -198,10 +206,10 @@ export default function StockDetail({
   // Trade entry/exit markers (drawn on charts whose window contains them).
   const markers: ChartMarker[] = [];
   if (markStart) {
-    markers.push({ at: new Date(markStart).getTime(), color: "#3fb950", label: "Entry" });
+    markers.push({ at: new Date(markStart).getTime(), color: chartColors.pos, label: "Entry" });
   }
   if (markEnd) {
-    markers.push({ at: new Date(markEnd).getTime(), color: "#f85149", label: "Exit" });
+    markers.push({ at: new Date(markEnd).getTime(), color: chartColors.neg, label: "Exit" });
   }
 
   // --- Calendar spread (next month − current month) ---
@@ -219,7 +227,7 @@ export default function StockDetail({
         points.push({ date: p.key, value: p.close - c0 });
       }
     }
-    return [{ label: "Spread (next − current)", color: "#58a6ff", points }];
+    return [{ label: "Spread (next − current)", color: chartColors.spread, points }];
   }
 
   const dailyFuts = history?.futures.map((f) => ({
@@ -254,6 +262,9 @@ export default function StockDetail({
             <h1>{item?.name ?? symbol}</h1>
             <p className="subtitle">{symbol} · price &amp; open interest history</p>
           </div>
+        </div>
+        <div className="toolbar">
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
       </header>
 
@@ -307,8 +318,8 @@ export default function StockDetail({
               ? (currentSpread - stats.mean_spread) / stats.std_dev_spread
               : 0;
 
-            const green = "#3fb950";
-            const red = "#f85149";
+            const green = "var(--pos)";
+            const red = "var(--neg)";
 
             const metrics: { label: string; value: string; color: string }[] = [
               {
@@ -361,7 +372,7 @@ export default function StockDetail({
               {
                 label: "Mean Spread",
                 value: fmtPrice(stats.mean_spread),
-                color: "#9ba3af",
+                color: "var(--text-2)",
               },
               {
                 label: "Max Spread",
