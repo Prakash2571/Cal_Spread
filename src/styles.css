@@ -51,6 +51,7 @@
   --series-expired: #6e7681;
   --chart-grid: #23272e;
   --chart-guide: #333a44;
+  --chart-zero: rgba(255, 255, 255, 0.28);
 
   /* ---- Typography ---- */
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -96,6 +97,69 @@
   --dur-fast: 110ms;
   --dur: 160ms;
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* ================================================================
+   Day mode — light theme. Overrides only the colour tokens; every
+   other value (type, spacing, radius, motion) is inherited from the
+   dark :root above. Values are tuned so numbers, labels and chart
+   lines keep strong contrast on light surfaces.
+   ================================================================ */
+[data-theme="light"] {
+  /* ---- Surfaces (white cards lifted off a soft grey canvas) ---- */
+  --surface-0: #f2f4f7;
+  --surface-1: #ffffff;
+  --surface-2: #eef1f5;
+  --surface-3: #e2e7ee;
+
+  /* ---- Borders ---- */
+  --border-subtle: #eaedf1;
+  --border: #d5dbe2;
+  --border-strong: #bcc4cd;
+
+  /* ---- Text (dark ink on light — high contrast) ---- */
+  --text-1: #1b1f24;
+  --text-2: #4a535e;
+  --text-3: #656d78;
+
+  /* ---- Accent (interaction only) ---- */
+  --accent: #1e63e9;
+  --accent-hover: #1550c8;
+  --accent-text: #0b57d0;
+  --accent-surface: #dce8fd;
+  --accent-border: #a9c6f8;
+  --on-accent: #ffffff;
+
+  /* ---- Semantic: P&L (darkened so value text stays legible) ---- */
+  --pos: #12823a;
+  --pos-surface: #d7f5df;
+  --neg: #d0342c;
+  --neg-hover: #b02620;
+  --neg-surface: #fde3e1;
+  --warn: #9a6a00;
+  --warn-surface: #fbeecb;
+
+  /* ---- Semantic: premium / discount ---- */
+  --prem: #0b57d0;
+  --prem-surface: #dce8fd;
+  --disc: #8a5a00;
+  --disc-surface: #fbeaca;
+
+  /* ---- Data viz (contrast-checked on white) ---- */
+  --oi: #0f7d8c;
+  --series-1: #1e63e9;
+  --series-2: #12823a;
+  --series-3: #9a6700;
+  --series-expired: #8b939c;
+  --chart-grid: #e6eaef;
+  --chart-guide: #aab3bd;
+  --chart-zero: rgba(0, 0, 0, 0.3);
+
+  /* ---- Elevation (softer shadows + scrim for light) ---- */
+  --shadow-popover: 0 4px 12px rgba(27, 31, 36, 0.12);
+  --shadow-overlay: 0 12px 32px rgba(27, 31, 36, 0.18);
+  --scrim: rgba(27, 31, 36, 0.35);
+  --ring: 0 0 0 3px rgba(30, 99, 233, 0.3);
 }
 
 * {
@@ -376,6 +440,29 @@ body {
 .btn:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* Square icon-only button — used by the day/night theme toggle. */
+.btn--icon {
+  padding: 0;
+  width: 32px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.btn--icon:hover:not(:disabled) {
+  color: var(--text-1);
+}
+
+.btn--icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 480px) {
+  .btn--icon {
+    width: 44px;
+  }
 }
 
 .btn--primary {
@@ -1691,6 +1778,13 @@ body {
   stroke: var(--chart-guide);
   stroke-width: 1;
   stroke-dasharray: 3 3;
+}
+
+/* Zero baseline for signed (spread) charts — theme-aware so it stays
+   visible on both dark and light surfaces (SVG attrs can't read var()). */
+.chart-zero {
+  stroke: var(--chart-zero);
+  stroke-width: 1;
 }
 
 .chart-ylabel {

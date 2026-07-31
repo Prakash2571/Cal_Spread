@@ -40,9 +40,9 @@ export default function TradeConfirmModal({
       : null;
   const lotSize = item.futures[0]?.lot_size ?? 1;
 
-  const green = "#3fb950";
-  const red = "#f85149";
-  const muted = "#9ba3af";
+  const green = "var(--pos)";
+  const red = "var(--neg)";
+  const muted = "var(--text-2)";
 
   return (
     <div className="modal-overlay" onClick={onCancel}>

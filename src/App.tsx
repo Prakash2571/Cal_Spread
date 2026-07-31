@@ -30,6 +30,8 @@ import TradesPanel from "./TradesPanel.tsx";
 import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
 import AccessTokenModal from "./AccessTokenModal.tsx";
+import ThemeToggle from "./ThemeToggle.tsx";
+import { applyTheme, getInitialTheme, type Theme } from "./theme.ts";
 
 type TickMap = Record<number, Tick>;
 
@@ -44,6 +46,22 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [adminRole, setAdminRole] = useState<AdminRole>(null);
   const [live, setLive] = useState(false);
+  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+
+  // Apply the theme synchronously so the following render (and any chart that
+  // resolves colours from CSS tokens) sees the updated values immediately.
+  function toggleTheme() {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    setThemeState(next);
+  }
+
+  // Ensure the DOM attribute matches state on mount (the pre-paint script in
+  // index.html normally sets this already; this keeps them in sync in dev).
+  useEffect(() => {
+    applyTheme(theme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const adminAuthenticated = adminRole !== null;
   const isFullAdmin = adminRole === "full";
@@ -566,6 +584,8 @@ export default function App() {
           hasOpenTrade={openTradeSymbols.has(sym.toUpperCase())}
           onTakeTrade={handleTakeTrade}
           isAdmin={adminAuthenticated}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
         {confirmSymbol && (() => {
           const confirmItem = board.find((b) => b.symbol === confirmSymbol);
@@ -603,6 +623,7 @@ export default function App() {
         </div>
 
         <div className="toolbar">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <div className="search-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
