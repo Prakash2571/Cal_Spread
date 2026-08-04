@@ -30,6 +30,7 @@ import TradesPanel from "./TradesPanel.tsx";
 import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
 import AccessTokenModal from "./AccessTokenModal.tsx";
+import ThemeToggle from "./ThemeToggle.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -603,6 +604,7 @@ export default function App() {
         </div>
 
         <div className="toolbar">
+          <ThemeToggle />
           <div className="search-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

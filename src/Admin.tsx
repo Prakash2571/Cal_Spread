@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { setAdminToken } from "./api.ts";
+import ThemeToggle from "./ThemeToggle.tsx";
 
 interface AdminProps {
   onAuthenticated: () => void;
@@ -43,6 +44,7 @@ export default function Admin({
 
   return (
     <div className="admin-page">
+      <ThemeToggle />
       <div className="admin-card">
         <div className="brand-mark" aria-hidden="true">
           <svg

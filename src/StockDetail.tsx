@@ -15,6 +15,7 @@ import {
 import { fmtCompact, formatExpiry } from "./format.ts";
 import StockCard from "./StockCard.tsx";
 import LineChart, { type ChartSeries, type ChartMarker } from "./LineChart.tsx";
+import ThemeToggle from "./ThemeToggle.tsx";
 
 
 interface Props {
@@ -46,9 +47,9 @@ interface Props {
 
 // Colours per contract slot (near / next / far) — deliberately distinct hues
 // (blue / green / amber) so all three lines are easy to tell apart.
-const LINE_COLORS = ["#58a6ff", "#3fb950", "#d29922"];
+const LINE_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)"];
 // Muted colour for a contract that has already expired.
-const EXPIRED_COLOR = "#6e7681";
+const EXPIRED_COLOR = "var(--series-expired)";
 
 const fmtPrice = (v: number) =>
   v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -198,10 +199,10 @@ export default function StockDetail({
   // Trade entry/exit markers (drawn on charts whose window contains them).
   const markers: ChartMarker[] = [];
   if (markStart) {
-    markers.push({ at: new Date(markStart).getTime(), color: "#3fb950", label: "Entry" });
+    markers.push({ at: new Date(markStart).getTime(), color: "var(--pos)", label: "Entry" });
   }
   if (markEnd) {
-    markers.push({ at: new Date(markEnd).getTime(), color: "#f85149", label: "Exit" });
+    markers.push({ at: new Date(markEnd).getTime(), color: "var(--neg)", label: "Exit" });
   }
 
   // --- Calendar spread (next month − current month) ---
@@ -219,7 +220,7 @@ export default function StockDetail({
         points.push({ date: p.key, value: p.close - c0 });
       }
     }
-    return [{ label: "Spread (next − current)", color: "#58a6ff", points }];
+    return [{ label: "Spread (next − current)", color: "var(--series-1)", points }];
   }
 
   const dailyFuts = history?.futures.map((f) => ({
@@ -255,6 +256,7 @@ export default function StockDetail({
             <p className="subtitle">{symbol} · price &amp; open interest history</p>
           </div>
         </div>
+        <ThemeToggle />
       </header>
 
       <div className="detail-grid">
@@ -307,8 +309,8 @@ export default function StockDetail({
               ? (currentSpread - stats.mean_spread) / stats.std_dev_spread
               : 0;
 
-            const green = "#3fb950";
-            const red = "#f85149";
+            const green = "var(--pos)";
+            const red = "var(--neg)";
 
             const metrics: { label: string; value: string; color: string }[] = [
               {
@@ -361,7 +363,7 @@ export default function StockDetail({
               {
                 label: "Mean Spread",
                 value: fmtPrice(stats.mean_spread),
-                color: "#9ba3af",
+                color: "var(--text-2)",
               },
               {
                 label: "Max Spread",

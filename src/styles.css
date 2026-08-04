@@ -4,6 +4,8 @@
    and motion values in this stylesheet.
    ================================================================ */
 :root {
+  color-scheme: dark;
+
   /* ---- Surfaces (elevation steps) ---- */
   --surface-0: #0f1216;
   --surface-1: #171a1f;
@@ -51,6 +53,7 @@
   --series-expired: #6e7681;
   --chart-grid: #23272e;
   --chart-guide: #333a44;
+  --chart-zero: rgba(255, 255, 255, 0.28);
 
   /* ---- Typography ---- */
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -96,6 +99,56 @@
   --dur-fast: 110ms;
   --dur: 160ms;
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-0: #f5f7fa;
+  --surface-1: #ffffff;
+  --surface-2: #f1f4f8;
+  --surface-3: #e8edf3;
+
+  --border-subtle: #d8dee8;
+  --border: #7f8da0;
+  --border-strong: #607086;
+
+  --text-1: #162033;
+  --text-2: #46566b;
+  --text-3: #526174;
+
+  --accent: #2458c6;
+  --accent-hover: #1949ad;
+  --accent-text: #174ea6;
+  --accent-surface: #eaf1ff;
+  --accent-border: #6f95df;
+
+  --pos: #16752f;
+  --pos-surface: #eaf7ee;
+  --neg: #c52a25;
+  --neg-hover: #a91f1b;
+  --neg-surface: #fff0ef;
+  --warn: #895c00;
+  --warn-surface: #fff6d9;
+
+  --prem: #175eb5;
+  --prem-surface: #eaf3ff;
+  --disc: #7b5900;
+  --disc-surface: #fff6d9;
+
+  --oi: #0a6674;
+  --series-1: #175eb5;
+  --series-2: #16752f;
+  --series-3: #895c00;
+  --series-expired: #526174;
+  --chart-grid: #d9e0e8;
+  --chart-guide: #8b98a8;
+  --chart-zero: #8b98a8;
+
+  --shadow-popover: 0 4px 12px rgba(22, 32, 51, 0.14);
+  --shadow-overlay: 0 12px 32px rgba(22, 32, 51, 0.2);
+  --scrim: rgba(15, 23, 42, 0.48);
+  --ring: 0 0 0 3px rgba(36, 88, 198, 0.28);
 }
 
 * {
@@ -221,6 +274,26 @@ body {
   align-items: center;
   gap: var(--sp-2);
   flex-wrap: wrap;
+}
+
+.theme-toggle {
+  gap: var(--sp-2);
+}
+
+.theme-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.admin-page > .theme-toggle {
+  position: fixed;
+  top: var(--sp-4);
+  right: var(--sp-4);
 }
 
 /* ================ Search ================ */

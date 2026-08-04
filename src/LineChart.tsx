@@ -113,7 +113,7 @@ export default function LineChart({
             y1={yAt(0)}
             x2={W - PAD.r}
             y2={yAt(0)}
-            stroke="rgba(255,255,255,0.28)"
+            stroke="var(--chart-zero)"
             strokeWidth={1}
           />
         )}
