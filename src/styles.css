@@ -99,6 +99,8 @@
   --shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-card: none;
   --shadow-card-hover: none;
+  --shadow-control: none;
+  --shadow-data: none;
   --scrim: rgba(6, 8, 10, 0.72);
   --ring: 0 0 0 3px rgba(47, 111, 237, 0.35);
 
@@ -116,13 +118,13 @@
   --surface-2: #edf2f7;
   --surface-3: #e2e9f1;
 
-  --border-subtle: #d5dde7;
-  --border: #a8b6c7;
-  --border-strong: #7f91a7;
+  --border-subtle: #c7d1dd;
+  --border: #8799ae;
+  --border-strong: #647991;
 
   --data-surface: #edf2f7;
   --data-surface-strong: #e2e9f1;
-  --data-border: #c5d0dd;
+  --data-border: #aebdce;
 
   --text-1: #162033;
   --text-2: #46566b;
@@ -158,10 +160,14 @@
 
   --shadow-popover: 0 4px 12px rgba(22, 32, 51, 0.14);
   --shadow-overlay: 0 12px 32px rgba(22, 32, 51, 0.2);
-  --shadow-card: 0 1px 2px rgba(22, 32, 51, 0.08),
-    0 6px 18px rgba(22, 32, 51, 0.07);
-  --shadow-card-hover: 0 2px 4px rgba(22, 32, 51, 0.1),
+  --shadow-card: 0 2px 4px rgba(22, 32, 51, 0.12),
     0 10px 24px rgba(22, 32, 51, 0.1);
+  --shadow-card-hover: 0 3px 6px rgba(22, 32, 51, 0.14),
+    0 14px 30px rgba(22, 32, 51, 0.13);
+  --shadow-control: 0 1px 2px rgba(22, 32, 51, 0.13),
+    0 3px 8px rgba(22, 32, 51, 0.08);
+  --shadow-data: 0 1px 2px rgba(22, 32, 51, 0.09),
+    0 4px 10px rgba(22, 32, 51, 0.06);
   --scrim: rgba(15, 23, 42, 0.48);
   --ring: 0 0 0 3px rgba(36, 88, 198, 0.28);
 }
@@ -339,12 +345,14 @@ body {
   padding: 0 var(--sp-3) 0 var(--sp-8);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  background: var(--surface-2);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-control);
   color: var(--text-1);
   font-size: var(--fs-4);
   font-family: inherit;
   text-align: left;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 
 .search::placeholder {
@@ -355,6 +363,10 @@ body {
   /* outline replaced by the shared :focus-visible ring above */
   outline: none;
   border-color: var(--accent);
+}
+
+.search:focus-visible {
+  box-shadow: var(--ring), var(--shadow-control);
 }
 
 /* ================ Status pill ================ */
@@ -999,6 +1011,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface-2);
+  box-shadow: var(--shadow-control);
   color: var(--text-1);
   font-family: var(--font-mono);
   font-size: var(--fs-4);
@@ -1010,6 +1023,10 @@ body {
   /* outline replaced by the shared :focus-visible ring in the base layer */
   outline: none;
   color: var(--accent-text);
+}
+
+.rf input:focus-visible {
+  box-shadow: var(--ring), var(--shadow-control);
 }
 
 .rf input::-webkit-outer-spin-button,
@@ -1081,6 +1098,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface-2);
+  box-shadow: var(--shadow-control);
   color: var(--text-1);
   font-size: var(--fs-4);
   font-family: inherit;
@@ -1096,6 +1114,10 @@ body {
   /* outline replaced by the shared :focus-visible ring in the base layer */
   outline: none;
   border-color: var(--accent);
+}
+
+.admin-input:focus-visible {
+  box-shadow: var(--ring), var(--shadow-control);
 }
 
 .admin-input:disabled {
@@ -1459,6 +1481,7 @@ body {
   border: 1px solid var(--data-border);
   border-radius: var(--r-md);
   background: var(--data-surface);
+  box-shadow: var(--shadow-data);
   padding: var(--sp-3);
 }
 
@@ -1921,6 +1944,7 @@ body {
   background: var(--data-surface);
   border: 1px solid var(--data-border);
   border-radius: var(--r-sm);
+  box-shadow: var(--shadow-data);
 }
 
 .metric-label {
@@ -1945,6 +1969,7 @@ body {
   background: var(--data-surface);
   border: 1px solid var(--data-border);
   border-radius: var(--r-md);
+  box-shadow: var(--shadow-data);
   text-align: center;
 }
 
@@ -1971,6 +1996,7 @@ body {
   background: var(--data-surface);
   border: 1px solid var(--data-border);
   border-radius: var(--r-md);
+  box-shadow: var(--shadow-data);
 }
 
 .token-label {
