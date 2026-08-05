@@ -17,7 +17,7 @@ export function applyTheme(theme: Theme) {
   document.documentElement.style.colorScheme = theme;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "light" ? "#f5f7fa" : "#0f1216");
+    ?.setAttribute("content", theme === "light" ? "#f2f5f9" : "#0f1216");
 }
 
 export default function ThemeToggle() {
