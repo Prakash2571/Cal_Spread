@@ -2240,18 +2240,21 @@ body {
 /* ---- Charts ---- */
 .an-charts {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* all three charts in one row */
+  /* minmax(0, 1fr) lets each column shrink below its scrollable content's
+     width so all three charts stay in ONE row and scroll internally instead
+     of blowing the grid out to full width. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-3);
   margin: var(--sp-3) 0 var(--sp-6);
 }
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .an-charts {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 720px) {
+@media (max-width: 600px) {
   .an-charts {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .an-chart-card {
@@ -2259,6 +2262,8 @@ body {
   border: 1px solid var(--data-border);
   border-radius: var(--r-lg);
   padding: var(--sp-3) var(--sp-4);
+  min-width: 0; /* allow the grid column to shrink (scroll content instead) */
+  overflow: hidden;
 }
 .an-chart-head {
   display: flex;

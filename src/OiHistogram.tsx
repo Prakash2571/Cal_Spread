@@ -15,8 +15,8 @@ interface Props {
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 42; // px per time bucket (wider, ~7-8 visible per compact view)
-const BAR_W = 15; // call & put bars sit side by side with a gap before the next bucket
+const GROUP_W = 16; // px per time bucket (compact) — call+put bars + small gap
+const BAR_W = 6;
 
 /**
  * Diverging OI-change histogram: for each time bucket a Call bar (red) and a
