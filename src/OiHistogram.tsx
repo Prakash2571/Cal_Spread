@@ -16,7 +16,7 @@ interface Props {
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 20; // one timestamp bucket: paired bars plus a clear outer gap
+const GROUP_W = 30; // 12px Call/Put pair plus an 18px inter-time gap
 const BAR_W = 5;
 const BAR_GAP = 2;
 const PAIR_W = BAR_W * 2 + BAR_GAP;
