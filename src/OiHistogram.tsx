@@ -16,9 +16,9 @@ interface Props {
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 30; // 12px Call/Put pair plus an 18px inter-time gap
-const BAR_W = 5;
-const BAR_GAP = 2;
+const GROUP_W = 45; // 21px Call/Put pair plus a 24px inter-time gap
+const BAR_W = 9;
+const BAR_GAP = 3;
 const PAIR_W = BAR_W * 2 + BAR_GAP;
 const GROUP_PAD = (GROUP_W - PAIR_W) / 2;
 
@@ -78,7 +78,7 @@ export default function OiHistogram({
     const yv = yFor(v);
     const y = v >= 0 ? yv : y0;
     const h = Math.max(1, Math.abs(yv - y0));
-    return <rect key={key} x={x} y={y} width={BAR_W} height={h} fill={color} rx={1} />;
+    return <rect key={key} x={x} y={y} width={BAR_W} height={h} fill={color} rx={2} />;
   }
 
   const hoverPt = hover !== null ? points[hover] : null;
@@ -146,9 +146,9 @@ export default function OiHistogram({
             {/* Highlight the complete Call/Put pair for the hovered timestamp. */}
             {hover !== null && (
               <rect
-                x={PAD.l + hover * GROUP_W + 1}
+                x={PAD.l + hover * GROUP_W + GROUP_PAD - 4}
                 y={PAD.t}
-                width={GROUP_W - 2}
+                width={PAIR_W + 8}
                 height={plotH}
                 rx={2}
                 className="an-hist-hover-band"
