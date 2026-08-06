@@ -17,6 +17,14 @@ import ThemeToggle from "./ThemeToggle.tsx";
 import { fmt, fmtCompact, formatExpiry } from "./format.ts";
 
 type TickMap = Record<number, Tick>;
+type ChainInterval = 5 | 15;
+type OptionBaseline = Record<number, { oi: number; ltp: number; t: number }>;
+
+// Baselines are sampled once per minute on the backend. Accept the nearest
+// sample just before the requested cutoff, but reject incomplete or stale
+// windows instead of presenting them as exact 5m/15m calculations.
+const BASELINE_OLDER_TOLERANCE_MS = 75 * 1000;
+const BASELINE_NEWER_TOLERANCE_MS = 5 * 1000;
 
 /** The underlying this analytics page is built for. */
 const UNDERLYING = "NIFTY";
@@ -95,7 +103,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
-  const [interval, setIntervalMin] = useState<5 | 15>(5);
+  const [oiInterval, setOiInterval] = useState<ChainInterval>(5);
+  const [bldInterval, setBldInterval] = useState<ChainInterval>(5);
   const [straddleFrame, setStraddleFrame] = useState<OiFrame>("5m"); // ATM straddle chart timeframe
   const [oiFrame, setOiFrame] = useState<OiFrame>("5m"); // Call/Put OI chart timeframe
   const [histFrame, setHistFrame] = useState<OiFrame>("5m"); // OI-change histogram frame
@@ -111,12 +120,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [ceOiSeries, setCeOiSeries] = useState<{ date: string; value: number }[]>([]);
   const [peOiSeries, setPeOiSeries] = useState<{ date: string; value: number }[]>([]);
 
-  // Server-provided baseline (OI + LTP as of `interval` minutes ago) from the
-  // per-day intraday cache. Preferred over the client rolling history so the
-  // OI-change % + buildup are correct immediately on load, any time of day.
-  const [baseline, setBaseline] = useState<
-    Record<number, { oi: number; ltp: number }>
-  >({});
+  // Server-provided OI + LTP baselines keyed by timeframe. Keeping both
+  // caches lets OI Δ% and buildup use independent 5m/15m selections.
+  const [baselines, setBaselines] = useState<Record<ChainInterval, OptionBaseline>>({
+    5: {},
+    15: {},
+  });
 
   const tickBuffer = useRef<TickMap>({});
   const ticksRef = useRef<TickMap>({});
@@ -144,7 +153,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         setStraddleRaw([]);
         setCeOiSeries([]);
         setPeOiSeries([]);
-        setBaseline({});
+        setBaselines({ 5: {}, 15: {} });
         setTicks({});
         tickBuffer.current = {};
         ticksRef.current = {};
@@ -218,25 +227,48 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain]);
 
-  // ---- Server baseline for the selected timeframe (per-day cache) ----
+  // ---- Server baselines for independent OI Δ% and buildup timeframes ----
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
-    const load = () =>
-      fetchOptionOiBaseline(UNDERLYING, interval)
-        .then((r) => {
-          if (!cancelled) setBaseline(r.tokens ?? {});
-        })
-        .catch(() => {
-          /* fall back to client rolling history */
-        });
+    const selected = Array.from(
+      new Set<ChainInterval>([oiInterval, bldInterval]),
+    );
+    const clearSelected = () => {
+      setBaselines((prev) => {
+        const next = { ...prev };
+        for (const frame of selected) next[frame] = {};
+        return next;
+      });
+    };
+    // Never expose a retained baseline under a newly selected timeframe while
+    // its fresh request is still pending.
+    clearSelected();
+    const load = () => {
+      for (const frame of selected) {
+        fetchOptionOiBaseline(UNDERLYING, frame)
+          .then((r) => {
+            if (!cancelled) {
+              setBaselines((prev) => ({
+                ...prev,
+                [frame]: r.minutes === frame ? r.tokens ?? {} : {},
+              }));
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setBaselines((prev) => ({ ...prev, [frame]: {} }));
+            }
+          });
+      }
+    };
     load();
-    const id = window.setInterval(load, 30000); // slide the window every 30s
+    const id = window.setInterval(load, 30000); // slide both windows every 30s
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [authenticated, chain, interval]);
+  }, [authenticated, chain, oiInterval, bldInterval]);
 
   // ---- Auto-ATM straddle + NIFTY spot history for the selected timeframe ----
   useEffect(() => {
@@ -356,14 +388,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const spot = ticks[chain.spot_token]?.last_price ?? chain.spot;
     const atmIdx = nearestStrikeIdx(strikes, spot);
     const atmStrike = strikes[atmIdx]?.strike ?? chain.atm_strike;
-    const cutoff = Date.now() - interval * 60 * 1000;
+    const oiCutoff = Date.now() - oiInterval * 60 * 1000;
+    const bldCutoff = Date.now() - bldInterval * 60 * 1000;
 
-    // Base (interval-ago) sample for a token. Prefer the server's per-day cache
-    // (correct baseline any time of day); fall back to the client rolling
-    // history (newest sample at/at-before cutoff, else the oldest we have).
-    const baseOf = (token: number): Sample | null => {
-      const b = baseline[token];
-      if (b) return { t: cutoff, oi: b.oi, ltp: b.ltp };
+    const isValidBaselineTime = (sampleTime: number, cutoff: number) =>
+      sampleTime >= cutoff - BASELINE_OLDER_TOLERANCE_MS &&
+      sampleTime <= cutoff + BASELINE_NEWER_TOLERANCE_MS;
+
+    // Resolve the selected server baseline, falling back to the client rolling
+    // history only when a complete sample exists at the matching cutoff.
+    const baseOf = (token: number, frame: ChainInterval): Sample | null => {
+      const cutoff = frame === oiInterval ? oiCutoff : bldCutoff;
+      const b = baselines[frame][token];
+      if (b && isValidBaselineTime(b.t, cutoff)) return b;
       const arr = histRef.current.get(token);
       if (!arr || arr.length === 0) return null;
       let base: Sample | null = null;
@@ -371,17 +408,26 @@ export default function Analytics({ authenticated, onBack }: Props) {
         if (s.t <= cutoff) base = s;
         else break;
       }
-      return base ?? arr[0]!;
+      return base && isValidBaselineTime(base.t, cutoff) ? base : null;
     };
 
     const changeFor = (token: number) => {
       const cur = ticks[token];
-      const base = baseOf(token);
-      if (!cur || !base) return { oiPct: null as number | null, buildup: null as Buildup };
-      const dOi = (cur.oi ?? 0) - base.oi;
-      const dPrice = (cur.last_price ?? 0) - base.ltp;
-      const oiPct = base.oi > 0 ? (dOi / base.oi) * 100 : null;
-      return { oiPct, buildup: classifyBuildup(dOi, dPrice) };
+      if (!cur) return { oiPct: null as number | null, buildup: null as Buildup };
+
+      const oiBase = baseOf(token, oiInterval);
+      const bldBase = baseOf(token, bldInterval);
+      const oiPct =
+        oiBase && oiBase.oi > 0
+          ? (((cur.oi ?? 0) - oiBase.oi) / oiBase.oi) * 100
+          : null;
+      const buildup = bldBase
+        ? classifyBuildup(
+            (cur.oi ?? 0) - bldBase.oi,
+            (cur.last_price ?? 0) - bldBase.ltp,
+          )
+        : null;
+      return { oiPct, buildup };
     };
 
     const dispLo = clamp(atmIdx - DISPLAY_HALF, 0, strikes.length - 1);
@@ -426,7 +472,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       for (let i = from; i <= to; i++) {
         const tok = side === "ce" ? strikes[i]!.ce_token : strikes[i]!.pe_token;
         const t = ticks[tok];
-        const b = baseOf(tok);
+        const b = baseOf(tok, oiInterval);
         if (t && b) {
           cur += t.oi ?? 0;
           base += b.oi;
@@ -456,7 +502,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
 
     return { rows, atmStrike, spot, totalCe, totalPe, pcr, buckets };
-  }, [chain, ticks, interval, baseline]);
+  }, [chain, ticks, oiInterval, bldInterval, baselines]);
 
   // Center the ATM row once the chain + first ticks are in.
   useEffect(() => {
@@ -603,7 +649,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               <span className="an-stat-sub">Put ÷ Call</span>
             </div>
             <div className="an-stat an-stat--wide">
-              <span className="an-stat-k">Call OI Δ% ({interval}m)</span>
+              <span className="an-stat-k">Call OI Δ% ({oiInterval}m)</span>
               <span className="an-stat-buckets">
                 <span>Above {pctCell(metrics.buckets.ce.above)}</span>
                 <span>ATM {pctCell(metrics.buckets.ce.atm)}</span>
@@ -611,7 +657,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               </span>
             </div>
             <div className="an-stat an-stat--wide">
-              <span className="an-stat-k">Put OI Δ% ({interval}m)</span>
+              <span className="an-stat-k">Put OI Δ% ({oiInterval}m)</span>
               <span className="an-stat-buckets">
                 <span>Above {pctCell(metrics.buckets.pe.above)}</span>
                 <span>ATM {pctCell(metrics.buckets.pe.atm)}</span>
@@ -622,17 +668,33 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
           {/* ---- Option chain (scrollable, ATM-centered) ---- */}
           <div className="an-chain-bar">
-            <span>OI Δ% &amp; Bld timeframe</span>
-            <div className="an-toggle" role="group" aria-label="OI change / buildup timeframe">
-              {([5, 15] as const).map((m) => (
-                <button
-                  key={m}
-                  className={`btn${interval === m ? " btn--primary" : ""}`}
-                  onClick={() => setIntervalMin(m)}
-                >
-                  {m}m
-                </button>
-              ))}
+            <div className="an-chain-control">
+              <span>OI Δ% timeframe</span>
+              <div className="an-toggle" role="group" aria-label="OI change timeframe">
+                {([5, 15] as const).map((m) => (
+                  <button
+                    key={m}
+                    className={`btn${oiInterval === m ? " btn--primary" : ""}`}
+                    onClick={() => setOiInterval(m)}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="an-chain-control">
+              <span>Bld timeframe</span>
+              <div className="an-toggle" role="group" aria-label="Buildup timeframe">
+                {([5, 15] as const).map((m) => (
+                  <button
+                    key={m}
+                    className={`btn${bldInterval === m ? " btn--primary" : ""}`}
+                    onClick={() => setBldInterval(m)}
+                  >
+                    {m}m
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="an-chain-wrap">
@@ -648,7 +710,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   <th>OI Δ%</th>
                   <th>Bld</th>
                   <th>LTP</th>
-                  <th className="an-strike-h">{interval}m</th>
+                  <th className="an-strike-h">Level</th>
                   <th>LTP</th>
                   <th>Bld</th>
                   <th>OI Δ%</th>

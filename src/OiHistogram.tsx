@@ -16,8 +16,11 @@ interface Props {
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 16; // px per time bucket (compact) — call+put bars + small gap
-const BAR_W = 6;
+const GROUP_W = 20; // one timestamp bucket: paired bars plus a clear outer gap
+const BAR_W = 5;
+const BAR_GAP = 2;
+const PAIR_W = BAR_W * 2 + BAR_GAP;
+const GROUP_PAD = (GROUP_W - PAIR_W) / 2;
 
 /**
  * Diverging OI-change histogram: for each time bucket a Call bar (red) and a
@@ -67,8 +70,9 @@ export default function OiHistogram({
   // Value axis ticks (symmetric around zero).
   const ticks = [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs];
 
-  // x labels: roughly every ~6 groups so they don't overlap.
-  const labelEvery = Math.max(1, Math.round(points.length / 12));
+  // Keep timestamp labels readable at roughly 100px intervals regardless of
+  // how many buckets are loaded.
+  const labelEvery = Math.max(1, Math.ceil(100 / GROUP_W));
 
   function bar(x: number, v: number, color: string, key: string) {
     const yv = yFor(v);
@@ -139,12 +143,31 @@ export default function OiHistogram({
               strokeWidth={1}
             />
 
+            {/* Highlight the complete Call/Put pair for the hovered timestamp. */}
+            {hover !== null && (
+              <rect
+                x={PAD.l + hover * GROUP_W + 1}
+                y={PAD.t}
+                width={GROUP_W - 2}
+                height={plotH}
+                rx={2}
+                className="an-hist-hover-band"
+                fill="var(--surface-3)"
+                pointerEvents="none"
+              />
+            )}
+
             {points.map((p, i) => {
               const gx = PAD.l + i * GROUP_W;
               return (
                 <g key={p.t}>
-                  {bar(gx + 2, p.ceChange, "var(--neg)", `ce-${i}`)}
-                  {bar(gx + 2 + BAR_W + 2, p.peChange, "var(--pos)", `pe-${i}`)}
+                  {bar(gx + GROUP_PAD, p.ceChange, "var(--neg)", `ce-${i}`)}
+                  {bar(
+                    gx + GROUP_PAD + BAR_W + BAR_GAP,
+                    p.peChange,
+                    "var(--pos)",
+                    `pe-${i}`,
+                  )}
                   {i % labelEvery === 0 && (
                     <text x={gx + GROUP_W / 2} y={H - 10} className="chart-xlabel">
                       {formatX(p.t)}

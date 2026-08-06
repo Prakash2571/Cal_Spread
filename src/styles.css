@@ -2369,8 +2369,11 @@ body {
 .oi-hist-svg rect {
   transition: opacity var(--dur-fast) var(--ease);
 }
-.oi-hist-svg:hover rect {
+.oi-hist-svg:hover rect:not(.an-hist-hover-band) {
   opacity: 0.92;
+}
+.oi-hist-svg .an-hist-hover-band {
+  opacity: 0.32;
 }
 .an-hist-tip {
   top: 32px;
@@ -2392,12 +2395,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  gap: var(--sp-3);
   margin-bottom: var(--sp-2);
   font-size: var(--fs-2);
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
+}
+.an-chain-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 2px 2px var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  white-space: nowrap;
 }
 
 /* ---- Analytics: Call-vs-Put OI chart (shared LineChart) tuning ----
