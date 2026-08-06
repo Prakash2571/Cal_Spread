@@ -732,6 +732,7 @@ export interface OptionOiFramePoint {
   totalCe: number;
   totalPe: number;
   straddle: number;
+  spot: number;
 }
 
 export interface OptionOiFrameResponse {

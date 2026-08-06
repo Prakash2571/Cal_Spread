@@ -12,6 +12,7 @@ import {
 } from "./api.ts";
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
 import OiHistogram, { type HistPoint } from "./OiHistogram.tsx";
+import StraddleSpotChart, { type StraddleSpotPoint } from "./StraddleSpotChart.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import { fmt, fmtCompact, formatExpiry } from "./format.ts";
 
@@ -105,10 +106,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
     "straddle" | "oi" | "hist" | null
   >(null);
 
-  // Live chart series (accumulated from the stream during the session).
-  const [straddleSeries, setStraddleSeries] = useState<
-    { date: string; value: number }[]
-  >([]);
+  // Chart series sourced from the server frame caches.
+  const [straddleRaw, setStraddleRaw] = useState<StraddleSpotPoint[]>([]);
   const [ceOiSeries, setCeOiSeries] = useState<{ date: string; value: number }[]>([]);
   const [peOiSeries, setPeOiSeries] = useState<{ date: string; value: number }[]>([]);
 
@@ -140,7 +139,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         // Reset per-chain accumulators when the instrument set changes.
         histRef.current = new Map();
         didCenterRef.current = false;
-        setStraddleSeries([]);
+        setStraddleRaw([]);
         setCeOiSeries([]);
         setPeOiSeries([]);
         setBaseline({});
@@ -237,19 +236,16 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, interval]);
 
-  // ---- Auto-ATM straddle history for the selected timeframe (frame cache) ----
+  // ---- Auto-ATM straddle + NIFTY spot history for the selected timeframe ----
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
-    const iso = (t: number) => new Date(t).toISOString();
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, straddleFrame)
         .then((r) => {
           if (cancelled) return;
-          setStraddleSeries(
-            r.points
-              .filter((p) => p.straddle > 0)
-              .map((p) => ({ date: iso(p.t), value: p.straddle })),
+          setStraddleRaw(
+            r.points.map((p) => ({ t: p.t, straddle: p.straddle, spot: p.spot })),
           );
         })
         .catch(() => {
@@ -481,9 +477,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const isoFmtFor = (frame: OiFrame) => (iso: string) => fmtTs(frame, new Date(iso).getTime());
   const tsFmtFor = (frame: OiFrame) => (t: number) => fmtTs(frame, t);
 
-  const straddleChart: ChartSeries[] = [
-    { label: "ATM Straddle", color: "var(--series-1)", points: straddleSeries },
-  ];
   const oiChart: ChartSeries[] = [
     { label: "Call OI", color: "var(--neg)", points: ceOiSeries },
     { label: "Put OI", color: "var(--pos)", points: peOiSeries },
@@ -679,25 +672,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </div>
               }
             >
-              {straddleSeries.length > 1 ? (
-                <div className="an-scrollx">
-                  <div
-                    className="an-scrollx-inner"
-                    style={{ minWidth: `${Math.max(760, straddleSeries.length * 7)}px` }}
-                  >
-                    <LineChart
-                      series={straddleChart}
-                      format={fmt}
-                      formatX={isoFmtFor(straddleFrame)}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="chart-empty">
-                  No straddle history yet for this timeframe — it fills as the day
-                  progresses (or backfills from history).
-                </div>
-              )}
+              <StraddleSpotChart points={straddleRaw} formatX={tsFmtFor(straddleFrame)} />
             </ChartCard>
 
             <ChartCard
