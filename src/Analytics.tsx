@@ -3,7 +3,6 @@ import {
   fetchOptionChain,
   fetchOptionOiBaseline,
   fetchOptionOiFrame,
-  fetchOptionOiSeries,
   fetchQuotes,
   streamUrl,
   type OiFrame,
@@ -26,9 +25,8 @@ const TOTAL_UP = 24; // total-OI window: 24 strikes above ATM
 const TOTAL_DOWN = 26; // total-OI window: 26 strikes below ATM
 const BUCKET_HALF = 30; // OI-change buckets: 30 above / ATM / 30 below
 
-const SAMPLE_MS = 5000; // how often we snapshot OI/price for history + charts
+const SAMPLE_MS = 5000; // how often we snapshot OI/price for buildup history
 const HIST_MS = 20 * 60 * 1000; // keep 20 min of rolling samples per token
-const MAX_SERIES_POINTS = 720; // cap chart series length (~1h at 5s)
 
 /** One rolling snapshot for a single option token. */
 interface Sample {
@@ -97,6 +95,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
   const [interval, setIntervalMin] = useState<5 | 15>(5);
+  const [straddleFrame, setStraddleFrame] = useState<OiFrame>("5m"); // ATM straddle chart timeframe
   const [oiFrame, setOiFrame] = useState<OiFrame>("5m"); // Call/Put OI chart timeframe
   const [histFrame, setHistFrame] = useState<OiFrame>("5m"); // OI-change histogram frame
   const [histRaw, setHistRaw] = useState<
@@ -238,28 +237,31 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, interval]);
 
-  // ---- Seed the ATM straddle chart with the full day's history ----
+  // ---- Auto-ATM straddle history for the selected timeframe (frame cache) ----
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
-    fetchOptionOiSeries(UNDERLYING)
-      .then((r) => {
-        if (cancelled || r.points.length === 0) return;
-        const iso = (t: number) => new Date(t).toISOString();
-        setStraddleSeries(
-          r.points
-            .filter((p) => p.straddle > 0)
-            .map((p) => ({ date: iso(p.t), value: p.straddle }))
-            .slice(-MAX_SERIES_POINTS),
-        );
-      })
-      .catch(() => {
-        /* straddle chart will still accumulate live from the stream */
-      });
+    const iso = (t: number) => new Date(t).toISOString();
+    const load = () =>
+      fetchOptionOiFrame(UNDERLYING, straddleFrame)
+        .then((r) => {
+          if (cancelled) return;
+          setStraddleSeries(
+            r.points
+              .filter((p) => p.straddle > 0)
+              .map((p) => ({ date: iso(p.t), value: p.straddle })),
+          );
+        })
+        .catch(() => {
+          /* keep whatever we have */
+        });
+    load();
+    const id = window.setInterval(load, 30000);
     return () => {
       cancelled = true;
+      window.clearInterval(id);
     };
-  }, [authenticated, chain]);
+  }, [authenticated, chain, straddleFrame]);
 
   // ---- Call/Put OI history for the selected timeframe (server frame cache) ----
   useEffect(() => {
@@ -325,7 +327,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return out;
   }, [histRaw]);
 
-  // ---- Periodic sampling: rolling per-token history + chart points ----
+  // ---- Periodic sampling: rolling per-token OI/price history ----
+  // Powers the 5m/15m OI-change % + buildup fallback when the server baseline
+  // has no entry yet. The straddle & OI charts are driven by the frame caches.
   useEffect(() => {
     if (!authenticated || !chain) return;
     const id = window.setInterval(() => {
@@ -333,8 +337,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
       const tk = ticksRef.current;
       if (!ch) return;
       const now = Date.now();
-
-      // Per-token rolling history (for timeframe OI/price change).
       for (const s of ch.strikes) {
         for (const token of [s.ce_token, s.pe_token]) {
           const cur = tk[token];
@@ -345,25 +347,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
           histRef.current.set(token, arr);
         }
       }
-
-      // Chart points: ATM straddle + total Call/Put OI (24/1/26 window).
-      const spot = tk[ch.spot_token]?.last_price ?? ch.spot;
-      const atmIdx = nearestStrikeIdx(ch.strikes, spot);
-      const atm = ch.strikes[atmIdx];
-      const iso = new Date(now).toISOString();
-
-      if (atm) {
-        const ceLtp = tk[atm.ce_token]?.last_price ?? 0;
-        const peLtp = tk[atm.pe_token]?.last_price ?? 0;
-        if (ceLtp > 0 && peLtp > 0) {
-          setStraddleSeries((prev) =>
-            [...prev, { date: iso, value: ceLtp + peLtp }].slice(-MAX_SERIES_POINTS),
-          );
-        }
-      }
-
-      // Note: the Call/Put OI history chart is driven by the server frame
-      // caches (see the option-oi-frame effect), not accumulated here.
     }, SAMPLE_MS);
     return () => window.clearInterval(id);
   }, [authenticated, chain]);
@@ -484,34 +467,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
     didCenterRef.current = true;
   }, [metrics]);
 
-  const timeFmt = (iso: string) =>
-    new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-
-  // Histogram x-axis formatter (takes epoch ms): time for 1m, date+time else.
-  const frameFmtFor = (frame: OiFrame) => (t: number) => {
-    const d = new Date(t);
-    return frame === "1m"
-      ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : d.toLocaleString("en-GB", {
+  // Timestamp formatting per frame: 1m shows time only; 5m/15m span multiple
+  // days so they show date + time.
+  const fmtTs = (frame: OiFrame, ms: number) =>
+    frame === "1m"
+      ? new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      : new Date(ms).toLocaleString("en-GB", {
           day: "2-digit",
           month: "short",
           hour: "2-digit",
           minute: "2-digit",
         });
-  };
-
-  // Intraday (1m) shows time only; multi-day frames (5m/15m) show date + time.
-  const frameFmt = (iso: string) => {
-    const d = new Date(iso);
-    return oiFrame === "1m"
-      ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : d.toLocaleString("en-GB", {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-  };
+  const isoFmtFor = (frame: OiFrame) => (iso: string) => fmtTs(frame, new Date(iso).getTime());
+  const tsFmtFor = (frame: OiFrame) => (t: number) => fmtTs(frame, t);
 
   const straddleChart: ChartSeries[] = [
     { label: "ATM Straddle", color: "var(--series-1)", points: straddleSeries },
@@ -685,16 +653,50 @@ export default function Analytics({ authenticated, onBack }: Props) {
           {/* ---- Charts ---- */}
           <div className="an-charts">
             <ChartCard
-              title="ATM Straddle (live)"
+              title="ATM Straddle"
               expanded={expandedChart === "straddle"}
               onToggle={() =>
                 setExpandedChart((c) => (c === "straddle" ? null : "straddle"))
               }
+              controls={
+                <div className="an-toggle" role="group" aria-label="Straddle timeframe">
+                  {(["1m", "5m", "15m"] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`btn${straddleFrame === f ? " btn--primary" : ""}`}
+                      onClick={() => setStraddleFrame(f)}
+                      title={
+                        f === "1m"
+                          ? "1-minute · last 1 day"
+                          : f === "5m"
+                            ? "5-minute · last 3 days"
+                            : "15-minute · last 1 week"
+                      }
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              }
             >
               {straddleSeries.length > 1 ? (
-                <LineChart series={straddleChart} format={fmt} formatX={timeFmt} />
+                <div className="an-scrollx">
+                  <div
+                    className="an-scrollx-inner"
+                    style={{ minWidth: `${Math.max(760, straddleSeries.length * 7)}px` }}
+                  >
+                    <LineChart
+                      series={straddleChart}
+                      format={fmt}
+                      formatX={isoFmtFor(straddleFrame)}
+                    />
+                  </div>
+                </div>
               ) : (
-                <div className="chart-empty">Collecting live straddle data…</div>
+                <div className="chart-empty">
+                  No straddle history yet for this timeframe — it fills as the day
+                  progresses (or backfills from history).
+                </div>
               )}
             </ChartCard>
 
@@ -734,7 +736,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
                       )}px`,
                     }}
                   >
-                    <LineChart series={oiChart} format={fmtCompact} formatX={frameFmt} />
+                    <LineChart
+                      series={oiChart}
+                      format={fmtCompact}
+                      formatX={isoFmtFor(oiFrame)}
+                    />
                   </div>
                 </div>
               ) : (
@@ -770,7 +776,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </div>
               }
             >
-              <OiHistogram points={histPoints} formatX={frameFmtFor(histFrame)} />
+              <OiHistogram points={histPoints} formatX={tsFmtFor(histFrame)} />
             </ChartCard>
           </div>
         </>
