@@ -472,14 +472,21 @@ export default function Analytics({ authenticated, onBack }: Props) {
     if (el && oiAtEndRef.current) el.scrollLeft = el.scrollWidth;
   }, [ceOiSeries, peOiSeries]);
 
-  // On a timeframe switch or expand toggle, reset to the latest (right).
+  // A timeframe switch starts at the latest point. Expanding or collapsing
+  // preserves historical position unless the chart was already pinned right.
   useEffect(() => {
     const el = oiScrollRef.current;
     if (el) {
       el.scrollLeft = el.scrollWidth;
       oiAtEndRef.current = true;
     }
-  }, [oiFrame, expandedChart]);
+  }, [oiFrame]);
+
+  const oiExpanded = expandedChart === "oi";
+  useEffect(() => {
+    const el = oiScrollRef.current;
+    if (el && oiAtEndRef.current) el.scrollLeft = el.scrollWidth;
+  }, [oiExpanded]);
 
   // Taller charts when expanded to (near) full screen.
   const bigChartH = Math.max(
@@ -553,17 +560,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
               </select>
             </label>
           )}
-          <div className="an-toggle" role="group" aria-label="OI change timeframe">
-            {([5, 15] as const).map((m) => (
-              <button
-                key={m}
-                className={`btn${interval === m ? " btn--primary" : ""}`}
-                onClick={() => setIntervalMin(m)}
-              >
-                {m}m
-              </button>
-            ))}
-          </div>
           {metrics && (
             <span className="an-spot">
               Spot <strong>{fmt(metrics.spot)}</strong> · ATM{" "}
@@ -715,6 +711,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 points={straddleRaw}
                 formatX={tsFmtFor(straddleFrame)}
                 height={expandedChart === "straddle" ? bigChartH : 210}
+                expanded={expandedChart === "straddle"}
               />
             </ChartCard>
 
@@ -807,6 +804,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 points={histPoints}
                 formatX={tsFmtFor(histFrame)}
                 height={expandedChart === "hist" ? bigChartH : 210}
+                expanded={expandedChart === "hist"}
               />
             </ChartCard>
           </div>

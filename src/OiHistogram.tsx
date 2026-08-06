@@ -12,6 +12,7 @@ interface Props {
   /** Format a bucket timestamp for the x-axis + tooltip title. */
   formatX: (t: number) => string;
   height?: number;
+  expanded?: boolean;
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
@@ -24,7 +25,12 @@ const BAR_W = 6;
  * negative. Horizontally scrollable to reveal past buckets; opens scrolled to
  * the most recent bar. Hover shows the actual OI-change values.
  */
-export default function OiHistogram({ points, formatX, height = 210 }: Props) {
+export default function OiHistogram({
+  points,
+  formatX,
+  height = 210,
+  expanded = false,
+}: Props) {
   const H = height;
   const scrollRef = useRef<HTMLDivElement>(null);
   const atEndRef = useRef(true); // whether the user is pinned to the latest bar
@@ -35,7 +41,7 @@ export default function OiHistogram({ points, formatX, height = 210 }: Props) {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el && atEndRef.current) el.scrollLeft = el.scrollWidth;
-  }, [points]);
+  }, [points, expanded]);
 
   if (points.length === 0) {
     return (
@@ -73,6 +79,7 @@ export default function OiHistogram({ points, formatX, height = 210 }: Props) {
 
   const hoverPt = hover !== null ? points[hover] : null;
   const hoverX = hover !== null ? PAD.l + hover * GROUP_W + GROUP_W / 2 : 0;
+  const tipOnLeft = hover !== null && hover > (points.length - 1) / 2;
 
   return (
     <div className="an-hist">
@@ -157,33 +164,37 @@ export default function OiHistogram({ points, formatX, height = 210 }: Props) {
               />
             )}
           </svg>
-
-          {hoverPt && (
-            <div
-              className="chart-tip an-hist-tip"
-              style={{ left: Math.max(0, hoverX - 70) }}
-            >
-              <div className="chart-tip-date">{formatX(hoverPt.t)}</div>
-              <div className="chart-tip-row">
-                <span className="chart-dot" style={{ background: "var(--neg)" }} />
-                <span className="chart-tip-label">Call ΔOI</span>
-                <span className="chart-tip-val">
-                  {hoverPt.ceChange > 0 ? "+" : hoverPt.ceChange < 0 ? "-" : ""}
-                  {fmtCompact(Math.abs(hoverPt.ceChange))}
-                </span>
-              </div>
-              <div className="chart-tip-row">
-                <span className="chart-dot" style={{ background: "var(--pos)" }} />
-                <span className="chart-tip-label">Put ΔOI</span>
-                <span className="chart-tip-val">
-                  {hoverPt.peChange > 0 ? "+" : hoverPt.peChange < 0 ? "-" : ""}
-                  {fmtCompact(Math.abs(hoverPt.peChange))}
-                </span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      {hoverPt && (
+        <div
+          className="chart-tip an-hist-tip"
+          style={
+            tipOnLeft
+              ? { left: 8, right: "auto" }
+              : { right: 8, left: "auto" }
+          }
+        >
+          <div className="chart-tip-date">{formatX(hoverPt.t)}</div>
+          <div className="chart-tip-row">
+            <span className="chart-dot" style={{ background: "var(--neg)" }} />
+            <span className="chart-tip-label">Call ΔOI</span>
+            <span className="chart-tip-val">
+              {hoverPt.ceChange > 0 ? "+" : hoverPt.ceChange < 0 ? "-" : ""}
+              {fmtCompact(Math.abs(hoverPt.ceChange))}
+            </span>
+          </div>
+          <div className="chart-tip-row">
+            <span className="chart-dot" style={{ background: "var(--pos)" }} />
+            <span className="chart-tip-label">Put ΔOI</span>
+            <span className="chart-tip-val">
+              {hoverPt.peChange > 0 ? "+" : hoverPt.peChange < 0 ? "-" : ""}
+              {fmtCompact(Math.abs(hoverPt.peChange))}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

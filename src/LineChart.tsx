@@ -27,6 +27,7 @@ interface Props {
 
 const W = 760;
 const H = 280;
+const TOOLTIP_W = 176;
 const PAD = { l: 58, r: 18, t: 16, b: 28 };
 const plotW = W - PAD.l - PAD.r;
 const plotH = H - PAD.t - PAD.b;
@@ -47,6 +48,7 @@ export default function LineChart({
   const valid = (v: number) => (signed ? Number.isFinite(v) : v > 0);
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const [tipLeft, setTipLeft] = useState(8);
 
   const allDates = Array.from(
     new Set(series.flatMap((s) => s.points.map((p) => p.date))),
@@ -81,12 +83,22 @@ export default function LineChart({
     const xInView = ((e.clientX - rect.left) / rect.width) * W;
     const idx = Math.round(((xInView - PAD.l) / plotW) * (n - 1));
     setHover(Math.max(0, Math.min(n - 1, idx)));
+
+    // Keep the tooltip docked inside the currently visible scroll viewport,
+    // not at an off-screen edge of the full historical canvas.
+    const scrollport = svg.closest<HTMLElement>(".an-scrollx");
+    const viewportRect = scrollport?.getBoundingClientRect() ?? rect;
+    const viewportWidth = scrollport?.clientWidth ?? rect.width;
+    const viewportLeft = scrollport?.scrollLeft ?? 0;
+    const pointerX = e.clientX - viewportRect.left;
+    const dockLeft = pointerX > viewportWidth / 2;
+    setTipLeft(
+      viewportLeft +
+        (dockLeft ? 8 : Math.max(8, viewportWidth - TOOLTIP_W - 8)),
+    );
   }
 
   const hoverDate = hover !== null ? allDates[hover] : null;
-  // Put the tooltip on the opposite side of the cursor so it never covers the
-  // point being viewed (hover on the right half -> tooltip on the left).
-  const tipOnLeft = hover !== null && hover > (n - 1) / 2;
 
   return (
     <div className="chart-wrap">
@@ -136,6 +148,7 @@ export default function LineChart({
               fill="none"
               stroke={s.color}
               strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
               strokeDasharray={s.dashed ? "5 4" : undefined}
@@ -214,12 +227,8 @@ export default function LineChart({
 
       {hover !== null && hoverDate && (
         <div
-          className="chart-tip"
-          style={
-            tipOnLeft
-              ? { left: 8, right: "auto" }
-              : { right: 8, left: "auto" }
-          }
+          className="chart-tip chart-tip--line"
+          style={{ left: tipLeft, right: "auto" }}
         >
           <div className="chart-tip-date">{formatX(hoverDate)}</div>
           {series.map((s) => {

@@ -11,6 +11,7 @@ interface Props {
   points: StraddleSpotPoint[];
   formatX: (t: number) => string;
   height?: number;
+  expanded?: boolean;
 }
 
 const PAD = { l: 60, r: 66, t: 16, b: 30 };
@@ -24,7 +25,12 @@ const SPOT_COLOR = "var(--warn)";
  * spot price (right axis), so their independent scales are both readable.
  * Horizontally scrollable; opens scrolled to the latest data.
  */
-export default function StraddleSpotChart({ points, formatX, height = 210 }: Props) {
+export default function StraddleSpotChart({
+  points,
+  formatX,
+  height = 210,
+  expanded = false,
+}: Props) {
   const H = height;
   const scrollRef = useRef<HTMLDivElement>(null);
   const atEndRef = useRef(true);
@@ -34,7 +40,7 @@ export default function StraddleSpotChart({ points, formatX, height = 210 }: Pro
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el && atEndRef.current) el.scrollLeft = el.scrollWidth;
-  }, [points]);
+  }, [points, expanded]);
 
   if (points.length < 2) {
     return (
@@ -80,6 +86,7 @@ export default function StraddleSpotChart({ points, formatX, height = 210 }: Pro
   const labelEvery = Math.max(1, Math.round(n / 12));
   const hoverPt = hover !== null ? points[hover] : null;
   const hoverX = hover !== null ? xAt(hover) : 0;
+  const tipOnLeft = hover !== null && hover > (n - 1) / 2;
 
   return (
     <div className="an-hist">
@@ -146,7 +153,8 @@ export default function StraddleSpotChart({ points, formatX, height = 210 }: Pro
               points={line((pt) => pt.spot, ySpot)}
               fill="none"
               stroke={SPOT_COLOR}
-              strokeWidth={1.1}
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -154,7 +162,8 @@ export default function StraddleSpotChart({ points, formatX, height = 210 }: Pro
               points={line((pt) => pt.straddle, yStraddle)}
               fill="none"
               stroke={STRADDLE_COLOR}
-              strokeWidth={1.3}
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -177,27 +186,31 @@ export default function StraddleSpotChart({ points, formatX, height = 210 }: Pro
               </>
             )}
           </svg>
-
-          {hoverPt && (
-            <div
-              className="chart-tip an-hist-tip"
-              style={{ left: Math.max(0, hoverX - 70) }}
-            >
-              <div className="chart-tip-date">{formatX(hoverPt.t)}</div>
-              <div className="chart-tip-row">
-                <span className="chart-dot" style={{ background: STRADDLE_COLOR }} />
-                <span className="chart-tip-label">Straddle</span>
-                <span className="chart-tip-val">{fmt(hoverPt.straddle)}</span>
-              </div>
-              <div className="chart-tip-row">
-                <span className="chart-dot" style={{ background: SPOT_COLOR }} />
-                <span className="chart-tip-label">NIFTY</span>
-                <span className="chart-tip-val">{fmt(hoverPt.spot)}</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      {hoverPt && (
+        <div
+          className="chart-tip an-hist-tip"
+          style={
+            tipOnLeft
+              ? { left: 8, right: "auto" }
+              : { right: 8, left: "auto" }
+          }
+        >
+          <div className="chart-tip-date">{formatX(hoverPt.t)}</div>
+          <div className="chart-tip-row">
+            <span className="chart-dot" style={{ background: STRADDLE_COLOR }} />
+            <span className="chart-tip-label">Straddle</span>
+            <span className="chart-tip-val">{fmt(hoverPt.straddle)}</span>
+          </div>
+          <div className="chart-tip-row">
+            <span className="chart-dot" style={{ background: SPOT_COLOR }} />
+            <span className="chart-tip-label">NIFTY</span>
+            <span className="chart-tip-val">{fmt(hoverPt.spot)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
