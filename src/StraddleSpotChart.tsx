@@ -56,9 +56,15 @@ export default function StraddleSpotChart({ points, formatX }: Props) {
   const s = range(straddleVals.length ? straddleVals : [0, 1]);
   const p = range(spotVals.length ? spotVals : [0, 1]);
 
+  // Each series is scaled independently to (nearly) the full plot height, so
+  // both lines overlap the same area and their shapes/moves are directly
+  // comparable — the two different y-axes make clear the price ranges differ.
+  const PADY = plotH * 0.08; // keep lines off the very top/bottom edges
+  const usableH = plotH - 2 * PADY;
   const xAt = (i: number) => PAD.l + i * STEP;
-  const yStraddle = (v: number) => PAD.t + plotH - ((v - s.mn) / s.span) * plotH;
-  const ySpot = (v: number) => PAD.t + plotH - ((v - p.mn) / p.span) * plotH;
+  const yFrac = (frac: number) => PAD.t + PADY + (1 - frac) * usableH;
+  const yStraddle = (v: number) => yFrac((v - s.mn) / s.span);
+  const ySpot = (v: number) => yFrac((v - p.mn) / p.span);
 
   const line = (accessor: (pt: StraddleSpotPoint) => number, yFn: (v: number) => number) =>
     points
@@ -98,7 +104,7 @@ export default function StraddleSpotChart({ points, formatX }: Props) {
             onMouseLeave={() => setHover(null)}
           >
             {ticks.map((tk, i) => {
-              const y = PAD.t + plotH - tk * plotH;
+              const y = yFrac(tk);
               return (
                 <g key={i}>
                   <line x1={PAD.l} y1={y} x2={svgW - PAD.r} y2={y} className="chart-grid" />
