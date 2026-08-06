@@ -10,9 +10,9 @@ export interface StraddleSpotPoint {
 interface Props {
   points: StraddleSpotPoint[];
   formatX: (t: number) => string;
+  height?: number;
 }
 
-const H = 300;
 const PAD = { l: 60, r: 66, t: 16, b: 30 };
 const STEP = 7; // px per point (drives horizontal scroll width)
 
@@ -24,7 +24,8 @@ const SPOT_COLOR = "var(--warn)";
  * spot price (right axis), so their independent scales are both readable.
  * Horizontally scrollable; opens scrolled to the latest data.
  */
-export default function StraddleSpotChart({ points, formatX }: Props) {
+export default function StraddleSpotChart({ points, formatX, height = 210 }: Props) {
+  const H = height;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
@@ -136,7 +137,7 @@ export default function StraddleSpotChart({ points, formatX }: Props) {
               points={line((pt) => pt.spot, ySpot)}
               fill="none"
               stroke={SPOT_COLOR}
-              strokeWidth={1.5}
+              strokeWidth={1.1}
               strokeLinejoin="round"
               strokeLinecap="round"
             />
@@ -144,7 +145,7 @@ export default function StraddleSpotChart({ points, formatX }: Props) {
               points={line((pt) => pt.straddle, yStraddle)}
               fill="none"
               stroke={STRADDLE_COLOR}
-              strokeWidth={2}
+              strokeWidth={1.3}
               strokeLinejoin="round"
               strokeLinecap="round"
             />

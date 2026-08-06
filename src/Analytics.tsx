@@ -124,6 +124,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const histRef = useRef<Map<number, Sample[]>>(new Map());
   const atmRowRef = useRef<HTMLTableRowElement | null>(null);
   const didCenterRef = useRef(false);
+  const oiScrollRef = useRef<HTMLDivElement | null>(null);
 
   chainRef.current = chain;
 
@@ -463,6 +464,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
     didCenterRef.current = true;
   }, [metrics]);
 
+  // Keep the Call/Put OI chart scrolled to the latest (right) by default, and
+  // re-anchor when the data, timeframe, or expand state changes.
+  useEffect(() => {
+    const el = oiScrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [ceOiSeries, peOiSeries, oiFrame, expandedChart]);
+
+  // Taller charts when expanded to (near) full screen.
+  const bigChartH = Math.max(
+    320,
+    (typeof window !== "undefined" ? window.innerHeight : 800) - 140,
+  );
+
   // Timestamp formatting per frame: 1m shows time only; 5m/15m span multiple
   // days so they show date + time.
   const fmtTs = (frame: OiFrame, ms: number) =>
@@ -601,6 +615,20 @@ export default function Analytics({ authenticated, onBack }: Props) {
           </div>
 
           {/* ---- Option chain (scrollable, ATM-centered) ---- */}
+          <div className="an-chain-bar">
+            <span>OI Δ% &amp; Bld timeframe</span>
+            <div className="an-toggle" role="group" aria-label="OI change / buildup timeframe">
+              {([5, 15] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`btn${interval === m ? " btn--primary" : ""}`}
+                  onClick={() => setIntervalMin(m)}
+                >
+                  {m}m
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="an-chain-wrap">
             <table className="an-chain">
               <thead>
@@ -672,7 +700,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </div>
               }
             >
-              <StraddleSpotChart points={straddleRaw} formatX={tsFmtFor(straddleFrame)} />
+              <StraddleSpotChart
+                points={straddleRaw}
+                formatX={tsFmtFor(straddleFrame)}
+                height={expandedChart === "straddle" ? bigChartH : 210}
+              />
             </ChartCard>
 
             <ChartCard
@@ -701,7 +733,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               }
             >
               {ceOiSeries.length > 1 || peOiSeries.length > 1 ? (
-                <div className="an-scrollx">
+                <div className="an-scrollx an-oi-scroll" ref={oiScrollRef}>
                   <div
                     className="an-scrollx-inner"
                     style={{
@@ -751,7 +783,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </div>
               }
             >
-              <OiHistogram points={histPoints} formatX={tsFmtFor(histFrame)} />
+              <OiHistogram
+                points={histPoints}
+                formatX={tsFmtFor(histFrame)}
+                height={expandedChart === "hist" ? bigChartH : 210}
+              />
             </ChartCard>
           </div>
         </>

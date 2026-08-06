@@ -11,9 +11,9 @@ interface Props {
   points: HistPoint[];
   /** Format a bucket timestamp for the x-axis + tooltip title. */
   formatX: (t: number) => string;
+  height?: number;
 }
 
-const H = 300;
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
 const GROUP_W = 26; // px per time bucket (two bars + gap)
 const BAR_W = 9;
@@ -24,7 +24,8 @@ const BAR_W = 9;
  * negative. Horizontally scrollable to reveal past buckets; opens scrolled to
  * the most recent bar. Hover shows the actual OI-change values.
  */
-export default function OiHistogram({ points, formatX }: Props) {
+export default function OiHistogram({ points, formatX, height = 210 }: Props) {
+  const H = height;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 

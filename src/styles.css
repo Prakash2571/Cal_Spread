@@ -2083,18 +2083,18 @@ body {
 .an-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-3);
-  margin: var(--sp-4) 0;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
 }
 .an-stat {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
   background: var(--data-surface);
   border: 1px solid var(--data-border);
   border-radius: var(--r-lg);
-  min-width: 140px;
+  min-width: 130px;
 }
 .an-stat--wide {
   min-width: 260px;
@@ -2107,7 +2107,7 @@ body {
   letter-spacing: var(--tracking-caps);
 }
 .an-stat-v {
-  font-size: var(--fs-6);
+  font-size: var(--fs-5);
   font-family: var(--font-mono);
   font-weight: var(--fw-semibold);
   color: var(--text-1);
@@ -2131,7 +2131,8 @@ body {
 
 /* ---- Option chain table ---- */
 .an-chain-wrap {
-  max-height: 62vh;
+  /* compact so the option chain + all three charts fit in one viewport */
+  max-height: 34vh;
   overflow-y: auto;
   border: 1px solid var(--data-border);
   border-radius: var(--r-lg);
@@ -2140,7 +2141,7 @@ body {
 .an-chain {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--fs-3);
+  font-size: var(--fs-2);
 }
 .an-chain thead {
   position: sticky;
@@ -2170,12 +2171,16 @@ body {
   color: var(--pos);
 }
 .an-chain td {
-  padding: 4px var(--sp-2);
+  padding: 2px var(--sp-2);
   text-align: right;
   border-bottom: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
   color: var(--text-1);
   white-space: nowrap;
+}
+/* Center the strike value (higher specificity than `.an-chain td`). */
+.an-chain td.an-strike {
+  text-align: center;
 }
 .an-row:hover {
   background: var(--surface-1);
@@ -2235,9 +2240,19 @@ body {
 /* ---- Charts ---- */
 .an-charts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: var(--sp-4);
-  margin: var(--sp-4) 0 var(--sp-8);
+  grid-template-columns: repeat(3, 1fr); /* all three charts in one row */
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0 var(--sp-6);
+}
+@media (max-width: 1100px) {
+  .an-charts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .an-charts {
+    grid-template-columns: 1fr;
+  }
 }
 .an-chart-card {
   background: var(--data-surface);
@@ -2265,20 +2280,25 @@ body {
   text-align: center;
   color: var(--text-3);
 }
-/* Expanded chart -> full-screen overlay */
+/* Expanded chart -> true full-screen overlay */
 .an-chart-card--expanded {
   position: fixed;
-  inset: 4vh 4vw;
+  inset: 0;
   z-index: 60;
+  border-radius: 0;
   box-shadow: var(--shadow-overlay);
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
 }
 .an-chart-card--expanded .an-chart-body {
   flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
+  align-items: stretch;
+}
+.an-chart-card--expanded .an-chart-body > * {
+  width: 100%;
 }
 .an-chart-card--expanded .an-chart-body .chart-wrap,
 .an-chart-card--expanded .an-chart-body .oi-chart {
@@ -2335,4 +2355,34 @@ body {
 .an-chart-card--expanded .an-hist,
 .an-chart-card--expanded .an-hist .an-scrollx {
   height: 100%;
+}
+
+
+/* ---- Analytics: near-chain OI-change/Bld timeframe strip ---- */
+.an-chain-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+/* ---- Analytics: Call-vs-Put OI chart (shared LineChart) tuning ----
+   Fixed compact svg height so it lines up with the other charts, no left-side
+   value labels (values are read on hover), and a thin line. Legend is kept. */
+.an-oi-scroll .oi-chart {
+  height: 176px;
+}
+.an-oi-scroll .chart-ylabel {
+  display: none;
+}
+.an-oi-scroll .oi-chart polyline {
+  stroke-width: 1.3px;
+}
+.an-chart-card--expanded .an-oi-scroll .oi-chart {
+  height: calc(100vh - 132px);
 }
