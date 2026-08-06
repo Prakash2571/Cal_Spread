@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchOptionChain,
+  fetchOptionOiBaseline,
+  fetchOptionOiSeries,
   fetchQuotes,
   streamUrl,
   type OptionChain,
@@ -103,6 +105,13 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [ceOiSeries, setCeOiSeries] = useState<{ date: string; value: number }[]>([]);
   const [peOiSeries, setPeOiSeries] = useState<{ date: string; value: number }[]>([]);
 
+  // Server-provided baseline (OI + LTP as of `interval` minutes ago) from the
+  // per-day intraday cache. Preferred over the client rolling history so the
+  // OI-change % + buildup are correct immediately on load, any time of day.
+  const [baseline, setBaseline] = useState<
+    Record<number, { oi: number; ltp: number }>
+  >({});
+
   const tickBuffer = useRef<TickMap>({});
   const ticksRef = useRef<TickMap>({});
   const chainRef = useRef<OptionChain | null>(null);
@@ -127,6 +136,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         setStraddleSeries([]);
         setCeOiSeries([]);
         setPeOiSeries([]);
+        setBaseline({});
         setTicks({});
         tickBuffer.current = {};
         ticksRef.current = {};
@@ -200,6 +210,61 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain]);
 
+  // ---- Server baseline for the selected timeframe (per-day cache) ----
+  useEffect(() => {
+    if (!authenticated || !chain) return;
+    let cancelled = false;
+    const load = () =>
+      fetchOptionOiBaseline(UNDERLYING, interval)
+        .then((r) => {
+          if (!cancelled) setBaseline(r.tokens ?? {});
+        })
+        .catch(() => {
+          /* fall back to client rolling history */
+        });
+    load();
+    const id = window.setInterval(load, 30000); // slide the window every 30s
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [authenticated, chain, interval]);
+
+  // ---- Seed charts with the full day's history from the per-day cache ----
+  useEffect(() => {
+    if (!authenticated || !chain) return;
+    let cancelled = false;
+    fetchOptionOiSeries(UNDERLYING)
+      .then((r) => {
+        if (cancelled || r.points.length === 0) return;
+        const iso = (t: number) => new Date(t).toISOString();
+        setStraddleSeries(
+          r.points
+            .filter((p) => p.straddle > 0)
+            .map((p) => ({ date: iso(p.t), value: p.straddle }))
+            .slice(-MAX_SERIES_POINTS),
+        );
+        setCeOiSeries(
+          r.points
+            .filter((p) => p.totalCe > 0)
+            .map((p) => ({ date: iso(p.t), value: p.totalCe }))
+            .slice(-MAX_SERIES_POINTS),
+        );
+        setPeOiSeries(
+          r.points
+            .filter((p) => p.totalPe > 0)
+            .map((p) => ({ date: iso(p.t), value: p.totalPe }))
+            .slice(-MAX_SERIES_POINTS),
+        );
+      })
+      .catch(() => {
+        /* charts will still accumulate live from the stream */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, chain]);
+
   // ---- Periodic sampling: rolling per-token history + chart points ----
   useEffect(() => {
     if (!authenticated || !chain) return;
@@ -266,9 +331,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const atmStrike = strikes[atmIdx]?.strike ?? chain.atm_strike;
     const cutoff = Date.now() - interval * 60 * 1000;
 
-    // Base (interval-ago) sample for a token: newest sample at/at-before cutoff,
-    // else the oldest sample we have (so a value appears as soon as we can).
+    // Base (interval-ago) sample for a token. Prefer the server's per-day cache
+    // (correct baseline any time of day); fall back to the client rolling
+    // history (newest sample at/at-before cutoff, else the oldest we have).
     const baseOf = (token: number): Sample | null => {
+      const b = baseline[token];
+      if (b) return { t: cutoff, oi: b.oi, ltp: b.ltp };
       const arr = histRef.current.get(token);
       if (!arr || arr.length === 0) return null;
       let base: Sample | null = null;
@@ -361,7 +429,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
 
     return { rows, atmStrike, spot, totalCe, totalPe, pcr, buckets };
-  }, [chain, ticks, interval]);
+  }, [chain, ticks, interval, baseline]);
 
   // Center the ATM row once the chain + first ticks are in.
   useEffect(() => {

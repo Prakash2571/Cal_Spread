@@ -667,3 +667,58 @@ export async function fetchOptionChain(
   }
   return body;
 }
+
+
+/**
+ * Per-token OI + LTP as of `minutes` ago, from the backend's per-day intraday
+ * cache. Used as the baseline for 5m/15m OI-change % and OI-buildup, so those
+ * values are correct immediately on load at any time of day.
+ */
+export interface OptionOiBaseline {
+  day: string;
+  expiry: string | null;
+  minutes: number;
+  tokens: Record<number, { oi: number; ltp: number; t: number }>;
+}
+
+export async function fetchOptionOiBaseline(
+  underlying: string,
+  minutes: number,
+): Promise<OptionOiBaseline> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-oi-baseline/${encodeURIComponent(underlying)}?minutes=${minutes}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionOiBaseline & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load OI baseline (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
+/** One captured minute of aggregate intraday option-OI data. */
+export interface OptionOiSeriesPoint {
+  t: number;
+  totalCe: number;
+  totalPe: number;
+  straddle: number;
+}
+
+export interface OptionOiSeries {
+  day: string;
+  expiry: string | null;
+  points: OptionOiSeriesPoint[];
+}
+
+/** Full-day per-minute aggregates (total Call/Put OI + ATM straddle) for charts. */
+export async function fetchOptionOiSeries(underlying: string): Promise<OptionOiSeries> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-oi-series/${encodeURIComponent(underlying)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionOiSeries & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load OI series (HTTP ${res.status}).`);
+  }
+  return body;
+}
