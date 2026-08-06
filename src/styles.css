@@ -1815,6 +1815,9 @@ body {
 
 .chart-wrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .oi-chart {
@@ -1855,19 +1858,70 @@ body {
   font-size: var(--fs-4);
 }
 
-.chart-legend {
+/* ================================================================
+   Chart readout — the always-visible values strip that replaced the
+   floating tooltip. Shows the latest point by default and retargets
+   to the hovered one, so values never sit under the cursor.
+   ================================================================ */
+.chart-readout {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  margin-top: var(--sp-2);
-  font-size: var(--fs-2);
-  color: var(--text-2);
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sp-2);
+  /* Two rows' worth, so hiding the "From" row on hover cannot shift the plot. */
+  min-height: 34px;
 }
-
-.chart-legend-item {
+.chart-readout-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-2);
+}
+.chart-readout-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+/* Accent the timestamp while it is tracking the cursor. */
+.chart-readout-time--hover {
+  color: var(--accent-text);
+}
+.chart-readout-item {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
+  white-space: nowrap;
+}
+.chart-readout-label {
+  color: var(--text-3);
+}
+.chart-readout-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+.chart-readout-start {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-1);
+  color: var(--text-3);
+}
+.chart-readout-start .chart-readout-time,
+.chart-readout-start .chart-readout-val {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+}
+
+/* Series line weight: heavy enough to read as a continuous line on a dense
+   intraday series, light enough not to swamp a sparse one. */
+.chart-line {
+  stroke-width: 1.9px;
 }
 
 .chart-dot {
@@ -1875,53 +1929,12 @@ body {
   height: var(--sp-2);
   border-radius: var(--r-sm);
   display: inline-block;
+  flex-shrink: 0;
 }
-
-/* True popover — the one chart element that keeps an elevation shadow */
-.chart-tip {
-  position: absolute;
-  top: var(--sp-2);
-  right: var(--sp-2);
-  background: var(--surface-1);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
-  padding: var(--sp-2) var(--sp-3);
-  font-size: var(--fs-2);
-  pointer-events: none;
-  z-index: 4;
-  width: max-content;
-  min-width: 140px;
-  max-width: calc(100% - var(--sp-4));
-  box-shadow: var(--shadow-popover);
-}
-
-.chart-tip-date {
-  font-weight: var(--fw-semibold);
-  margin-bottom: var(--sp-1);
-  color: var(--text-1);
-}
-
-.chart-tip-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  margin-top: var(--sp-1);
-}
-
-.chart-tip-label {
-  color: var(--text-2);
-  flex: 1;
-}
-
-.chart-tip-val {
-  color: var(--text-1);
-  font-weight: var(--fw-semibold);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.chart-tip--line {
-  width: 176px;
+/* Quieter dot for the secondary "From" row. */
+.chart-dot--sm {
+  width: 5px;
+  height: 5px;
 }
 
 
@@ -2105,10 +2118,6 @@ body {
   border-radius: var(--r-lg);
   min-width: 130px;
 }
-.an-stat--wide {
-  min-width: 260px;
-  flex: 1;
-}
 .an-stat-k {
   font-size: var(--fs-1);
   color: var(--text-3);
@@ -2124,18 +2133,6 @@ body {
 .an-stat-sub {
   font-size: var(--fs-1);
   color: var(--text-3);
-}
-.an-stat-buckets {
-  display: flex;
-  gap: var(--sp-4);
-  font-size: var(--fs-3);
-  font-family: var(--font-mono);
-  color: var(--text-2);
-  margin-top: 2px;
-}
-.an-stat-buckets span {
-  display: inline-flex;
-  gap: 4px;
 }
 
 /* ---- Option chain table ---- */
@@ -2316,8 +2313,7 @@ body {
 .an-chart-card--expanded .an-chart-body > * {
   width: 100%;
 }
-.an-chart-card--expanded .an-chart-body .chart-wrap,
-.an-chart-card--expanded .an-chart-body .oi-chart {
+.an-chart-card--expanded .an-chart-body .chart-wrap {
   width: 100%;
   height: 100%;
 }
@@ -2341,13 +2337,17 @@ body {
   overscroll-behavior-inline: contain;
   -webkit-overflow-scrolling: touch;
 }
-.an-scrollx-inner {
-  /* min-width is set inline (proportional to the number of points) so the
-     chart grows wider than the viewport and the container scrolls sideways. */
-  height: 100%;
-}
 .an-chart-card--expanded .an-scrollx {
   height: 100%;
+}
+/* The line charts own their scroller too, so give them the same expanded fill as
+   the histogram/straddle cards. */
+.an-chart-card--expanded .chart-wrap {
+  min-height: 0;
+}
+.an-chart-card--expanded .chart-wrap .an-scrollx {
+  flex: 1;
+  min-height: 0;
 }
 
 
@@ -2356,10 +2356,6 @@ body {
   position: relative;
   width: 100%;
   min-width: 0;
-}
-.an-hist-legend {
-  justify-content: flex-end;
-  margin-bottom: var(--sp-1);
 }
 .an-hist-inner {
   position: relative;
@@ -2371,14 +2367,18 @@ body {
 .oi-hist-svg rect {
   transition: opacity var(--dur-fast) var(--ease);
 }
-.oi-hist-svg:hover rect:not(.an-hist-hover-band) {
+.oi-hist-svg:hover rect:not(.an-hist-hover-band):not(.an-hist-latest-band) {
   opacity: 0.92;
 }
 .oi-hist-svg .an-hist-hover-band {
+  fill: var(--surface-3);
   opacity: 0.32;
 }
-.an-hist-tip {
-  top: 32px;
+/* Idle marker on the newest bucket — quieter than the hover band, and tinted so
+   it reads as "current" rather than "selected". */
+.oi-hist-svg .an-hist-latest-band {
+  fill: var(--accent);
+  opacity: 0.1;
 }
 .an-chart-card--expanded .an-hist {
   height: 100%;
@@ -2416,25 +2416,16 @@ body {
   white-space: nowrap;
 }
 
-/* ---- Analytics: Call-vs-Put OI chart (shared LineChart) tuning ----
-   Fixed compact svg height so it lines up with the other charts, no left-side
-   value labels (values are read on hover), and a thin line. Legend is kept. */
-.an-oi-scroll .oi-chart {
-  height: 176px;
-}
-.an-oi-scroll .chart-ylabel {
-  display: none;
-}
-.an-oi-scroll .oi-chart polyline {
-  stroke-width: 1px;
-}
+/* ---- Analytics chart strokes ----
+   The analytics line charts run in LineChart's fixed-canvas mode (explicit px
+   width/height, no viewBox), so nothing is scaled and these weights land exactly
+   as written — matching the histogram and straddle cards. */
 .an-page .chart-grid,
 .an-page .chart-guide {
   stroke-width: 0.75px;
 }
-.an-chart-card--expanded .an-oi-scroll .oi-chart {
-  height: calc(100vh - 132px);
-}
+
+
 
 
 /* ---- Analytics: data tables embedded in a chart card ----

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import ChartReadout, { type ReadoutItem } from "./ChartReadout.tsx";
 import { fmtCompact } from "./format.ts";
 
 export interface HistPoint {
@@ -9,24 +10,36 @@ export interface HistPoint {
 
 interface Props {
   points: HistPoint[];
-  /** Format a bucket timestamp for the x-axis + tooltip title. */
+  /** Format a bucket timestamp for the x-axis + the readout. */
   formatX: (t: number) => string;
   height?: number;
   expanded?: boolean;
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 45; // 21px Call/Put pair plus a 24px inter-time gap
-const BAR_W = 9;
-const BAR_GAP = 3;
+const GROUP_W = 58; // 28px Call/Put pair plus a 30px inter-time gap
+const BAR_W = 12;
+const BAR_GAP = 4;
 const PAIR_W = BAR_W * 2 + BAR_GAP;
 const GROUP_PAD = (GROUP_W - PAIR_W) / 2;
+
+const CE_COLOR = "var(--neg)";
+const PE_COLOR = "var(--pos)";
+/** Approximate width of a "06 Aug, 14:35" x-axis label at --fs-1 mono. */
+const LABEL_PX = 110;
+
+/** Signed compact OI change, e.g. "+4.00L" / "-7.45L" / "0". */
+function fmtDelta(v: number): string {
+  const mag = fmtCompact(Math.abs(v));
+  if (mag === "—" || v === 0) return "0";
+  return `${v > 0 ? "+" : "-"}${mag}`;
+}
 
 /**
  * Diverging OI-change histogram: for each time bucket a Call bar (red) and a
  * Put bar (green), pointing UP when the OI change is positive and DOWN when
  * negative. Horizontally scrollable to reveal past buckets; opens scrolled to
- * the most recent bar. Hover shows the actual OI-change values.
+ * the most recent bar, whose values are always shown in the readout above.
  */
 export default function OiHistogram({
   points,
@@ -64,15 +77,24 @@ export default function OiHistogram({
     maxAbs = Math.max(maxAbs, Math.abs(p.ceChange), Math.abs(p.peChange));
   }
 
+  const lastI = points.length - 1;
   const svgW = PAD.l + points.length * GROUP_W + PAD.r;
   const yFor = (v: number) => y0 - (v / maxAbs) * half;
+  const groupX = (i: number) => PAD.l + i * GROUP_W;
+  const centreX = (i: number) => groupX(i) + GROUP_W / 2;
 
   // Value axis ticks (symmetric around zero).
   const ticks = [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs];
 
-  // Keep timestamp labels readable at roughly 100px intervals regardless of
-  // how many buckets are loaded.
-  const labelEvery = Math.max(1, Math.ceil(100 / GROUP_W));
+  // Label roughly every 110px, always including the first bucket and — when it
+  // clears the first by a label's width — the last, so the covered span is
+  // readable without hovering and short series never overlap their two labels.
+  const labelEvery = Math.max(1, Math.ceil(LABEL_PX / GROUP_W));
+  const labelIdx = new Set<number>([0]);
+  if (lastI * GROUP_W >= LABEL_PX) labelIdx.add(lastI);
+  for (let i = labelEvery; i < lastI; i += labelEvery) {
+    if (lastI - i >= labelEvery) labelIdx.add(i);
+  }
 
   function bar(x: number, v: number, color: string, key: string) {
     const yv = yFor(v);
@@ -81,22 +103,47 @@ export default function OiHistogram({
     return <rect key={key} x={x} y={y} width={BAR_W} height={h} fill={color} rx={2} />;
   }
 
-  const hoverPt = hover !== null ? points[hover] : null;
-  const hoverX = hover !== null ? PAD.l + hover * GROUP_W + GROUP_W / 2 : 0;
-  const tipOnLeft = hover !== null && hover > (points.length - 1) / 2;
+  /** Band covering one bucket's Call/Put pair (hover highlight + latest marker). */
+  const band = (i: number, className: string) => (
+    <rect
+      x={groupX(i) + GROUP_PAD - 5}
+      y={PAD.t}
+      width={PAIR_W + 10}
+      height={plotH}
+      rx={3}
+      className={className}
+      pointerEvents="none"
+    />
+  );
+
+  // The readout reports the hovered bucket, or the latest one when idle. Clamped
+  // because the rolling window can shrink while a hover index is still held.
+  const activeIdx = Math.min(hover ?? lastI, lastI);
+  const active = points[activeIdx]!;
+  const readoutItems: ReadoutItem[] = [
+    { label: "Call ΔOI", color: CE_COLOR, value: fmtDelta(active.ceChange) },
+    { label: "Put ΔOI", color: PE_COLOR, value: fmtDelta(active.peChange) },
+  ];
+  const first = points[0]!;
+  const start =
+    points.length > 1
+      ? {
+          time: formatX(first.t),
+          items: [
+            { label: "Call ΔOI", color: CE_COLOR, value: fmtDelta(first.ceChange) },
+            { label: "Put ΔOI", color: PE_COLOR, value: fmtDelta(first.peChange) },
+          ],
+        }
+      : null;
 
   return (
     <div className="an-hist">
-      <div className="chart-legend an-hist-legend">
-        <span className="chart-legend-item">
-          <span className="chart-dot" style={{ background: "var(--neg)" }} />
-          Call OI change
-        </span>
-        <span className="chart-legend-item">
-          <span className="chart-dot" style={{ background: "var(--pos)" }} />
-          Put OI change
-        </span>
-      </div>
+      <ChartReadout
+        time={formatX(active.t)}
+        items={readoutItems}
+        hovering={hover !== null}
+        start={start}
+      />
       <div
         className="an-scrollx"
         ref={scrollRef}
@@ -128,8 +175,7 @@ export default function OiHistogram({
                   className="chart-grid"
                 />
                 <text x={PAD.l - 8} y={yFor(v) + 3} className="chart-ylabel">
-                  {v > 0 ? "+" : ""}
-                  {fmtCompact(Math.abs(v)) === "—" ? "0" : (v < 0 ? "-" : "") + fmtCompact(Math.abs(v))}
+                  {fmtDelta(v)}
                 </text>
               </g>
             ))}
@@ -143,33 +189,25 @@ export default function OiHistogram({
               strokeWidth={1}
             />
 
-            {/* Highlight the complete Call/Put pair for the hovered timestamp. */}
-            {hover !== null && (
-              <rect
-                x={PAD.l + hover * GROUP_W + GROUP_PAD - 4}
-                y={PAD.t}
-                width={PAIR_W + 8}
-                height={plotH}
-                rx={2}
-                className="an-hist-hover-band"
-                fill="var(--surface-3)"
-                pointerEvents="none"
-              />
-            )}
+            {/* The newest bucket stays marked at all times — matching the
+                always-visible end dots on the line charts — with the hover band
+                drawn over it while tracking. */}
+            {band(lastI, "an-hist-latest-band")}
+            {hover !== null && band(activeIdx, "an-hist-hover-band")}
 
             {points.map((p, i) => {
-              const gx = PAD.l + i * GROUP_W;
+              const gx = groupX(i);
               return (
                 <g key={p.t}>
-                  {bar(gx + GROUP_PAD, p.ceChange, "var(--neg)", `ce-${i}`)}
+                  {bar(gx + GROUP_PAD, p.ceChange, CE_COLOR, `ce-${i}`)}
                   {bar(
                     gx + GROUP_PAD + BAR_W + BAR_GAP,
                     p.peChange,
-                    "var(--pos)",
+                    PE_COLOR,
                     `pe-${i}`,
                   )}
-                  {i % labelEvery === 0 && (
-                    <text x={gx + GROUP_W / 2} y={H - 10} className="chart-xlabel">
+                  {labelIdx.has(i) && (
+                    <text x={centreX(i)} y={H - 10} className="chart-xlabel">
                       {formatX(p.t)}
                     </text>
                   )}
@@ -179,9 +217,9 @@ export default function OiHistogram({
 
             {hover !== null && (
               <line
-                x1={hoverX}
+                x1={centreX(activeIdx)}
                 y1={PAD.t}
-                x2={hoverX}
+                x2={centreX(activeIdx)}
                 y2={PAD.t + plotH}
                 className="chart-guide"
               />
@@ -189,37 +227,6 @@ export default function OiHistogram({
           </svg>
         </div>
       </div>
-
-      {hoverPt && (
-        <div
-          className="chart-tip an-hist-tip"
-          style={
-            tipOnLeft
-              ? { left: 8, right: "auto" }
-              : { right: 8, left: "auto" }
-          }
-        >
-          <div className="chart-tip-date">{formatX(hoverPt.t)}</div>
-          <div className="chart-tip-row">
-            <span className="chart-dot" style={{ background: "var(--neg)" }} />
-            <span className="chart-tip-label">Call ΔOI</span>
-            <span className="chart-tip-val">
-              {hoverPt.ceChange > 0 ? "+" : hoverPt.ceChange < 0 ? "-" : ""}
-              {fmtCompact(Math.abs(hoverPt.ceChange))}
-            </span>
-          </div>
-          <div className="chart-tip-row">
-            <span className="chart-dot" style={{ background: "var(--pos)" }} />
-            <span className="chart-tip-label">Put ΔOI</span>
-            <span className="chart-tip-val">
-              {hoverPt.peChange > 0 ? "+" : hoverPt.peChange < 0 ? "-" : ""}
-              {fmtCompact(Math.abs(hoverPt.peChange))}
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-
-

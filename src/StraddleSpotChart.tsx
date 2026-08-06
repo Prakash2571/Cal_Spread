@@ -1,4 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import ChartReadout, { type ReadoutItem } from "./ChartReadout.tsx";
+import { smoothPath } from "./chartPath.ts";
 import { fmt } from "./format.ts";
 
 export interface StraddleSpotPoint {
@@ -19,6 +21,34 @@ const STEP = 7; // px per point (drives horizontal scroll width)
 
 const STRADDLE_COLOR = "var(--series-1)";
 const SPOT_COLOR = "var(--warn)";
+/** Approximate width of a "06 Aug, 14:35" x-axis label at --fs-1 mono. */
+const LABEL_PX = 110;
+
+/**
+ * Dot drawn as a zero-length round-capped stroke. `M x y l 0 0` is the
+ * best-supported spelling of a zero-length subpath — same as LineChart's Dot.
+ */
+function Dot({
+  x,
+  y,
+  color,
+  size,
+}: {
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+}) {
+  return (
+    <path
+      d={`M ${x} ${y} l 0 0`}
+      stroke={color}
+      strokeWidth={size}
+      strokeLinecap="round"
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}
 
 /**
  * Dual-axis line chart: auto-ATM straddle (left axis) overlaid on the NIFTY
@@ -57,49 +87,123 @@ export default function StraddleSpotChart({
 
   const straddleVals = points.map((p) => p.straddle).filter((v) => v > 0);
   const spotVals = points.map((p) => p.spot).filter((v) => v > 0);
+  // Headroom is added to the VALUE range rather than inset in pixels, so the
+  // gridlines still span the full plot box and line up with the other cards.
   const range = (vals: number[]) => {
     const mn = Math.min(...vals);
     const mx = Math.max(...vals);
-    return { mn, span: mx - mn || 1 };
+    const span = mx - mn || 1;
+    const pad = span * 0.08; // keep lines off the very top/bottom edges
+    return { mn: mn - pad, span: span + 2 * pad };
   };
   const s = range(straddleVals.length ? straddleVals : [0, 1]);
   const p = range(spotVals.length ? spotVals : [0, 1]);
 
-  // Each series is scaled independently to (nearly) the full plot height, so
-  // both lines overlap the same area and their shapes/moves are directly
-  // comparable — the two different y-axes make clear the price ranges differ.
-  const PADY = plotH * 0.08; // keep lines off the very top/bottom edges
-  const usableH = plotH - 2 * PADY;
+  // Each series is scaled independently to the full plot height, so both lines
+  // overlap the same area and their shapes/moves are directly comparable — the
+  // two different y-axes make clear the price ranges differ.
   const xAt = (i: number) => PAD.l + i * STEP;
-  const yFrac = (frac: number) => PAD.t + PADY + (1 - frac) * usableH;
+  const yFrac = (frac: number) => PAD.t + (1 - frac) * plotH;
   const yStraddle = (v: number) => yFrac((v - s.mn) / s.span);
   const ySpot = (v: number) => yFrac((v - p.mn) / p.span);
 
-  const line = (accessor: (pt: StraddleSpotPoint) => number, yFn: (v: number) => number) =>
+  /** Plotted points for one series (zero/missing samples are skipped). */
+  const linePts = (
+    accessor: (pt: StraddleSpotPoint) => number,
+    yFn: (v: number) => number,
+  ) =>
     points
       .map((pt, i) => ({ v: accessor(pt), i }))
       .filter((o) => o.v > 0)
-      .map((o) => `${xAt(o.i)},${yFn(o.v)}`)
-      .join(" ");
+      .map((o) => ({ x: xAt(o.i), y: yFn(o.v) }));
+
+  const straddlePts = linePts((pt) => pt.straddle, yStraddle);
+  const spotPts = linePts((pt) => pt.spot, ySpot);
+  const straddleEnd = straddlePts[straddlePts.length - 1] ?? null;
+  const spotEnd = spotPts[spotPts.length - 1] ?? null;
 
   const ticks = [0, 0.25, 0.5, 0.75, 1];
-  const labelEvery = Math.max(1, Math.round(n / 12));
-  const hoverPt = hover !== null ? points[hover] : null;
-  const hoverX = hover !== null ? xAt(hover) : 0;
-  const tipOnLeft = hover !== null && hover > (n - 1) / 2;
+  // Clamped: the rolling window can shrink while a hover index is still held.
+  const hoverIdx = hover === null ? null : Math.min(hover, n - 1);
+  const hoverPt = hoverIdx === null ? null : points[hoverIdx]!;
+  const hoverX = hoverIdx === null ? 0 : xAt(hoverIdx);
+
+  // Label roughly every 110px, always including the first sample and — when it
+  // clears the first by a label's width — the last, so short series never
+  // overlap their two labels.
+  const lastI = n - 1;
+  const labelEvery = Math.max(1, Math.ceil(LABEL_PX / STEP));
+  const labelIdx = new Set<number>([0]);
+  if (lastI * STEP >= LABEL_PX) labelIdx.add(lastI);
+  for (let i = labelEvery; i < lastI; i += labelEvery) {
+    if (lastI - i >= labelEvery) labelIdx.add(i);
+  }
+
+  /** Last positive value of a series, so the readout agrees with the end dot. */
+  const lastPositive = (accessor: (pt: StraddleSpotPoint) => number) => {
+    for (let i = lastI; i >= 0; i--) {
+      const v = accessor(points[i]!);
+      if (v > 0) return v;
+    }
+    return null;
+  };
+  const firstPositive = (accessor: (pt: StraddleSpotPoint) => number) => {
+    for (let i = 0; i <= lastI; i++) {
+      const v = accessor(points[i]!);
+      if (v > 0) return v;
+    }
+    return null;
+  };
+
+  // The readout reports the hovered sample, or each series' own latest value when
+  // idle — which is what the end dots mark.
+  const readValue = (accessor: (pt: StraddleSpotPoint) => number) => {
+    if (hoverPt) {
+      const v = accessor(hoverPt);
+      return v > 0 ? fmt(v) : "—";
+    }
+    const v = lastPositive(accessor);
+    return v === null ? "—" : fmt(v);
+  };
+  const readoutItems: ReadoutItem[] = [
+    {
+      label: "ATM Straddle",
+      color: STRADDLE_COLOR,
+      value: readValue((pt) => pt.straddle),
+    },
+    { label: "NIFTY Spot", color: SPOT_COLOR, value: readValue((pt) => pt.spot) },
+  ];
+  const startVal = (accessor: (pt: StraddleSpotPoint) => number) => {
+    const v = firstPositive(accessor);
+    return v === null ? "—" : fmt(v);
+  };
+  const start =
+    n > 1
+      ? {
+          time: formatX(points[0]!.t),
+          items: [
+            {
+              label: "ATM Straddle",
+              color: STRADDLE_COLOR,
+              value: startVal((pt) => pt.straddle),
+            },
+            {
+              label: "NIFTY Spot",
+              color: SPOT_COLOR,
+              value: startVal((pt) => pt.spot),
+            },
+          ],
+        }
+      : null;
 
   return (
     <div className="an-hist">
-      <div className="chart-legend an-hist-legend">
-        <span className="chart-legend-item">
-          <span className="chart-dot" style={{ background: STRADDLE_COLOR }} />
-          ATM Straddle
-        </span>
-        <span className="chart-legend-item">
-          <span className="chart-dot" style={{ background: SPOT_COLOR }} />
-          NIFTY Spot
-        </span>
-      </div>
+      <ChartReadout
+        time={formatX((hoverPt ?? points[lastI]!).t)}
+        items={readoutItems}
+        hovering={hoverIdx !== null}
+        start={start}
+      />
       <div
         className="an-scrollx"
         ref={scrollRef}
@@ -142,33 +246,47 @@ export default function StraddleSpotChart({
 
             {points.map(
               (pt, i) =>
-                i % labelEvery === 0 && (
+                labelIdx.has(i) && (
                   <text key={pt.t} x={xAt(i)} y={H - 10} className="chart-xlabel">
                     {formatX(pt.t)}
                   </text>
                 ),
             )}
 
-            <polyline
-              points={line((pt) => pt.spot, ySpot)}
+            <path
+              d={smoothPath(spotPts)}
               fill="none"
               stroke={SPOT_COLOR}
-              strokeWidth={1}
+              className="chart-line"
               vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
-            <polyline
-              points={line((pt) => pt.straddle, yStraddle)}
+            <path
+              d={smoothPath(straddlePts)}
               fill="none"
               stroke={STRADDLE_COLOR}
-              strokeWidth={1}
+              className="chart-line"
               vectorEffect="non-scaling-stroke"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
 
-            {hover !== null && (
+            {/* Latest value of each series, always marked so the end of the line
+                is obvious without hovering. */}
+            {spotEnd && (
+              <Dot x={spotEnd.x} y={spotEnd.y} color={SPOT_COLOR} size={6} />
+            )}
+            {straddleEnd && (
+              <Dot
+                x={straddleEnd.x}
+                y={straddleEnd.y}
+                color={STRADDLE_COLOR}
+                size={6}
+              />
+            )}
+
+            {hoverIdx !== null && (
               <>
                 <line
                   x1={hoverX}
@@ -178,39 +296,21 @@ export default function StraddleSpotChart({
                   className="chart-guide"
                 />
                 {hoverPt && hoverPt.straddle > 0 && (
-                  <circle cx={hoverX} cy={yStraddle(hoverPt.straddle)} r={3.5} fill={STRADDLE_COLOR} />
+                  <Dot
+                    x={hoverX}
+                    y={yStraddle(hoverPt.straddle)}
+                    color={STRADDLE_COLOR}
+                    size={7}
+                  />
                 )}
                 {hoverPt && hoverPt.spot > 0 && (
-                  <circle cx={hoverX} cy={ySpot(hoverPt.spot)} r={3.5} fill={SPOT_COLOR} />
+                  <Dot x={hoverX} y={ySpot(hoverPt.spot)} color={SPOT_COLOR} size={7} />
                 )}
               </>
             )}
           </svg>
         </div>
       </div>
-
-      {hoverPt && (
-        <div
-          className="chart-tip an-hist-tip"
-          style={
-            tipOnLeft
-              ? { left: 8, right: "auto" }
-              : { right: 8, left: "auto" }
-          }
-        >
-          <div className="chart-tip-date">{formatX(hoverPt.t)}</div>
-          <div className="chart-tip-row">
-            <span className="chart-dot" style={{ background: STRADDLE_COLOR }} />
-            <span className="chart-tip-label">Straddle</span>
-            <span className="chart-tip-val">{fmt(hoverPt.straddle)}</span>
-          </div>
-          <div className="chart-tip-row">
-            <span className="chart-dot" style={{ background: SPOT_COLOR }} />
-            <span className="chart-tip-label">NIFTY</span>
-            <span className="chart-tip-val">{fmt(hoverPt.spot)}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

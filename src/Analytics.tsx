@@ -37,7 +37,6 @@ const CHAIN_COMPACT_HALF = 7; // collapsed option chain: ATM ± 7 strikes
 const STRADDLE_HALF = 10; // straddle chain: ATM ± 10 strikes
 const TOTAL_UP = 24; // total-OI window: 24 strikes above ATM
 const TOTAL_DOWN = 26; // total-OI window: 26 strikes below ATM
-const BUCKET_HALF = 30; // OI-change buckets: 30 above / ATM / 30 below
 
 /**
  * Futures series colours. Four slots, keyed off the expiry MONTH rather than the
@@ -189,10 +188,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const straddleAtmRowRef = useRef<HTMLTableRowElement | null>(null);
   const didCenterStraddleRef = useRef(false);
   const didCenterRef = useRef(false);
-  const oiScrollRef = useRef<HTMLDivElement | null>(null);
-  const oiAtEndRef = useRef(true);
-  const futScrollRef = useRef<HTMLDivElement | null>(null);
-  const futAtEndRef = useRef(true);
+
 
   chainRef.current = chain;
 
@@ -550,44 +546,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     }
     const pcr = totalCe > 0 ? totalPe / totalCe : null;
 
-    // OI-change % buckets: above (30), ATM, below (30) — per side.
-    const bucketPct = (from: number, to: number, side: "ce" | "pe"): number | null => {
-      let cur = 0;
-      let base = 0;
-      let have = false;
-      for (let i = from; i <= to; i++) {
-        const tok = side === "ce" ? strikes[i]!.ce_token : strikes[i]!.pe_token;
-        const t = ticks[tok];
-        const b = baseOf(tok, oiInterval);
-        if (t && b) {
-          cur += t.oi ?? 0;
-          base += b.oi;
-          have = true;
-        }
-      }
-      if (!have || base <= 0) return null;
-      return ((cur - base) / base) * 100;
-    };
-
-    const aboveLo = clamp(atmIdx + 1, 0, strikes.length - 1);
-    const aboveHi = clamp(atmIdx + BUCKET_HALF, 0, strikes.length - 1);
-    const belowLo = clamp(atmIdx - BUCKET_HALF, 0, strikes.length - 1);
-    const belowHi = clamp(atmIdx - 1, 0, strikes.length - 1);
-
-    const buckets = {
-      ce: {
-        above: bucketPct(aboveLo, aboveHi, "ce"),
-        atm: bucketPct(atmIdx, atmIdx, "ce"),
-        below: bucketPct(belowLo, belowHi, "ce"),
-      },
-      pe: {
-        above: bucketPct(aboveLo, aboveHi, "pe"),
-        atm: bucketPct(atmIdx, atmIdx, "pe"),
-        below: bucketPct(belowLo, belowHi, "pe"),
-      },
-    };
-
-    return { rows, atmStrike, spot, totalCe, totalPe, pcr, buckets };
+    return { rows, atmStrike, spot, totalCe, totalPe, pcr };
   }, [chain, ticks, oiInterval, bldInterval, baselines]);
 
   // Center the ATM row once the chain + first ticks are in.
@@ -605,53 +564,16 @@ export default function Analytics({ authenticated, onBack }: Props) {
     centerRowInScroller(atmRowRef.current);
   }, [chainExpanded]);
 
-  // On a 60s data refresh, only follow to the latest if already pinned to the
-  // right edge — otherwise leave the user where they scrolled into the past.
-  useEffect(() => {
-    const el = oiScrollRef.current;
-    if (el && oiAtEndRef.current) el.scrollLeft = el.scrollWidth;
-  }, [ceOiSeries, peOiSeries]);
+  // Horizontal scrolling for the two line charts (follow-to-latest, and reset on
+  // a timeframe switch via the `key` prop) is owned by LineChart itself, the same
+  // way StraddleSpotChart and OiHistogram own theirs.
 
-  // A timeframe switch starts at the latest point. Expanding or collapsing
-  // preserves historical position unless the chart was already pinned right.
-  useEffect(() => {
-    const el = oiScrollRef.current;
-    if (el) {
-      el.scrollLeft = el.scrollWidth;
-      oiAtEndRef.current = true;
-    }
-  }, [oiFrame]);
-
-  const oiExpanded = expandedCard === "oi";
-  useEffect(() => {
-    const el = oiScrollRef.current;
-    if (el && oiAtEndRef.current) el.scrollLeft = el.scrollWidth;
-  }, [oiExpanded]);
-
-  // Same pinned-to-latest behaviour for the futures-OI chart.
-  useEffect(() => {
-    const el = futScrollRef.current;
-    if (el && futAtEndRef.current) el.scrollLeft = el.scrollWidth;
-  }, [futRaw]);
-
-  useEffect(() => {
-    const el = futScrollRef.current;
-    if (el) {
-      el.scrollLeft = el.scrollWidth;
-      futAtEndRef.current = true;
-    }
-  }, [futFrame]);
-
-  const futExpanded = expandedCard === "futoi";
-  useEffect(() => {
-    const el = futScrollRef.current;
-    if (el && futAtEndRef.current) el.scrollLeft = el.scrollWidth;
-  }, [futExpanded]);
-
-  // Taller charts when expanded to (near) full screen.
+  // Taller charts when expanded to (near) full screen. 125px covers the measured
+  // card chrome: padding (24) + head (32) + readout strip incl. margin (42) +
+  // the horizontal scrollbar gutter.
   const bigChartH = Math.max(
-    320,
-    (typeof window !== "undefined" ? window.innerHeight : 800) - 140,
+    240,
+    (typeof window !== "undefined" ? window.innerHeight : 800) - 125,
   );
 
   // Timestamp formatting per frame: 1m shows time only; 5m/15m span multiple
@@ -668,10 +590,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const isoFmtFor = (frame: OiFrame) => (iso: string) => fmtTs(frame, new Date(iso).getTime());
   const tsFmtFor = (frame: OiFrame) => (t: number) => fmtTs(frame, t);
 
-  const oiChart: ChartSeries[] = [
-    { label: "Call OI", color: "var(--neg)", points: ceOiSeries },
-    { label: "Put OI", color: "var(--pos)", points: peOiSeries },
-  ];
+  // Memoised: a fresh array identity here would re-trigger LineChart's
+  // follow-to-latest layout effect on every 500ms tick flush.
+  const oiChart = useMemo<ChartSeries[]>(
+    () => [
+      { label: "Call OI", color: "var(--neg)", points: ceOiSeries },
+      { label: "Put OI", color: "var(--pos)", points: peOiSeries },
+    ],
+    [ceOiSeries, peOiSeries],
+  );
 
   // One series per tracked futures contract, labelled by expiry month.
   const futOiChart = useMemo<ChartSeries[]>(
@@ -827,22 +754,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 {metrics.pcr === null ? "—" : metrics.pcr.toFixed(2)}
               </span>
               <span className="an-stat-sub">Put ÷ Call</span>
-            </div>
-            <div className="an-stat an-stat--wide">
-              <span className="an-stat-k">Call OI Δ% ({oiInterval}m)</span>
-              <span className="an-stat-buckets">
-                <span>Above {pctCell(metrics.buckets.ce.above)}</span>
-                <span>ATM {pctCell(metrics.buckets.ce.atm)}</span>
-                <span>Below {pctCell(metrics.buckets.ce.below)}</span>
-              </span>
-            </div>
-            <div className="an-stat an-stat--wide">
-              <span className="an-stat-k">Put OI Δ% ({oiInterval}m)</span>
-              <span className="an-stat-buckets">
-                <span>Above {pctCell(metrics.buckets.pe.above)}</span>
-                <span>ATM {pctCell(metrics.buckets.pe.atm)}</span>
-                <span>Below {pctCell(metrics.buckets.pe.below)}</span>
-              </span>
             </div>
           </div>
 
@@ -1035,31 +946,18 @@ export default function Analytics({ authenticated, onBack }: Props) {
               }
             >
               {ceOiSeries.length > 1 || peOiSeries.length > 1 ? (
-                <div
-                  className="an-scrollx an-oi-scroll"
-                  ref={oiScrollRef}
-                  onScroll={(e) => {
-                    const el = e.currentTarget;
-                    oiAtEndRef.current =
-                      el.scrollWidth - el.clientWidth - el.scrollLeft < 24;
-                  }}
-                >
-                  <div
-                    className="an-scrollx-inner"
-                    style={{
-                      minWidth: `${Math.max(
-                        760,
-                        Math.max(ceOiSeries.length, peOiSeries.length) * 7,
-                      )}px`,
-                    }}
-                  >
-                    <LineChart
-                      series={oiChart}
-                      format={fmtCompact}
-                      formatX={isoFmtFor(oiFrame)}
-                    />
-                  </div>
-                </div>
+                <LineChart
+                  key={oiFrame}
+                  series={oiChart}
+                  format={fmtCompact}
+                  formatX={isoFmtFor(oiFrame)}
+                  height={expandedCard === "oi" ? bigChartH : 210}
+                  canvasWidth={Math.max(
+                    760,
+                    Math.max(ceOiSeries.length, peOiSeries.length) * 7,
+                  )}
+                  expanded={expandedCard === "oi"}
+                />
               ) : (
                 <div className="chart-empty">
                   No OI history yet for this timeframe — it fills as the day
@@ -1128,26 +1026,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
               }
             >
               {hasFutOi ? (
-                <div
-                  className="an-scrollx an-oi-scroll"
-                  ref={futScrollRef}
-                  onScroll={(e) => {
-                    const el = e.currentTarget;
-                    futAtEndRef.current =
-                      el.scrollWidth - el.clientWidth - el.scrollLeft < 24;
-                  }}
-                >
-                  <div
-                    className="an-scrollx-inner"
-                    style={{ minWidth: `${Math.max(760, futRaw.length * 7)}px` }}
-                  >
-                    <LineChart
-                      series={futOiChart}
-                      format={fmtCompact}
-                      formatX={isoFmtFor(futFrame)}
-                    />
-                  </div>
-                </div>
+                <LineChart
+                  key={futFrame}
+                  series={futOiChart}
+                  format={fmtCompact}
+                  formatX={isoFmtFor(futFrame)}
+                  height={expandedCard === "futoi" ? bigChartH : 210}
+                  canvasWidth={Math.max(760, futRaw.length * 7)}
+                  expanded={expandedCard === "futoi"}
+                />
               ) : (
                 <div className="chart-empty">
                   No futures OI history yet for this timeframe — it fills as the
