@@ -619,3 +619,51 @@ export async function fetchInstruments(params?: {
   }
   return body;
 }
+
+
+// ---------------- Options analytics: live option chain ----------------
+
+/** One strike row of the option chain (CE + PE instrument tokens). */
+export interface OptionChainStrike {
+  strike: number;
+  ce_token: number;
+  pe_token: number;
+  ce_symbol: string;
+  pe_symbol: string;
+}
+
+/** ATM-centered option-chain band returned by GET /api/option-chain/:underlying. */
+export interface OptionChain {
+  underlying: string;
+  name: string;
+  spot_token: number;
+  spot: number;
+  atm_strike: number;
+  expiry: string;
+  expiries: string[];
+  lot_size: number;
+  strikes: OptionChainStrike[];
+}
+
+/**
+ * Fetch the ATM-centered option chain (CE/PE tokens per strike) for an index
+ * or stock. The band is generous (ATM ± ~40) so the frontend can recompute the
+ * live ATM from the streamed spot tick and still show ATM ± 30.
+ */
+export async function fetchOptionChain(
+  underlying: string,
+  expiry?: string,
+): Promise<OptionChain> {
+  const qs = expiry ? `?expiry=${encodeURIComponent(expiry)}` : "";
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-chain/${encodeURIComponent(underlying)}${qs}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionChain & { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      body.error ?? `Failed to load option chain (HTTP ${res.status}).`,
+    );
+  }
+  return body;
+}
