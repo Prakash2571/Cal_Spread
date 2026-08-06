@@ -55,6 +55,7 @@
   --series-1: #58a6ff;
   --series-2: #3fb950;
   --series-3: #d29922;
+  --series-4: #bc8cff;
   --series-expired: #6e7681;
   --chart-grid: #23272e;
   --chart-guide: #333a44;
@@ -153,6 +154,7 @@
   --series-1: #175eb5;
   --series-2: #16752f;
   --series-3: #895c00;
+  --series-4: #6b3fa0;
   --series-expired: #526174;
   --chart-grid: #d9e0e8;
   --chart-guide: #8b98a8;
@@ -2432,4 +2434,65 @@ body {
 }
 .an-chart-card--expanded .an-oi-scroll .oi-chart {
   height: calc(100vh - 132px);
+}
+
+
+/* ---- Analytics: data tables embedded in a chart card ----
+   The option chain and straddle chain sit in the same 3-column card grid as
+   the charts. Their card BODY is the column flex container (via ChartCard's
+   bodyClass), so the scrollable table takes the leftover height — and the full
+   screen once expanded, where `.an-chart-card--expanded .an-chart-body` already
+   supplies `flex: 1; min-height: 0`. */
+.an-table-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  min-height: 0;
+}
+.an-table-card .an-chain-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: 210px;
+}
+.an-chart-card--expanded .an-table-card .an-chain-wrap {
+  max-height: none;
+}
+
+/* Compact in-card timeframe strip (option chain card). */
+.an-table-card .an-chain-bar {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+.an-table-card .an-chain-control {
+  padding: 1px 1px 1px var(--sp-2);
+}
+
+/* Small footnote under an in-card table. */
+.an-card-note {
+  flex-shrink: 0;
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  text-align: right;
+}
+
+/* ---- Analytics: straddle chain (ATM ± 10, premium = call + put) ---- */
+.an-straddle-chain td,
+.an-straddle-chain th {
+  padding: 3px var(--sp-2);
+}
+.an-straddle-chain .an-ce-ltp {
+  color: var(--neg);
+}
+.an-straddle-chain .an-pe-ltp {
+  color: var(--pos);
+}
+.an-straddle-v {
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  background: var(--data-surface);
+}
+.an-atm .an-straddle-v {
+  background: var(--accent-surface);
+  color: var(--accent-text);
 }

@@ -761,3 +761,54 @@ export async function fetchOptionOiFrame(
   }
   return body;
 }
+
+/** One NIFTY monthly futures contract tracked by the futures-OI frames. */
+export interface FuturesOiContract {
+  token: number;
+  tradingsymbol: string;
+  expiry: string;
+  lot_size: number;
+}
+
+/** One contract's OI + price within a futures-OI point (keyed by expiry). */
+export interface FuturesOiLeg {
+  expiry: string;
+  oi: number;
+  ltp: number;
+}
+
+export interface FuturesOiPoint {
+  t: number;
+  legs: FuturesOiLeg[];
+}
+
+export interface FuturesOiFrameResponse {
+  frame: OiFrame;
+  intervalMin: number;
+  retentionMs: number;
+  contracts: FuturesOiContract[];
+  points: FuturesOiPoint[];
+}
+
+/**
+ * Retained NIFTY futures open-interest history for one timeframe: 1m (last 1
+ * day), 5m (last 3 days) or 15m (last 1 week). Each point carries one leg per
+ * tracked monthly contract (current/next/far), so the client can plot all three
+ * as separate series.
+ */
+export async function fetchFuturesOiFrame(
+  underlying: string,
+  frame: OiFrame,
+): Promise<FuturesOiFrameResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/futures-oi-frame/${encodeURIComponent(underlying)}?frame=${frame}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as FuturesOiFrameResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      body.error ?? `Failed to load futures OI frame (HTTP ${res.status}).`,
+    );
+  }
+  return body;
+}

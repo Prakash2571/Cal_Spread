@@ -54,6 +54,10 @@ export default function LineChart({
     new Set(series.flatMap((s) => s.points.map((p) => p.date))),
   ).sort();
   const n = allDates.length;
+  // date → x-index, so building the polylines below stays linear. With several
+  // hundred points across 3 series, a per-point indexOf scan was re-running on
+  // every mousemove (each hover triggers a re-render).
+  const dateIdx = new Map(allDates.map((d, i) => [d, i]));
 
   const allVals = series
     .flatMap((s) => s.points.map((p) => p.value))
@@ -139,7 +143,7 @@ export default function LineChart({
         {series.map((s) => {
           const pts = s.points
             .filter((p) => valid(p.value))
-            .map((p) => `${xAt(allDates.indexOf(p.date))},${yAt(p.value)}`)
+            .map((p) => `${xAt(dateIdx.get(p.date) ?? 0)},${yAt(p.value)}`)
             .join(" ");
           return (
             <polyline
