@@ -12,6 +12,7 @@ import {
   type Tick,
 } from "./api.ts";
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
+import OiHistogram, { type HistPoint } from "./OiHistogram.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import { fmt, fmtCompact, formatExpiry } from "./format.ts";
 
@@ -97,6 +98,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [live, setLive] = useState(false);
   const [interval, setIntervalMin] = useState<5 | 15>(5);
   const [oiFrame, setOiFrame] = useState<OiFrame>("5m"); // Call/Put OI chart timeframe
+  const [histFrame, setHistFrame] = useState<OiFrame>("5m"); // OI-change histogram frame
+  const [histRaw, setHistRaw] = useState<
+    { t: number; totalCe: number; totalPe: number }[]
+  >([]);
   const [expandedChart, setExpandedChart] = useState<
     "straddle" | "oi" | "hist" | null
   >(null);
@@ -287,6 +292,39 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, oiFrame]);
 
+  // ---- OI-change histogram data for the selected timeframe ----
+  useEffect(() => {
+    if (!authenticated || !chain) return;
+    let cancelled = false;
+    const load = () =>
+      fetchOptionOiFrame(UNDERLYING, histFrame)
+        .then((r) => {
+          if (!cancelled) setHistRaw(r.points);
+        })
+        .catch(() => {
+          /* keep whatever we have */
+        });
+    load();
+    const id = window.setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [authenticated, chain, histFrame]);
+
+  // First-difference of the frame series → per-bucket OI change (Call & Put).
+  const histPoints = useMemo<HistPoint[]>(() => {
+    const out: HistPoint[] = [];
+    for (let i = 1; i < histRaw.length; i++) {
+      out.push({
+        t: histRaw[i]!.t,
+        ceChange: histRaw[i]!.totalCe - histRaw[i - 1]!.totalCe,
+        peChange: histRaw[i]!.totalPe - histRaw[i - 1]!.totalPe,
+      });
+    }
+    return out;
+  }, [histRaw]);
+
   // ---- Periodic sampling: rolling per-token history + chart points ----
   useEffect(() => {
     if (!authenticated || !chain) return;
@@ -448,6 +486,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
   const timeFmt = (iso: string) =>
     new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+  // Histogram x-axis formatter (takes epoch ms): time for 1m, date+time else.
+  const frameFmtFor = (frame: OiFrame) => (t: number) => {
+    const d = new Date(t);
+    return frame === "1m"
+      ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+  };
 
   // Intraday (1m) shows time only; multi-day frames (5m/15m) show date + time.
   const frameFmt = (iso: string) => {
@@ -695,13 +746,31 @@ export default function Analytics({ authenticated, onBack }: Props) {
             </ChartCard>
 
             <ChartCard
-              title="Total Put/Call OI Change — Histogram"
+              title="Total Call/Put OI Change"
               expanded={expandedChart === "hist"}
               onToggle={() => setExpandedChart((c) => (c === "hist" ? null : "hist"))}
+              controls={
+                <div className="an-toggle" role="group" aria-label="OI-change histogram timeframe">
+                  {(["1m", "5m", "15m"] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`btn${histFrame === f ? " btn--primary" : ""}`}
+                      onClick={() => setHistFrame(f)}
+                      title={
+                        f === "1m"
+                          ? "per-minute change · last 1 day"
+                          : f === "5m"
+                            ? "per-5-min change · last 3 days"
+                            : "per-15-min change · last 1 week"
+                      }
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              }
             >
-              <div className="chart-empty an-placeholder">
-                Reserved — histogram of total Put/Call OI change (to be defined).
-              </div>
+              <OiHistogram points={histPoints} formatX={frameFmtFor(histFrame)} />
             </ChartCard>
           </div>
         </>

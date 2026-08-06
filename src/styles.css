@@ -2300,3 +2300,33 @@ body {
 .an-chart-card--expanded .an-scrollx {
   height: 100%;
 }
+
+
+/* ---- Analytics: OI-change histogram ---- */
+.an-hist {
+  width: 100%;
+}
+.an-hist-legend {
+  justify-content: flex-end;
+  margin-bottom: var(--sp-1);
+}
+.an-hist-inner {
+  position: relative;
+  height: 100%;
+}
+.oi-hist-svg {
+  display: block;
+}
+.oi-hist-svg rect {
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.oi-hist-svg:hover rect {
+  opacity: 0.92;
+}
+.an-hist-tip {
+  top: 10px;
+}
+.an-chart-card--expanded .an-hist,
+.an-chart-card--expanded .an-hist .an-scrollx {
+  height: 100%;
+}
