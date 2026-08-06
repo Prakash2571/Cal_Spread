@@ -2,14 +2,20 @@ import { useLayoutEffect, useRef, useState } from "react";
 import ChartReadout, { type ReadoutItem } from "./ChartReadout.tsx";
 import { fmtCompact } from "./format.ts";
 
+/** One bar series in the histogram (index-aligned with each point's `values`). */
+export interface HistSeries {
+  label: string;
+  color: string;
+}
+
 export interface HistPoint {
   t: number; // epoch ms (bucket end)
-  ceChange: number; // change in total Call OI over the bucket
-  peChange: number; // change in total Put OI over the bucket
+  values: number[]; // one signed change per series, in `series` order
 }
 
 interface Props {
   points: HistPoint[];
+  series: HistSeries[];
   /** Format a bucket timestamp for the x-axis + the readout. */
   formatX: (t: number) => string;
   height?: number;
@@ -17,14 +23,9 @@ interface Props {
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 58; // 28px Call/Put pair plus a 30px inter-time gap
 const BAR_W = 12;
-const BAR_GAP = 4;
-const PAIR_W = BAR_W * 2 + BAR_GAP;
-const GROUP_PAD = (GROUP_W - PAIR_W) / 2;
-
-const CE_COLOR = "var(--neg)";
-const PE_COLOR = "var(--pos)";
+const BAR_GAP = 4; // between bars of the same time bucket
+const GROUP_GAP = 30; // blank space between adjacent time buckets
 /** Approximate width of a "06 Aug, 14:35" x-axis label at --fs-1 mono. */
 const LABEL_PX = 110;
 
@@ -36,13 +37,18 @@ function fmtDelta(v: number): string {
 }
 
 /**
- * Diverging OI-change histogram: for each time bucket a Call bar (red) and a
- * Put bar (green), pointing UP when the OI change is positive and DOWN when
- * negative. Horizontally scrollable to reveal past buckets; opens scrolled to
- * the most recent bar, whose values are always shown in the readout above.
+ * Diverging change histogram: for each time bucket one bar per series, pointing
+ * UP when the change is positive and DOWN when negative. Horizontally scrollable
+ * to reveal past buckets; opens scrolled to the most recent bar, whose values are
+ * always shown in the readout above.
+ *
+ * Bar width and the gap between buckets are fixed, so a one-series histogram
+ * reads at exactly the same density as a two-series one — only the bucket width
+ * changes to absorb the missing bar.
  */
 export default function OiHistogram({
   points,
+  series,
   formatX,
   height = 210,
   expanded = false,
@@ -59,14 +65,20 @@ export default function OiHistogram({
     if (el && atEndRef.current) el.scrollLeft = el.scrollWidth;
   }, [points, expanded]);
 
-  if (points.length === 0) {
+  if (points.length === 0 || series.length === 0) {
     return (
       <div className="chart-empty">
-        No OI-change history yet for this timeframe — it fills as the day
-        progresses (or backfills from history).
+        No history yet for this timeframe — it fills as the day progresses (or
+        backfills from history).
       </div>
     );
   }
+
+  // Bucket geometry: the bars sit centred in the bucket with half the inter-time
+  // gap on either side, so the visible gap between buckets is always GROUP_GAP.
+  const barsW = series.length * BAR_W + (series.length - 1) * BAR_GAP;
+  const GROUP_W = barsW + GROUP_GAP;
+  const GROUP_PAD = GROUP_GAP / 2;
 
   const plotH = H - PAD.t - PAD.b;
   const half = plotH / 2;
@@ -74,7 +86,7 @@ export default function OiHistogram({
 
   let maxAbs = 1;
   for (const p of points) {
-    maxAbs = Math.max(maxAbs, Math.abs(p.ceChange), Math.abs(p.peChange));
+    for (const v of p.values) maxAbs = Math.max(maxAbs, Math.abs(v));
   }
 
   const lastI = points.length - 1;
@@ -103,12 +115,12 @@ export default function OiHistogram({
     return <rect key={key} x={x} y={y} width={BAR_W} height={h} fill={color} rx={2} />;
   }
 
-  /** Band covering one bucket's Call/Put pair (hover highlight + latest marker). */
+  /** Band covering one bucket's bars (hover highlight + latest marker). */
   const band = (i: number, className: string) => (
     <rect
       x={groupX(i) + GROUP_PAD - 5}
       y={PAD.t}
-      width={PAIR_W + 10}
+      width={barsW + 10}
       height={plotH}
       rx={3}
       className={className}
@@ -116,31 +128,26 @@ export default function OiHistogram({
     />
   );
 
+  const itemsFor = (p: HistPoint): ReadoutItem[] =>
+    series.map((s, si) => ({
+      label: s.label,
+      color: s.color,
+      value: fmtDelta(p.values[si] ?? 0),
+    }));
+
   // The readout reports the hovered bucket, or the latest one when idle. Clamped
   // because the rolling window can shrink while a hover index is still held.
   const activeIdx = Math.min(hover ?? lastI, lastI);
   const active = points[activeIdx]!;
-  const readoutItems: ReadoutItem[] = [
-    { label: "Call ΔOI", color: CE_COLOR, value: fmtDelta(active.ceChange) },
-    { label: "Put ΔOI", color: PE_COLOR, value: fmtDelta(active.peChange) },
-  ];
   const first = points[0]!;
   const start =
-    points.length > 1
-      ? {
-          time: formatX(first.t),
-          items: [
-            { label: "Call ΔOI", color: CE_COLOR, value: fmtDelta(first.ceChange) },
-            { label: "Put ΔOI", color: PE_COLOR, value: fmtDelta(first.peChange) },
-          ],
-        }
-      : null;
+    points.length > 1 ? { time: formatX(first.t), items: itemsFor(first) } : null;
 
   return (
     <div className="an-hist">
       <ChartReadout
         time={formatX(active.t)}
-        items={readoutItems}
+        items={itemsFor(active)}
         hovering={hover !== null}
         start={start}
       />
@@ -196,15 +203,16 @@ export default function OiHistogram({
             {hover !== null && band(activeIdx, "an-hist-hover-band")}
 
             {points.map((p, i) => {
-              const gx = groupX(i);
+              const gx = groupX(i) + GROUP_PAD;
               return (
                 <g key={p.t}>
-                  {bar(gx + GROUP_PAD, p.ceChange, CE_COLOR, `ce-${i}`)}
-                  {bar(
-                    gx + GROUP_PAD + BAR_W + BAR_GAP,
-                    p.peChange,
-                    PE_COLOR,
-                    `pe-${i}`,
+                  {series.map((s, si) =>
+                    bar(
+                      gx + si * (BAR_W + BAR_GAP),
+                      p.values[si] ?? 0,
+                      s.color,
+                      `${si}-${i}`,
+                    ),
                   )}
                   {labelIdx.has(i) && (
                     <text x={centreX(i)} y={H - 10} className="chart-xlabel">

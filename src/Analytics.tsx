@@ -14,7 +14,7 @@ import {
   type Tick,
 } from "./api.ts";
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
-import OiHistogram, { type HistPoint } from "./OiHistogram.tsx";
+import OiHistogram, { type HistPoint, type HistSeries } from "./OiHistogram.tsx";
 import StraddleSpotChart, { type StraddleSpotPoint } from "./StraddleSpotChart.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import { fmt, fmtCompact, formatExpiry } from "./format.ts";
@@ -38,28 +38,18 @@ const STRADDLE_HALF = 10; // straddle chain: ATM ± 10 strikes
 const TOTAL_UP = 24; // total-OI window: 24 strikes above ATM
 const TOTAL_DOWN = 26; // total-OI window: 26 strikes below ATM
 
-/**
- * Futures series colours. Four slots, keyed off the expiry MONTH rather than the
- * contract's position: for up to a week after a monthly expiry the server still
- * reports the expired month alongside current/next/far (so its line survives to
- * the edge of retention), and any 4 consecutive months map to 4 distinct slots.
- * Month-keying also stops every line changing colour when a contract rolls off.
- */
-const FUT_COLORS = [
-  "var(--series-1)",
-  "var(--series-2)",
-  "var(--series-3)",
-  "var(--series-4)",
-];
-const futColorFor = (expiry: string) => {
-  const month = Number(expiry.slice(5, 7));
-  // A degenerate entry gets a neutral colour rather than silently duplicating a
-  // real series' colour.
-  if (!Number.isInteger(month) || month < 1 || month > 12) {
-    return "var(--series-expired)";
-  }
-  return FUT_COLORS[month % FUT_COLORS.length]!;
-};
+/** Both futures charts share one blue identity (OI level + OI change). */
+const FUT_COLOR = "var(--series-1)";
+
+/** Bucket length of a frame. The server stamps each frame point with its
+ *  bucket-END boundary, so consecutive buckets are exactly this far apart —
+ *  which is what lets the change histograms detect a gap. */
+const frameMs = (frame: OiFrame): number =>
+  frame === "1m" ? 60_000 : frame === "5m" ? 5 * 60_000 : 15 * 60_000;
+
+/** IST calendar day, matching the backend's day key. */
+const istDayKey = () =>
+  new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 const SAMPLE_MS = 5000; // how often we snapshot OI/price for buildup history
 const HIST_MS = 20 * 60 * 1000; // keep 20 min of rolling samples per token
@@ -157,16 +147,27 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [oiFrame, setOiFrame] = useState<OiFrame>("5m"); // Call/Put OI chart timeframe
   const [histFrame, setHistFrame] = useState<OiFrame>("5m"); // OI-change histogram frame
   const [futFrame, setFutFrame] = useState<OiFrame>("5m"); // futures-OI chart timeframe
+  const [futHistFrame, setFutHistFrame] = useState<OiFrame>("5m"); // futures OI-change frame
   const [histRaw, setHistRaw] = useState<
     { t: number; totalCe: number; totalPe: number }[]
   >([]);
   const [expandedCard, setExpandedCard] = useState<
-    "chain" | "straddleChain" | "straddle" | "oi" | "hist" | "futoi" | null
+    | "chain"
+    | "straddleChain"
+    | "straddle"
+    | "oi"
+    | "hist"
+    | "futoi"
+    | "futhist"
+    | null
   >(null);
 
-  // NIFTY futures OI history (current/next/far month) from the server frames.
+  // NIFTY futures OI history from the server frames. Both futures charts read the
+  // CURRENT-month contract only, but each keeps its own timeframe selection.
   const [futRaw, setFutRaw] = useState<FuturesOiPoint[]>([]);
   const [futContracts, setFutContracts] = useState<FuturesOiContract[]>([]);
+  const [futHistRaw, setFutHistRaw] = useState<FuturesOiPoint[]>([]);
+  const [futHistContracts, setFutHistContracts] = useState<FuturesOiContract[]>([]);
 
   // Chart series sourced from the server frame caches.
   const [straddleRaw, setStraddleRaw] = useState<StraddleSpotPoint[]>([]);
@@ -399,45 +400,67 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, histFrame]);
 
-  // ---- NIFTY futures OI (current/next/far) for the selected timeframe ----
-  // Served by its own frame cache, but gated on `chain` because the card only
-  // renders once the chain-derived metrics exist — no point polling before that.
+  // ---- NIFTY futures OI, for the level chart and the change histogram ----
+  // Both cards read the same endpoint (inheriting the server's per-frame cache
+  // and Kite backfill) but keep independent timeframes, so we fetch the DISTINCT
+  // selected frames — one request when they happen to match. Gated on `chain`
+  // because the cards only render once the chain-derived metrics exist.
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
-    const load = () =>
-      fetchFuturesOiFrame(UNDERLYING, futFrame)
-        .then((r) => {
-          if (cancelled) return;
-          // The server coerces an unknown frame to 5m; ignore a mismatched
-          // response rather than labelling it with the requested timeframe.
-          if (r.frame !== futFrame) return;
-          setFutRaw(r.points);
-          setFutContracts(r.contracts);
-        })
-        .catch(() => {
-          /* keep whatever we have */
-        });
+    const load = () => {
+      for (const frame of Array.from(new Set<OiFrame>([futFrame, futHistFrame]))) {
+        fetchFuturesOiFrame(UNDERLYING, frame)
+          .then((r) => {
+            if (cancelled) return;
+            // The server coerces an unknown frame to 5m; ignore a mismatched
+            // response rather than labelling it with the requested timeframe.
+            if (r.frame !== frame) return;
+            if (frame === futFrame) {
+              setFutRaw(r.points);
+              setFutContracts(r.contracts);
+            }
+            if (frame === futHistFrame) {
+              setFutHistRaw(r.points);
+              setFutHistContracts(r.contracts);
+            }
+          })
+          .catch(() => {
+            /* keep whatever we have */
+          });
+      }
+    };
     load();
     const id = window.setInterval(load, 60000); // OI moves slowly; 60s refresh
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [authenticated, chain, futFrame]);
+  }, [authenticated, chain, futFrame, futHistFrame]);
 
   // First-difference of the frame series → per-bucket OI change (Call & Put).
+  // Buckets that aren't adjacent are skipped: capture only runs during market
+  // hours, so differencing across an overnight or weekend hole would draw the
+  // whole close→open move as if it happened in one 5m/15m bucket.
   const histPoints = useMemo<HistPoint[]>(() => {
+    const step = frameMs(histFrame);
     const out: HistPoint[] = [];
-    for (let i = 1; i < histRaw.length; i++) {
-      out.push({
-        t: histRaw[i]!.t,
-        ceChange: histRaw[i]!.totalCe - histRaw[i - 1]!.totalCe,
-        peChange: histRaw[i]!.totalPe - histRaw[i - 1]!.totalPe,
-      });
+    let prev: { t: number; ce: number; pe: number } | null = null;
+    for (const p of histRaw) {
+      // A zero total means "no reading" (e.g. a pre-open bucket), not "OI
+      // collapsed to nothing" — differencing against it would draw a bar the
+      // size of the entire open interest.
+      if (p.totalCe <= 0 || p.totalPe <= 0) continue;
+      if (prev && p.t - prev.t === step) {
+        out.push({
+          t: p.t,
+          values: [p.totalCe - prev.ce, p.totalPe - prev.pe],
+        });
+      }
+      prev = { t: p.t, ce: p.totalCe, pe: p.totalPe };
     }
     return out;
-  }, [histRaw]);
+  }, [histRaw, histFrame]);
 
   // ---- Periodic sampling: rolling per-token OI/price history ----
   // Powers the 5m/15m OI-change % + buildup fallback when the server baseline
@@ -600,22 +623,76 @@ export default function Analytics({ authenticated, onBack }: Props) {
     [ceOiSeries, peOiSeries],
   );
 
-  // One series per tracked futures contract, labelled by expiry month.
-  const futOiChart = useMemo<ChartSeries[]>(
-    () =>
-      futContracts.map((c) => ({
-        label: formatExpiry(c.expiry),
-        color: futColorFor(c.expiry),
+  /**
+   * Nearest contract that has NOT expired. The endpoint keeps a just-expired
+   * month in `contracts` for as long as its points are retained, so the first
+   * entry is not necessarily the current month.
+   */
+  const currentMonthOf = (contracts: FuturesOiContract[]) => {
+    const today = istDayKey();
+    return (
+      contracts
+        .filter((c) => c.expiry >= today)
+        .sort((a, b) => a.expiry.localeCompare(b.expiry))[0] ?? null
+    );
+  };
+
+  // Current-month futures OI only — the next/far months moved in lockstep and
+  // added no information to the level chart.
+  const currentFut = useMemo(() => currentMonthOf(futContracts), [futContracts]);
+  const futOiChart = useMemo<ChartSeries[]>(() => {
+    if (!currentFut) return [];
+    return [
+      {
+        label: `${formatExpiry(currentFut.expiry)} OI`,
+        color: FUT_COLOR,
         points: futRaw
           .map((p) => ({
             date: new Date(p.t).toISOString(),
-            value: p.legs.find((l) => l.expiry === c.expiry)?.oi ?? 0,
+            value: p.legs.find((l) => l.expiry === currentFut.expiry)?.oi ?? 0,
           }))
           .filter((p) => p.value > 0),
-      })),
-    [futContracts, futRaw],
-  );
+      },
+    ];
+  }, [currentFut, futRaw]);
   const hasFutOi = futOiChart.some((s) => s.points.length > 1);
+
+  // Per-bucket change in current-month futures OI. Buckets with no reading are
+  // skipped rather than differenced against 0, which would invent a huge swing.
+  const currentFutHist = useMemo(
+    () => currentMonthOf(futHistContracts),
+    [futHistContracts],
+  );
+  const futHistPoints = useMemo<HistPoint[]>(() => {
+    if (!currentFutHist) return [];
+    const step = frameMs(futHistFrame);
+    const out: HistPoint[] = [];
+    let prevOi: number | null = null;
+    let prevT: number | null = null;
+    for (const p of futHistRaw) {
+      const oi = p.legs.find((l) => l.expiry === currentFutHist.expiry)?.oi ?? 0;
+      // A non-positive reading means "no data", not "OI collapsed to zero".
+      if (oi <= 0) continue;
+      // Only difference genuinely adjacent buckets — see histPoints above.
+      if (prevOi !== null && prevT !== null && p.t - prevT === step) {
+        out.push({ t: p.t, values: [oi - prevOi] });
+      }
+      prevOi = oi;
+      prevT = p.t;
+    }
+    return out;
+  }, [currentFutHist, futHistRaw, futHistFrame]);
+  const futHistSeries = useMemo<HistSeries[]>(
+    () => [{ label: "Futures ΔOI", color: FUT_COLOR }],
+    [],
+  );
+  const oiHistSeries = useMemo<HistSeries[]>(
+    () => [
+      { label: "Call ΔOI", color: "var(--neg)" },
+      { label: "Put ΔOI", color: "var(--pos)" },
+    ],
+    [],
+  );
 
   // The option chain stays deliberately small until expanded: ATM ± 7 strikes
   // collapsed, the full ATM ± 30 band when expanded.
@@ -757,9 +834,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
             </div>
           </div>
 
-          {/* ---- Cards: row 1 = chain | straddle chain | ATM straddle,
-                 row 2 = Call/Put OI | OI change | NIFTY futures OI ---- */}
-          <div className="an-charts">
+          {/* ---- Row 1: the two tables + the straddle chart ---- */}
+          <div className="an-charts an-charts--3">
             <ChartCard
               title="Option Chain"
               expanded={expandedCard === "chain"}
@@ -919,9 +995,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 expanded={expandedCard === "straddle"}
               />
             </ChartCard>
+          </div>
 
+          {/* ---- Row 2: the four time-series charts ---- */}
+          <div className="an-charts an-charts--4">
             <ChartCard
-              title="Call OI vs Put OI"
+              title="Call vs Put OI"
               expanded={expandedCard === "oi"}
               onToggle={() => setExpandedCard((c) => (c === "oi" ? null : "oi"))}
               controls={
@@ -967,7 +1046,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
             </ChartCard>
 
             <ChartCard
-              title="Total Call/Put OI Change"
+              title="Call/Put ΔOI"
               expanded={expandedCard === "hist"}
               onToggle={() => setExpandedCard((c) => (c === "hist" ? null : "hist"))}
               controls={
@@ -994,6 +1073,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               <OiHistogram
                 key={histFrame}
                 points={histPoints}
+                series={oiHistSeries}
                 formatX={tsFmtFor(histFrame)}
                 height={expandedCard === "hist" ? bigChartH : 210}
                 expanded={expandedCard === "hist"}
@@ -1001,7 +1081,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
             </ChartCard>
 
             <ChartCard
-              title="NIFTY Futures OI"
+              title="Futures OI"
               expanded={expandedCard === "futoi"}
               onToggle={() => setExpandedCard((c) => (c === "futoi" ? null : "futoi"))}
               controls={
@@ -1042,6 +1122,47 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </div>
               )}
             </ChartCard>
+
+            <ChartCard
+              title="Futures ΔOI"
+              expanded={expandedCard === "futhist"}
+              onToggle={() =>
+                setExpandedCard((c) => (c === "futhist" ? null : "futhist"))
+              }
+              controls={
+                <div
+                  className="an-toggle"
+                  role="group"
+                  aria-label="Futures OI-change timeframe"
+                >
+                  {(["1m", "5m", "15m"] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`btn${futHistFrame === f ? " btn--primary" : ""}`}
+                      onClick={() => setFutHistFrame(f)}
+                      title={
+                        f === "1m"
+                          ? "per-minute change · last 1 day"
+                          : f === "5m"
+                            ? "per-5-min change · last 3 days"
+                            : "per-15-min change · last 1 week"
+                      }
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              }
+            >
+              <OiHistogram
+                key={futHistFrame}
+                points={futHistPoints}
+                series={futHistSeries}
+                formatX={tsFmtFor(futHistFrame)}
+                height={expandedCard === "futhist" ? bigChartH : 210}
+                expanded={expandedCard === "futhist"}
+              />
+            </ChartCard>
           </div>
         </>
       )}
@@ -1069,15 +1190,18 @@ function ChartCard({
   return (
     <div className={`an-chart-card${expanded ? " an-chart-card--expanded" : ""}`}>
       <div className="an-chart-head">
-        <h3>{title}</h3>
+        {/* title attribute so an ellipsised heading is still readable on hover */}
+        <h3 title={title}>{title}</h3>
         <div className="an-chart-controls">
           {controls}
+          {/* Icon-only: four cards in a row leave no width for a text label. */}
           <button
             className="btn an-expand"
             onClick={onToggle}
             title={expanded ? "Collapse" : "Expand"}
+            aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
           >
-            {expanded ? "✕ Close" : "⤢ Expand"}
+            {expanded ? "✕" : "⤢"}
           </button>
         </div>
       </div>

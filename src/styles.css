@@ -55,7 +55,6 @@
   --series-1: #58a6ff;
   --series-2: #3fb950;
   --series-3: #d29922;
-  --series-4: #bc8cff;
   --series-expired: #6e7681;
   --chart-grid: #23272e;
   --chart-guide: #333a44;
@@ -154,7 +153,6 @@
   --series-1: #175eb5;
   --series-2: #16752f;
   --series-3: #895c00;
-  --series-4: #6b3fa0;
   --series-expired: #526174;
   --chart-grid: #d9e0e8;
   --chart-guide: #8b98a8;
@@ -2244,22 +2242,43 @@ body {
 }
 
 /* ---- Charts ---- */
+/* Two card rows: three cards on top (tables + straddle), four time-series charts
+   below. minmax(0, 1fr) lets each column shrink below its scrollable content's
+   width so the cards keep their row and scroll internally instead of blowing the
+   grid out to full width. */
 .an-charts {
   display: grid;
-  /* minmax(0, 1fr) lets each column shrink below its scrollable content's
-     width so all three charts stay in ONE row and scroll internally instead
-     of blowing the grid out to full width. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-3);
-  margin: var(--sp-3) 0 var(--sp-6);
+  margin: var(--sp-3) 0;
 }
-@media (max-width: 900px) {
-  .an-charts {
+.an-charts--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* Bottom row — carries the page's trailing margin. */
+.an-charts--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: var(--sp-6);
+}
+/* Four charts need more room than three, so they fold to 2x2 earlier — while the
+   card is still wide enough to show a full title next to the controls. */
+@media (max-width: 1320px) {
+  .an-charts--4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+@media (max-width: 900px) {
+  .an-charts--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* Below this the 2-up columns get too narrow for a title beside the controls. */
+@media (max-width: 700px) {
+  .an-charts--4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 600px) {
-  .an-charts {
+  .an-charts--3 {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -2279,12 +2298,20 @@ body {
   margin-bottom: var(--sp-2);
   flex-shrink: 0;
 }
+/* Titles never wrap: a wrapped title would make the head taller and push that
+   card's plot below its row-mates'. Four-up cards are narrow, so the title
+   ellipsises instead (full text stays available via its title attribute). */
 .an-chart-head h3 {
   margin: 0;
+  min-width: 0;
   font-size: var(--fs-4);
   font-weight: var(--fw-semibold);
   color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 .an-placeholder {
   min-height: 200px;
   display: flex;
@@ -2327,6 +2354,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+  /* Never squeezed: the title ellipsises instead (see .an-chart-head h3). */
+  flex-shrink: 0;
+}
+/* Compact so a narrow four-up card still fits title + timeframes + expand. */
+.an-chart-controls .btn {
+  padding: 0 var(--sp-2);
 }
 .an-scrollx {
   width: 100%;
