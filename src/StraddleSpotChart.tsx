@@ -27,12 +27,14 @@ const SPOT_COLOR = "var(--warn)";
 export default function StraddleSpotChart({ points, formatX, height = 210 }: Props) {
   const H = height;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const atEndRef = useRef(true);
   const [hover, setHover] = useState<number | null>(null);
 
+  // Follow to the latest only when already pinned to the right edge.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollLeft = el.scrollWidth;
-  }, [points.length]);
+    if (el && atEndRef.current) el.scrollLeft = el.scrollWidth;
+  }, [points]);
 
   if (points.length < 2) {
     return (
@@ -91,7 +93,14 @@ export default function StraddleSpotChart({ points, formatX, height = 210 }: Pro
           NIFTY Spot
         </span>
       </div>
-      <div className="an-scrollx" ref={scrollRef}>
+      <div
+        className="an-scrollx"
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atEndRef.current = el.scrollWidth - el.clientWidth - el.scrollLeft < 24;
+        }}
+      >
         <div className="an-hist-inner" style={{ width: `${svgW}px` }}>
           <svg
             className="oi-hist-svg"

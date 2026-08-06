@@ -15,8 +15,8 @@ interface Props {
 }
 
 const PAD = { l: 56, r: 14, t: 16, b: 30 };
-const GROUP_W = 26; // px per time bucket (two bars + gap)
-const BAR_W = 9;
+const GROUP_W = 42; // px per time bucket (wider, ~7-8 visible per compact view)
+const BAR_W = 15; // call & put bars sit side by side with a gap before the next bucket
 
 /**
  * Diverging OI-change histogram: for each time bucket a Call bar (red) and a
@@ -27,13 +27,15 @@ const BAR_W = 9;
 export default function OiHistogram({ points, formatX, height = 210 }: Props) {
   const H = height;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const atEndRef = useRef(true); // whether the user is pinned to the latest bar
   const [hover, setHover] = useState<number | null>(null);
 
-  // Open scrolled fully to the right (latest bars) and follow new data.
+  // Follow new data to the right ONLY when already at the latest bar; if the
+  // user has scrolled into the past, leave their position untouched.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollLeft = el.scrollWidth;
-  }, [points.length]);
+    if (el && atEndRef.current) el.scrollLeft = el.scrollWidth;
+  }, [points]);
 
   if (points.length === 0) {
     return (
@@ -84,7 +86,14 @@ export default function OiHistogram({ points, formatX, height = 210 }: Props) {
           Put OI change
         </span>
       </div>
-      <div className="an-scrollx" ref={scrollRef}>
+      <div
+        className="an-scrollx"
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atEndRef.current = el.scrollWidth - el.clientWidth - el.scrollLeft < 24;
+        }}
+      >
         <div className="an-hist-inner" style={{ width: `${svgW}px` }}>
           <svg
             className="oi-hist-svg"

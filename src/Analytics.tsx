@@ -125,6 +125,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const atmRowRef = useRef<HTMLTableRowElement | null>(null);
   const didCenterRef = useRef(false);
   const oiScrollRef = useRef<HTMLDivElement | null>(null);
+  const oiAtEndRef = useRef(true);
 
   chainRef.current = chain;
 
@@ -464,12 +465,21 @@ export default function Analytics({ authenticated, onBack }: Props) {
     didCenterRef.current = true;
   }, [metrics]);
 
-  // Keep the Call/Put OI chart scrolled to the latest (right) by default, and
-  // re-anchor when the data, timeframe, or expand state changes.
+  // On a 60s data refresh, only follow to the latest if already pinned to the
+  // right edge — otherwise leave the user where they scrolled into the past.
   useEffect(() => {
     const el = oiScrollRef.current;
-    if (el) el.scrollLeft = el.scrollWidth;
-  }, [ceOiSeries, peOiSeries, oiFrame, expandedChart]);
+    if (el && oiAtEndRef.current) el.scrollLeft = el.scrollWidth;
+  }, [ceOiSeries, peOiSeries]);
+
+  // On a timeframe switch or expand toggle, reset to the latest (right).
+  useEffect(() => {
+    const el = oiScrollRef.current;
+    if (el) {
+      el.scrollLeft = el.scrollWidth;
+      oiAtEndRef.current = true;
+    }
+  }, [oiFrame, expandedChart]);
 
   // Taller charts when expanded to (near) full screen.
   const bigChartH = Math.max(
@@ -701,6 +711,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               }
             >
               <StraddleSpotChart
+                key={straddleFrame}
                 points={straddleRaw}
                 formatX={tsFmtFor(straddleFrame)}
                 height={expandedChart === "straddle" ? bigChartH : 210}
@@ -733,7 +744,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
               }
             >
               {ceOiSeries.length > 1 || peOiSeries.length > 1 ? (
-                <div className="an-scrollx an-oi-scroll" ref={oiScrollRef}>
+                <div
+                  className="an-scrollx an-oi-scroll"
+                  ref={oiScrollRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    oiAtEndRef.current =
+                      el.scrollWidth - el.clientWidth - el.scrollLeft < 24;
+                  }}
+                >
                   <div
                     className="an-scrollx-inner"
                     style={{
@@ -784,6 +803,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               }
             >
               <OiHistogram
+                key={histFrame}
                 points={histPoints}
                 formatX={tsFmtFor(histFrame)}
                 height={expandedChart === "hist" ? bigChartH : 210}
