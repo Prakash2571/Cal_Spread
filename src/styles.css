@@ -563,7 +563,9 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--sp-4);
-  align-items: start;
+  /* stretch so every card in a row shares the tallest card's height, giving a
+     uniform grid regardless of per-card content (e.g. missing OI lines). */
+  align-items: stretch;
 }
 
 @media (max-width: 1180px) {
@@ -686,6 +688,9 @@ body {
 /* ================ Card ================ */
 .card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* fill the (stretched) grid cell so all cards match height */
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface-1);
@@ -1193,6 +1198,7 @@ body {
 }
 
 .card-foot {
+  margin-top: auto; /* pin the trade button to the bottom of a stretched card */
   padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border);
 }

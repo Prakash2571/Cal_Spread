@@ -140,9 +140,11 @@ export default function StockCard({
                 <td>
                   <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
                   <span className="contract-meta">{days}d</span>
-                  {oi > 0 && (
-                    <span className="contract-oi">OI {fmtCompact(oi)}</span>
-                  )}
+                  {/* Always render the OI line (placeholder when absent) so every
+                      row — and therefore every card — has a consistent height. */}
+                  <span className="contract-oi">
+                    {oi > 0 ? `OI ${fmtCompact(oi)}` : "\u00A0"}
+                  </span>
                 </td>
                 <td className="num mono">{fmt(last)}</td>
                 <td
