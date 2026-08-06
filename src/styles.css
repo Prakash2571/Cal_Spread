@@ -2279,3 +2279,24 @@ body {
   width: 100%;
   height: 100%;
 }
+
+
+/* ---- Analytics: chart header controls + horizontal-scroll charts ---- */
+.an-chart-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.an-scrollx {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.an-scrollx-inner {
+  /* min-width is set inline (proportional to the number of points) so the
+     chart grows wider than the viewport and the container scrolls sideways. */
+  height: 100%;
+}
+.an-chart-card--expanded .an-scrollx {
+  height: 100%;
+}

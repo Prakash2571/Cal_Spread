@@ -722,3 +722,40 @@ export async function fetchOptionOiSeries(underlying: string): Promise<OptionOiS
   }
   return body;
 }
+
+
+/** Timeframe for the multi-frame Call/Put OI history chart. */
+export type OiFrame = "1m" | "5m" | "15m";
+
+export interface OptionOiFramePoint {
+  t: number;
+  totalCe: number;
+  totalPe: number;
+}
+
+export interface OptionOiFrameResponse {
+  frame: OiFrame;
+  intervalMin: number;
+  retentionMs: number;
+  points: OptionOiFramePoint[];
+}
+
+/**
+ * Retained Call/Put total-OI (24↑/ATM/26↓) history for one timeframe:
+ * 1m (last 1 day), 5m (last 3 days) or 15m (last 1 week). Backed by the
+ * server's per-frame caches (filled live + backfilled from Kite on downtime).
+ */
+export async function fetchOptionOiFrame(
+  underlying: string,
+  frame: OiFrame,
+): Promise<OptionOiFrameResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-oi-frame/${encodeURIComponent(underlying)}?frame=${frame}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionOiFrameResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load OI frame (HTTP ${res.status}).`);
+  }
+  return body;
+}

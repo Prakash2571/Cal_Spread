@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   fetchOptionChain,
   fetchOptionOiBaseline,
+  fetchOptionOiFrame,
   fetchOptionOiSeries,
   fetchQuotes,
   streamUrl,
+  type OiFrame,
   type OptionChain,
   type OptionChainStrike,
   type Tick,
@@ -94,6 +96,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
   const [interval, setIntervalMin] = useState<5 | 15>(5);
+  const [oiFrame, setOiFrame] = useState<OiFrame>("5m"); // Call/Put OI chart timeframe
   const [expandedChart, setExpandedChart] = useState<
     "straddle" | "oi" | "hist" | null
   >(null);
@@ -230,7 +233,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, interval]);
 
-  // ---- Seed charts with the full day's history from the per-day cache ----
+  // ---- Seed the ATM straddle chart with the full day's history ----
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
@@ -244,26 +247,45 @@ export default function Analytics({ authenticated, onBack }: Props) {
             .map((p) => ({ date: iso(p.t), value: p.straddle }))
             .slice(-MAX_SERIES_POINTS),
         );
-        setCeOiSeries(
-          r.points
-            .filter((p) => p.totalCe > 0)
-            .map((p) => ({ date: iso(p.t), value: p.totalCe }))
-            .slice(-MAX_SERIES_POINTS),
-        );
-        setPeOiSeries(
-          r.points
-            .filter((p) => p.totalPe > 0)
-            .map((p) => ({ date: iso(p.t), value: p.totalPe }))
-            .slice(-MAX_SERIES_POINTS),
-        );
       })
       .catch(() => {
-        /* charts will still accumulate live from the stream */
+        /* straddle chart will still accumulate live from the stream */
       });
     return () => {
       cancelled = true;
     };
   }, [authenticated, chain]);
+
+  // ---- Call/Put OI history for the selected timeframe (server frame cache) ----
+  useEffect(() => {
+    if (!authenticated || !chain) return;
+    let cancelled = false;
+    const iso = (t: number) => new Date(t).toISOString();
+    const load = () =>
+      fetchOptionOiFrame(UNDERLYING, oiFrame)
+        .then((r) => {
+          if (cancelled) return;
+          setCeOiSeries(
+            r.points
+              .filter((p) => p.totalCe > 0)
+              .map((p) => ({ date: iso(p.t), value: p.totalCe })),
+          );
+          setPeOiSeries(
+            r.points
+              .filter((p) => p.totalPe > 0)
+              .map((p) => ({ date: iso(p.t), value: p.totalPe })),
+          );
+        })
+        .catch(() => {
+          /* keep whatever we have */
+        });
+    load();
+    const id = window.setInterval(load, 60000); // OI moves slowly; 60s refresh
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [authenticated, chain, oiFrame]);
 
   // ---- Periodic sampling: rolling per-token history + chart points ----
   useEffect(() => {
@@ -302,22 +324,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
         }
       }
 
-      const lo = clamp(atmIdx - TOTAL_DOWN, 0, ch.strikes.length - 1);
-      const hi = clamp(atmIdx + TOTAL_UP, 0, ch.strikes.length - 1);
-      let totCe = 0;
-      let totPe = 0;
-      for (let i = lo; i <= hi; i++) {
-        totCe += tk[ch.strikes[i]!.ce_token]?.oi ?? 0;
-        totPe += tk[ch.strikes[i]!.pe_token]?.oi ?? 0;
-      }
-      if (totCe > 0)
-        setCeOiSeries((prev) =>
-          [...prev, { date: iso, value: totCe }].slice(-MAX_SERIES_POINTS),
-        );
-      if (totPe > 0)
-        setPeOiSeries((prev) =>
-          [...prev, { date: iso, value: totPe }].slice(-MAX_SERIES_POINTS),
-        );
+      // Note: the Call/Put OI history chart is driven by the server frame
+      // caches (see the option-oi-frame effect), not accumulated here.
     }, SAMPLE_MS);
     return () => window.clearInterval(id);
   }, [authenticated, chain]);
@@ -440,6 +448,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
   const timeFmt = (iso: string) =>
     new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+  // Intraday (1m) shows time only; multi-day frames (5m/15m) show date + time.
+  const frameFmt = (iso: string) => {
+    const d = new Date(iso);
+    return oiFrame === "1m"
+      ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+  };
 
   const straddleChart: ChartSeries[] = [
     { label: "ATM Straddle", color: "var(--series-1)", points: straddleSeries },
@@ -627,14 +648,49 @@ export default function Analytics({ authenticated, onBack }: Props) {
             </ChartCard>
 
             <ChartCard
-              title="Call OI vs Put OI (live)"
+              title="Call OI vs Put OI"
               expanded={expandedChart === "oi"}
               onToggle={() => setExpandedChart((c) => (c === "oi" ? null : "oi"))}
+              controls={
+                <div className="an-toggle" role="group" aria-label="OI chart timeframe">
+                  {(["1m", "5m", "15m"] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`btn${oiFrame === f ? " btn--primary" : ""}`}
+                      onClick={() => setOiFrame(f)}
+                      title={
+                        f === "1m"
+                          ? "1-minute · last 1 day"
+                          : f === "5m"
+                            ? "5-minute · last 3 days"
+                            : "15-minute · last 1 week"
+                      }
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              }
             >
               {ceOiSeries.length > 1 || peOiSeries.length > 1 ? (
-                <LineChart series={oiChart} format={fmtCompact} formatX={timeFmt} />
+                <div className="an-scrollx">
+                  <div
+                    className="an-scrollx-inner"
+                    style={{
+                      minWidth: `${Math.max(
+                        760,
+                        Math.max(ceOiSeries.length, peOiSeries.length) * 7,
+                      )}px`,
+                    }}
+                  >
+                    <LineChart series={oiChart} format={fmtCompact} formatX={frameFmt} />
+                  </div>
+                </div>
               ) : (
-                <div className="chart-empty">Collecting live OI data…</div>
+                <div className="chart-empty">
+                  No OI history yet for this timeframe — it fills as the day
+                  progresses (or backfills from history).
+                </div>
               )}
             </ChartCard>
 
@@ -654,25 +710,34 @@ export default function Analytics({ authenticated, onBack }: Props) {
   );
 }
 
-/** A chart panel with an expand-to-full / collapse toggle. */
+/** A chart panel with optional header controls and an expand/collapse toggle. */
 function ChartCard({
   title,
   expanded,
   onToggle,
+  controls,
   children,
 }: {
   title: string;
   expanded: boolean;
   onToggle: () => void;
+  controls?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className={`an-chart-card${expanded ? " an-chart-card--expanded" : ""}`}>
       <div className="an-chart-head">
         <h3>{title}</h3>
-        <button className="btn an-expand" onClick={onToggle} title={expanded ? "Collapse" : "Expand"}>
-          {expanded ? "✕ Close" : "⤢ Expand"}
-        </button>
+        <div className="an-chart-controls">
+          {controls}
+          <button
+            className="btn an-expand"
+            onClick={onToggle}
+            title={expanded ? "Collapse" : "Expand"}
+          >
+            {expanded ? "✕ Close" : "⤢ Expand"}
+          </button>
+        </div>
       </div>
       <div className="an-chart-body">{children}</div>
     </div>
