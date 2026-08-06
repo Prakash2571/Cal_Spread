@@ -31,6 +31,7 @@ import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
 import AccessTokenModal from "./AccessTokenModal.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
+import Analytics from "./Analytics.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -535,6 +536,11 @@ export default function App() {
     );
   }
 
+  // Public NIFTY options analytics page.
+  if (route === "/analytics") {
+    return <Analytics authenticated={authenticated} onBack={() => navigate("/")} />;
+  }
+
   // Stock detail page with price/OI history charts.
   if (route.startsWith("/stock/")) {
     const sym = decodeURIComponent(route.slice("/stock/".length));
@@ -641,6 +647,13 @@ export default function App() {
           <span className="count">
             <strong>{filtered.length.toLocaleString()}</strong> stocks
           </span>
+          <button
+            className="btn"
+            onClick={() => navigate("/analytics")}
+            title="NIFTY options analytics: live option chain, OI change & charts"
+          >
+            Analytics
+          </button>
           {adminAuthenticated && (
             <button
               className={`btn${arbOnly ? " btn--primary" : ""}`}

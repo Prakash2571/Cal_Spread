@@ -619,3 +619,145 @@ export async function fetchInstruments(params?: {
   }
   return body;
 }
+
+
+// ---------------- Options analytics: live option chain ----------------
+
+/** One strike row of the option chain (CE + PE instrument tokens). */
+export interface OptionChainStrike {
+  strike: number;
+  ce_token: number;
+  pe_token: number;
+  ce_symbol: string;
+  pe_symbol: string;
+}
+
+/** ATM-centered option-chain band returned by GET /api/option-chain/:underlying. */
+export interface OptionChain {
+  underlying: string;
+  name: string;
+  spot_token: number;
+  spot: number;
+  atm_strike: number;
+  expiry: string;
+  expiries: string[];
+  lot_size: number;
+  strikes: OptionChainStrike[];
+}
+
+/**
+ * Fetch the ATM-centered option chain (CE/PE tokens per strike) for an index
+ * or stock. The band is generous (ATM ± ~40) so the frontend can recompute the
+ * live ATM from the streamed spot tick and still show ATM ± 30.
+ */
+export async function fetchOptionChain(
+  underlying: string,
+  expiry?: string,
+): Promise<OptionChain> {
+  const qs = expiry ? `?expiry=${encodeURIComponent(expiry)}` : "";
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-chain/${encodeURIComponent(underlying)}${qs}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionChain & { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      body.error ?? `Failed to load option chain (HTTP ${res.status}).`,
+    );
+  }
+  return body;
+}
+
+
+/**
+ * Per-token OI + LTP as of `minutes` ago, from the backend's per-day intraday
+ * cache. Used as the baseline for 5m/15m OI-change % and OI-buildup, so those
+ * values are correct immediately on load at any time of day.
+ */
+export interface OptionOiBaseline {
+  day: string;
+  expiry: string | null;
+  minutes: number;
+  tokens: Record<number, { oi: number; ltp: number; t: number }>;
+}
+
+export async function fetchOptionOiBaseline(
+  underlying: string,
+  minutes: number,
+): Promise<OptionOiBaseline> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-oi-baseline/${encodeURIComponent(underlying)}?minutes=${minutes}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionOiBaseline & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load OI baseline (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
+/** One captured minute of aggregate intraday option-OI data. */
+export interface OptionOiSeriesPoint {
+  t: number;
+  totalCe: number;
+  totalPe: number;
+  straddle: number;
+}
+
+export interface OptionOiSeries {
+  day: string;
+  expiry: string | null;
+  points: OptionOiSeriesPoint[];
+}
+
+/** Full-day per-minute aggregates (total Call/Put OI + ATM straddle) for charts. */
+export async function fetchOptionOiSeries(underlying: string): Promise<OptionOiSeries> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-oi-series/${encodeURIComponent(underlying)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionOiSeries & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load OI series (HTTP ${res.status}).`);
+  }
+  return body;
+}
+
+
+/** Timeframe for the multi-frame Call/Put OI history chart. */
+export type OiFrame = "1m" | "5m" | "15m";
+
+export interface OptionOiFramePoint {
+  t: number;
+  totalCe: number;
+  totalPe: number;
+  straddle: number;
+  spot: number;
+}
+
+export interface OptionOiFrameResponse {
+  frame: OiFrame;
+  intervalMin: number;
+  retentionMs: number;
+  points: OptionOiFramePoint[];
+}
+
+/**
+ * Retained Call/Put total-OI (24↑/ATM/26↓) history for one timeframe:
+ * 1m (last 1 day), 5m (last 3 days) or 15m (last 1 week). Backed by the
+ * server's per-frame caches (filled live + backfilled from Kite on downtime).
+ */
+export async function fetchOptionOiFrame(
+  underlying: string,
+  frame: OiFrame,
+): Promise<OptionOiFrameResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-oi-frame/${encodeURIComponent(underlying)}?frame=${frame}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionOiFrameResponse & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Failed to load OI frame (HTTP ${res.status}).`);
+  }
+  return body;
+}
