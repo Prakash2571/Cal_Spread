@@ -4,6 +4,7 @@ import {
   fetchOptionChain,
   fetchOptionOiBaseline,
   fetchOptionOiFrame,
+  fetchOptionPrevClose,
   fetchQuotes,
   streamUrl,
   type FuturesOiContract,
@@ -11,17 +12,32 @@ import {
   type OiFrame,
   type OptionChain,
   type OptionChainStrike,
+  type OptionPrevClose,
   type Tick,
 } from "./api.ts";
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
 import OiHistogram, { type HistPoint, type HistSeries } from "./OiHistogram.tsx";
-import StraddleSpotChart, { type StraddleSpotPoint } from "./StraddleSpotChart.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import { fmt, fmtCompact, formatExpiry } from "./format.ts";
 
 type TickMap = Record<number, Tick>;
-type ChainInterval = 5 | 15;
+/** Comparison window for the chain's OI Δ% and buildup columns. */
+type ChainInterval = 5 | 15 | "day";
+type MinuteInterval = 5 | 15;
 type OptionBaseline = Record<number, { oi: number; ltp: number; t: number }>;
+
+const CHAIN_INTERVALS: ChainInterval[] = [5, 15, "day"];
+const intervalLabel = (i: ChainInterval) => (i === "day" ? "Day" : `${i}m`);
+const isMinuteInterval = (i: ChainInterval): i is MinuteInterval => i !== "day";
+
+/** No previous-session baseline yet (or not one that applies to today). */
+const EMPTY_PREV_CLOSE: OptionPrevClose = {
+  forDay: "",
+  closedOn: null,
+  expiry: null,
+  complete: false,
+  tokens: {},
+};
 
 // Baselines are sampled once per minute on the backend. Accept the nearest
 // sample just before the requested cutoff, but reject incomplete or stale
@@ -32,9 +48,7 @@ const BASELINE_NEWER_TOLERANCE_MS = 5 * 1000;
 /** The underlying this analytics page is built for. */
 const UNDERLYING = "NIFTY";
 
-const DISPLAY_HALF = 30; // show ATM ± 30 strikes
-const CHAIN_COMPACT_HALF = 7; // collapsed option chain: ATM ± 7 strikes
-const STRADDLE_HALF = 10; // straddle chain: ATM ± 10 strikes
+const CHAIN_COMPACT_HALF = 14; // collapsed option chain: ATM ± 14 strikes
 const TOTAL_UP = 24; // total-OI window: 24 strikes above ATM
 const TOTAL_DOWN = 26; // total-OI window: 26 strikes below ATM
 
@@ -153,7 +167,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
   >([]);
   const [expandedCard, setExpandedCard] = useState<
     | "chain"
-    | "straddleChain"
     | "straddle"
     | "oi"
     | "hist"
@@ -170,26 +183,31 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [futHistContracts, setFutHistContracts] = useState<FuturesOiContract[]>([]);
 
   // Chart series sourced from the server frame caches.
-  const [straddleRaw, setStraddleRaw] = useState<StraddleSpotPoint[]>([]);
+  const [straddleRaw, setStraddleRaw] = useState<{ t: number; straddle: number }[]>(
+    [],
+  );
   const [ceOiSeries, setCeOiSeries] = useState<{ date: string; value: number }[]>([]);
   const [peOiSeries, setPeOiSeries] = useState<{ date: string; value: number }[]>([]);
 
   // Server-provided OI + LTP baselines keyed by timeframe. Keeping both
   // caches lets OI Δ% and buildup use independent 5m/15m selections.
-  const [baselines, setBaselines] = useState<Record<ChainInterval, OptionBaseline>>({
+  const [baselines, setBaselines] = useState<Record<MinuteInterval, OptionBaseline>>({
     5: {},
     15: {},
   });
+  // Previous session's close per token — the "Day" comparison baseline. Unlike the
+  // minute baselines this needs no freshness window: it is a fixed reference point
+  // the server only publishes while it is valid for today. Polled regardless of the
+  // toggles so the Day option can be disabled up front rather than selected and
+  // then found empty.
+  const [prevClose, setPrevClose] = useState<OptionPrevClose>(EMPTY_PREV_CLOSE);
 
   const tickBuffer = useRef<TickMap>({});
   const ticksRef = useRef<TickMap>({});
   const chainRef = useRef<OptionChain | null>(null);
   const histRef = useRef<Map<number, Sample[]>>(new Map());
   const atmRowRef = useRef<HTMLTableRowElement | null>(null);
-  const straddleAtmRowRef = useRef<HTMLTableRowElement | null>(null);
-  const didCenterStraddleRef = useRef(false);
   const didCenterRef = useRef(false);
-
 
   chainRef.current = chain;
 
@@ -205,11 +223,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
         // Reset per-chain accumulators when the instrument set changes.
         histRef.current = new Map();
         didCenterRef.current = false;
-        didCenterStraddleRef.current = false;
         setStraddleRaw([]);
         setCeOiSeries([]);
         setPeOiSeries([]);
         setBaselines({ 5: {}, 15: {} });
+        // Token-keyed, so a different expiry invalidates it.
+        setPrevClose(EMPTY_PREV_CLOSE);
         setTicks({});
         tickBuffer.current = {};
         ticksRef.current = {};
@@ -290,18 +309,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const selected = Array.from(
       new Set<ChainInterval>([oiInterval, bldInterval]),
     );
-    const clearSelected = () => {
-      setBaselines((prev) => {
-        const next = { ...prev };
-        for (const frame of selected) next[frame] = {};
-        return next;
-      });
-    };
+    const minuteFrames = selected.filter(isMinuteInterval);
     // Never expose a retained baseline under a newly selected timeframe while
-    // its fresh request is still pending.
-    clearSelected();
+    // its fresh request is still pending. The previous-session baseline is NOT
+    // cleared here: it is a fixed reference for the day, so switching a toggle
+    // between 5m and 15m must not blank a Day column that is already correct.
+    setBaselines((prev) => {
+      const next = { ...prev };
+      for (const frame of minuteFrames) next[frame] = {};
+      return next;
+    });
+
     const load = () => {
-      for (const frame of selected) {
+      for (const frame of minuteFrames) {
         fetchOptionOiBaseline(UNDERLYING, frame)
           .then((r) => {
             if (!cancelled) {
@@ -317,6 +337,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
             }
           });
       }
+      // Always polled, even when neither toggle is on "day": knowing whether a
+      // baseline exists is what lets the Day buttons be disabled instead of
+      // selectable-then-empty. The server only returns tokens while the baseline
+      // is valid for today, so an empty map means "not available yet".
+      fetchOptionPrevClose(UNDERLYING)
+        .then((r) => {
+          if (!cancelled) setPrevClose({ ...r, tokens: r.tokens ?? {} });
+        })
+        .catch(() => {
+          // Deliberately keeps the last good baseline: it's a fixed reference for
+          // the whole day, so a dropped poll says nothing about its validity, and
+          // discarding it would blank a correct column.
+        });
     };
     load();
     const id = window.setInterval(load, 30000); // slide both windows every 30s
@@ -326,7 +359,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, oiInterval, bldInterval]);
 
-  // ---- Auto-ATM straddle + NIFTY spot history for the selected timeframe ----
+  // ---- Auto-ATM straddle premium history for the selected timeframe ----
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
@@ -334,9 +367,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       fetchOptionOiFrame(UNDERLYING, straddleFrame)
         .then((r) => {
           if (cancelled) return;
-          setStraddleRaw(
-            r.points.map((p) => ({ t: p.t, straddle: p.straddle, spot: p.spot })),
-          );
+          setStraddleRaw(r.points.map((p) => ({ t: p.t, straddle: p.straddle })));
         })
         .catch(() => {
           /* keep whatever we have */
@@ -493,17 +524,27 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const spot = ticks[chain.spot_token]?.last_price ?? chain.spot;
     const atmIdx = nearestStrikeIdx(strikes, spot);
     const atmStrike = strikes[atmIdx]?.strike ?? chain.atm_strike;
-    const oiCutoff = Date.now() - oiInterval * 60 * 1000;
-    const bldCutoff = Date.now() - bldInterval * 60 * 1000;
+    const cutoffFor = (frame: MinuteInterval) => Date.now() - frame * 60 * 1000;
 
     const isValidBaselineTime = (sampleTime: number, cutoff: number) =>
       sampleTime >= cutoff - BASELINE_OLDER_TOLERANCE_MS &&
       sampleTime <= cutoff + BASELINE_NEWER_TOLERANCE_MS;
 
-    // Resolve the selected server baseline, falling back to the client rolling
-    // history only when a complete sample exists at the matching cutoff.
+    /**
+     * Baseline for one token under one comparison window.
+     *
+     * "Day" is the previous session's close — a fixed reference the server only
+     * serves while it is valid for today, so it needs no freshness check and has
+     * no client-side fallback. The minute windows prefer the server baseline and
+     * fall back to the client's rolling history, but only when a sample actually
+     * lands at the requested cutoff.
+     */
     const baseOf = (token: number, frame: ChainInterval): Sample | null => {
-      const cutoff = frame === oiInterval ? oiCutoff : bldCutoff;
+      if (frame === "day") {
+        const pc = prevClose.tokens[token];
+        return pc && pc.oi > 0 ? { t: 0, oi: pc.oi, ltp: pc.ltp } : null;
+      }
+      const cutoff = cutoffFor(frame);
       const b = baselines[frame][token];
       if (b && isValidBaselineTime(b.t, cutoff)) return b;
       const arr = histRef.current.get(token);
@@ -535,28 +576,30 @@ export default function Analytics({ authenticated, onBack }: Props) {
       return { oiPct, buildup };
     };
 
-    const dispLo = clamp(atmIdx - DISPLAY_HALF, 0, strikes.length - 1);
-    const dispHi = clamp(atmIdx + DISPLAY_HALF, 0, strikes.length - 1);
-    const rows = [];
-    for (let i = dispLo; i <= dispHi; i++) {
-      const s = strikes[i]!;
+    // Every strike the chain API returned — the straddle column makes the whole
+    // ladder useful, not just the band around ATM.
+    const rows = strikes.map((s, i) => {
       const ce = ticks[s.ce_token];
       const pe = ticks[s.pe_token];
       const ceCh = changeFor(s.ce_token);
       const peCh = changeFor(s.pe_token);
-      rows.push({
+      const ceLtp = ce?.last_price ?? null;
+      const peLtp = pe?.last_price ?? null;
+      return {
         strike: s.strike,
         isAtm: i === atmIdx,
-        ceLtp: ce?.last_price ?? null,
+        ceLtp,
         ceOi: ce?.oi ?? null,
         ceOiPct: ceCh.oiPct,
         ceBuildup: ceCh.buildup,
-        peLtp: pe?.last_price ?? null,
+        peLtp,
         peOi: pe?.oi ?? null,
         peOiPct: peCh.oiPct,
         peBuildup: peCh.buildup,
-      });
-    }
+        // Straddle premium for this strike (call + put), the old Straddle Chain.
+        straddle: ceLtp !== null && peLtp !== null ? ceLtp + peLtp : null,
+      };
+    });
 
     // Total OI (24 above / ATM / 26 below).
     const totLo = clamp(atmIdx - TOTAL_DOWN, 0, strikes.length - 1);
@@ -570,7 +613,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const pcr = totalCe > 0 ? totalPe / totalCe : null;
 
     return { rows, atmStrike, spot, totalCe, totalPe, pcr };
-  }, [chain, ticks, oiInterval, bldInterval, baselines]);
+  }, [chain, ticks, oiInterval, bldInterval, baselines, prevClose]);
 
   // Center the ATM row once the chain + first ticks are in.
   useEffect(() => {
@@ -579,17 +622,18 @@ export default function Analytics({ authenticated, onBack }: Props) {
     didCenterRef.current = true;
   }, [metrics]);
 
-  // Expanding/collapsing the chain swaps the visible band (ATM ± 30 vs ± 7).
-  // The scroll container is reused, so re-center ATM in BOTH directions —
-  // otherwise the retained scrollTop is clamped and hides the ATM row.
+  // Expanding/collapsing the chain swaps the visible band (the whole ladder vs
+  // ATM ± CHAIN_COMPACT_HALF). The scroll container is reused, so re-center ATM in
+  // BOTH directions — otherwise the retained scrollTop is clamped and hides the
+  // ATM row.
   const chainExpanded = expandedCard === "chain";
   useEffect(() => {
     centerRowInScroller(atmRowRef.current);
   }, [chainExpanded]);
 
-  // Horizontal scrolling for the two line charts (follow-to-latest, and reset on
-  // a timeframe switch via the `key` prop) is owned by LineChart itself, the same
-  // way StraddleSpotChart and OiHistogram own theirs.
+  // Horizontal scrolling for the line charts (follow-to-latest, and reset on a
+  // timeframe switch via the `key` prop) is owned by LineChart itself, the same
+  // way OiHistogram owns its own.
 
   // Taller charts when expanded to (near) full screen. 125px covers the measured
   // card chrome: padding (24) + head (32) + readout strip incl. margin (42) +
@@ -694,8 +738,25 @@ export default function Analytics({ authenticated, onBack }: Props) {
     [],
   );
 
-  // The option chain stays deliberately small until expanded: ATM ± 7 strikes
-  // collapsed, the full ATM ± 30 band when expanded.
+  // How much of the LOADED chain the previous-session baseline actually covers.
+  // Measured by token overlap rather than by comparing expiry strings, so it also
+  // catches the case the cache only ever holds the nearest expiry while the user
+  // is looking at a later one — there the baseline is real but useless here, and
+  // "Day" would silently render a full column of dashes.
+  const dayBaselineTokens = useMemo(() => {
+    if (!chain) return 0;
+    let n = 0;
+    for (const s of chain.strikes) {
+      if (prevClose.tokens[s.ce_token]) n++;
+      if (prevClose.tokens[s.pe_token]) n++;
+    }
+    return n;
+  }, [chain, prevClose]);
+  const chainTokenCount = (chain?.strikes.length ?? 0) * 2;
+  const dayAvailable = dayBaselineTokens > 0;
+
+  // The chain now holds every strike the API returned, so the collapsed card
+  // shows a band around ATM and expanding reveals the whole ladder.
   const chainRows = useMemo(() => {
     const rows = metrics?.rows ?? [];
     if (expandedCard === "chain" || rows.length === 0) return rows;
@@ -706,42 +767,35 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return rows.slice(lo, hi + 1);
   }, [metrics, expandedCard]);
 
-  // Straddle chain: ATM ± 10 strikes with the straddle premium (CE LTP + PE LTP).
-  const straddleChain = useMemo(() => {
-    const rows = metrics?.rows ?? [];
-    if (rows.length === 0) return [];
-    const atm = rows.findIndex((r) => r.isAtm);
-    const centre = atm < 0 ? Math.floor(rows.length / 2) : atm;
-    const lo = Math.max(0, centre - STRADDLE_HALF);
-    const hi = Math.min(rows.length - 1, centre + STRADDLE_HALF);
-    return rows.slice(lo, hi + 1).map((r) => ({
-      strike: r.strike,
-      isAtm: r.isAtm,
-      ceLtp: r.ceLtp,
-      peLtp: r.peLtp,
-      straddle: r.ceLtp !== null && r.peLtp !== null ? r.ceLtp + r.peLtp : null,
-    }));
-  }, [metrics]);
+  // ATM straddle premium over time — the NIFTY spot overlay was dropped, so this
+  // is a single-series chart and uses the shared LineChart like the others.
+  const straddleChart = useMemo<ChartSeries[]>(
+    () => [
+      {
+        label: "ATM Straddle",
+        color: "var(--series-1)",
+        points: straddleRaw
+          .filter((p) => p.straddle > 0)
+          .map((p) => ({ date: new Date(p.t).toISOString(), value: p.straddle })),
+      },
+    ],
+    [straddleRaw],
+  );
+  const hasStraddle = straddleChart.some((s) => s.points.length > 1);
 
-  // The straddle chain is 21 rows in a ~210px scroller, so ATM starts below the
-  // fold unless we center it. Center ONCE when the rows first arrive, then only
-  // on expand/collapse: `straddleChain` gets a new identity on every 500ms tick
-  // flush, and re-centering that often would fight the user's own scrolling.
-  // NOTE: must stay below the `straddleChain` memo — a dependency array is
-  // evaluated during render, so referencing it earlier is a TDZ error.
-  const straddleChainExpanded = expandedCard === "straddleChain";
-  useEffect(() => {
-    if (didCenterStraddleRef.current || straddleChain.length === 0) return;
-    // No ATM row rendered yet — leave the flag unset so the next `straddleChain`
-    // identity change (every metrics recompute) re-attempts the centering.
-    if (!straddleAtmRowRef.current) return;
-    centerRowInScroller(straddleAtmRowRef.current);
-    didCenterStraddleRef.current = true;
-  }, [straddleChain]);
-
-  useEffect(() => {
-    centerRowInScroller(straddleAtmRowRef.current);
-  }, [straddleChainExpanded]);
+  /** Tooltip for the Day buttons — names the session, or why it's unavailable. */
+  const dayTitle = (what: "Change" | "Buildup") => {
+    if (!dayAvailable) {
+      return "No previous-session close cached for this expiry yet — the server is still rebuilding it";
+    }
+    const gap =
+      dayBaselineTokens < chainTokenCount
+        ? ` (${dayBaselineTokens} of ${chainTokenCount} contracts covered${
+            prevClose.complete === false ? " so far" : ""
+          })`
+        : "";
+    return `${what} vs the ${prevClose.closedOn ?? "previous"} close${gap}`;
+  };
 
   const pctCell = (v: number | null) =>
     v === null ? (
@@ -813,60 +867,77 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
       {metrics && (
         <>
-          {/* ---- Summary strip ---- */}
-          <div className="an-summary">
-            <div className="an-stat">
-              <span className="an-stat-k">Total Call OI</span>
-              <span className="an-stat-v neg">{fmtCompact(metrics.totalCe)}</span>
-              <span className="an-stat-sub">24↑ · ATM · 26↓</span>
-            </div>
-            <div className="an-stat">
-              <span className="an-stat-k">Total Put OI</span>
-              <span className="an-stat-v pos">{fmtCompact(metrics.totalPe)}</span>
-              <span className="an-stat-sub">24↑ · ATM · 26↓</span>
-            </div>
-            <div className="an-stat">
-              <span className="an-stat-k">PCR (OI)</span>
-              <span className="an-stat-v">
-                {metrics.pcr === null ? "—" : metrics.pcr.toFixed(2)}
-              </span>
-              <span className="an-stat-sub">Put ÷ Call</span>
-            </div>
-          </div>
-
-          {/* ---- Row 1: the two tables + the straddle chart ---- */}
-          <div className="an-charts an-charts--3">
+          {/* ---- Chain (2 rows tall) + the five time-series charts ---- */}
+          <div className="an-charts an-charts--dash">
             <ChartCard
+              className="an-card--chain"
               title="Option Chain"
               expanded={expandedCard === "chain"}
               onToggle={() => setExpandedCard((c) => (c === "chain" ? null : "chain"))}
               bodyClass="an-table-card"
             >
+              {/* Totals live here now instead of a full-width strip above. */}
+              <div className="an-chain-stats">
+                <span className="an-chain-stat">
+                  <span className="an-chain-stat-k">Call OI</span>
+                  <span className="an-chain-stat-v neg">
+                    {fmtCompact(metrics.totalCe)}
+                  </span>
+                </span>
+                <span className="an-chain-stat">
+                  <span className="an-chain-stat-k">Put OI</span>
+                  <span className="an-chain-stat-v pos">
+                    {fmtCompact(metrics.totalPe)}
+                  </span>
+                </span>
+                <span className="an-chain-stat">
+                  <span className="an-chain-stat-k">PCR</span>
+                  <span className="an-chain-stat-v">
+                    {metrics.pcr === null ? "—" : metrics.pcr.toFixed(2)}
+                  </span>
+                </span>
+                <span className="an-chain-stat-sub">24↑ · ATM · 26↓</span>
+              </div>
               <div className="an-chain-bar">
                 <div className="an-chain-control">
                   <span>OI Δ%</span>
-                  <div className="an-toggle" role="group" aria-label="OI change timeframe">
-                    {([5, 15] as const).map((m) => (
+                  <div className="an-toggle" role="group" aria-label="OI change window">
+                    {CHAIN_INTERVALS.map((m) => (
                       <button
-                        key={m}
+                        key={String(m)}
                         className={`btn${oiInterval === m ? " btn--primary" : ""}`}
                         onClick={() => setOiInterval(m)}
+                        // Never disable the live selection: the baseline can go
+                        // missing after it was picked (expiry switch), and a
+                        // disabled-but-active button would trap the user there.
+                        disabled={m === "day" && !dayAvailable && oiInterval !== m}
+                        title={
+                          m === "day"
+                            ? dayTitle("Change")
+                            : `Change over the last ${m} minutes`
+                        }
                       >
-                        {m}m
+                        {intervalLabel(m)}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="an-chain-control">
                   <span>Bld</span>
-                  <div className="an-toggle" role="group" aria-label="Buildup timeframe">
-                    {([5, 15] as const).map((m) => (
+                  <div className="an-toggle" role="group" aria-label="Buildup window">
+                    {CHAIN_INTERVALS.map((m) => (
                       <button
-                        key={m}
+                        key={String(m)}
                         className={`btn${bldInterval === m ? " btn--primary" : ""}`}
                         onClick={() => setBldInterval(m)}
+                        disabled={m === "day" && !dayAvailable && bldInterval !== m}
+                        title={
+                          m === "day"
+                            ? dayTitle("Buildup")
+                            : `Buildup over the last ${m} minutes`
+                        }
                       >
-                        {m}m
+                        {intervalLabel(m)}
                       </button>
                     ))}
                   </div>
@@ -877,7 +948,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   <thead>
                     <tr className="an-chain-side">
                       <th colSpan={4} className="an-calls">CALLS</th>
-                      <th className="an-strike-h">STRIKE</th>
+                      <th colSpan={2} className="an-strike-h">STRIKE</th>
                       <th colSpan={4} className="an-puts">PUTS</th>
                     </tr>
                     <tr>
@@ -886,6 +957,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                       <th>Bld</th>
                       <th>LTP</th>
                       <th className="an-strike-h">Level</th>
+                      <th className="an-strike-h">Straddle</th>
                       <th>LTP</th>
                       <th>Bld</th>
                       <th>OI Δ%</th>
@@ -904,6 +976,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                         <td className="an-bld-cell">{buildupBadge(r.ceBuildup)}</td>
                         <td className="num an-ce-ltp">{fmt(r.ceLtp)}</td>
                         <td className="num an-strike">{r.strike}</td>
+                        <td className="num an-straddle-v">{fmt(r.straddle)}</td>
                         <td className="num an-pe-ltp">{fmt(r.peLtp)}</td>
                         <td className="an-bld-cell">{buildupBadge(r.peBuildup)}</td>
                         <td className="num">{pctCell(r.peOiPct)}</td>
@@ -913,50 +986,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   </tbody>
                 </table>
               </div>
-              {expandedCard !== "chain" && (
-                <div className="an-card-note">
-                  {chainRows.length} strikes around ATM — expand for the full band
-                </div>
-              )}
-            </ChartCard>
-
-            <ChartCard
-              title="Straddle Chain"
-              expanded={expandedCard === "straddleChain"}
-              onToggle={() =>
-                setExpandedCard((c) => (c === "straddleChain" ? null : "straddleChain"))
-              }
-              bodyClass="an-table-card"
-            >
-              <div className="an-chain-wrap">
-                <table className="an-chain an-straddle-chain">
-                  <thead>
-                    <tr>
-                      <th className="an-strike-h">STRIKE</th>
-                      <th>CALL</th>
-                      <th>PUT</th>
-                      <th>STRADDLE</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {straddleChain.map((r) => (
-                      <tr
-                        key={r.strike}
-                        ref={r.isAtm ? straddleAtmRowRef : undefined}
-                        className={`${r.isAtm ? "an-atm" : ""} an-row`}
-                      >
-                        <td className="num an-strike">{r.strike}</td>
-                        <td className="num an-ce-ltp">{fmt(r.ceLtp)}</td>
-                        <td className="num an-pe-ltp">{fmt(r.peLtp)}</td>
-                        <td className="num an-straddle-v">{fmt(r.straddle)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
               <div className="an-card-note">
-                {straddleChain.length} strikes around ATM · straddle = call LTP +
-                put LTP
+                {expandedCard === "chain"
+                  ? `${chainRows.length} strikes · straddle = call LTP + put LTP`
+                  : `${chainRows.length} of ${metrics.rows.length} strikes — expand for the full ladder`}
               </div>
             </ChartCard>
 
@@ -987,18 +1020,24 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </div>
               }
             >
-              <StraddleSpotChart
-                key={straddleFrame}
-                points={straddleRaw}
-                formatX={tsFmtFor(straddleFrame)}
-                height={expandedCard === "straddle" ? bigChartH : 210}
-                expanded={expandedCard === "straddle"}
-              />
+              {hasStraddle ? (
+                <LineChart
+                  key={straddleFrame}
+                  series={straddleChart}
+                  format={fmt}
+                  formatX={isoFmtFor(straddleFrame)}
+                  height={expandedCard === "straddle" ? bigChartH : 210}
+                  canvasWidth={Math.max(760, straddleRaw.length * 7)}
+                  expanded={expandedCard === "straddle"}
+                />
+              ) : (
+                <div className="chart-empty">
+                  No straddle history yet for this timeframe — it fills as the day
+                  progresses (or backfills from history).
+                </div>
+              )}
             </ChartCard>
-          </div>
 
-          {/* ---- Row 2: the four time-series charts ---- */}
-          <div className="an-charts an-charts--4">
             <ChartCard
               title="Call vs Put OI"
               expanded={expandedCard === "oi"}
@@ -1177,6 +1216,7 @@ function ChartCard({
   onToggle,
   controls,
   bodyClass,
+  className,
   children,
 }: {
   title: string;
@@ -1185,10 +1225,16 @@ function ChartCard({
   controls?: ReactNode;
   /** Extra class on the body (e.g. to lay a table card out as a column). */
   bodyClass?: string;
+  /** Extra class on the card itself (e.g. to place it in the grid). */
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className={`an-chart-card${expanded ? " an-chart-card--expanded" : ""}`}>
+    <div
+      className={`an-chart-card${expanded ? " an-chart-card--expanded" : ""}${
+        className ? ` ${className}` : ""
+      }`}
+    >
       <div className="an-chart-head">
         {/* title attribute so an ellipsised heading is still readable on hover */}
         <h3 title={title}>{title}</h3>

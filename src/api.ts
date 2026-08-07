@@ -696,6 +696,36 @@ export async function fetchOptionOiBaseline(
   return body;
 }
 
+/**
+ * Previous session's closing OI + LTP per option token — the baseline for the
+ * chain's "Day" change column. `tokens` is empty until the server has a baseline
+ * valid for today.
+ */
+export interface OptionPrevClose {
+  forDay: string;
+  closedOn: string | null;
+  expiry: string | null;
+  /** False while the server still has strikes left to reconstruct. */
+  complete?: boolean;
+  tokens: Record<number, { oi: number; ltp: number }>;
+}
+
+export async function fetchOptionPrevClose(
+  underlying: string,
+): Promise<OptionPrevClose> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/option-prev-close/${encodeURIComponent(underlying)}`,
+    { headers: getHeaders() },
+  );
+  const body = (await res.json()) as OptionPrevClose & { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      body.error ?? `Failed to load previous close (HTTP ${res.status}).`,
+    );
+  }
+  return body;
+}
+
 /** One captured minute of aggregate intraday option-OI data. */
 export interface OptionOiSeriesPoint {
   t: number;

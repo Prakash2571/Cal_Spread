@@ -2099,44 +2099,11 @@ body {
   font-family: var(--font-mono);
 }
 
-/* ---- Summary strip ---- */
-.an-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin: var(--sp-3) 0;
-}
-.an-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--data-surface);
-  border: 1px solid var(--data-border);
-  border-radius: var(--r-lg);
-  min-width: 130px;
-}
-.an-stat-k {
-  font-size: var(--fs-1);
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
-}
-.an-stat-v {
-  font-size: var(--fs-5);
-  font-family: var(--font-mono);
-  font-weight: var(--fw-semibold);
-  color: var(--text-1);
-}
-.an-stat-sub {
-  font-size: var(--fs-1);
-  color: var(--text-3);
-}
+/* The full-width summary strip is gone — those totals now sit inline in the
+   Option Chain card, see .an-chain-stats. */
 
 /* ---- Option chain table ---- */
 .an-chain-wrap {
-  /* compact so the option chain + all three charts fit in one viewport */
-  max-height: 34vh;
   overflow: auto;
   border: 1px solid var(--data-border);
   border-radius: var(--r-lg);
@@ -2242,44 +2209,56 @@ body {
 }
 
 /* ---- Charts ---- */
-/* Two card rows: three cards on top (tables + straddle), four time-series charts
-   below. minmax(0, 1fr) lets each column shrink below its scrollable content's
-   width so the cards keep their row and scroll internally instead of blowing the
-   grid out to full width. */
+/* minmax(0, 1fr) lets each column shrink below its scrollable content's width so
+   the cards keep their row and scroll internally instead of blowing the grid out
+   to full width. */
 .an-charts {
   display: grid;
   gap: var(--sp-3);
   margin: var(--sp-3) 0;
 }
-.an-charts--3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-/* Bottom row — carries the page's trailing margin. */
-.an-charts--4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+/* Dashboard: the option chain is a tall card spanning both chart rows on the
+   left, with four charts beside it and the fifth as a full-width strip below.
+   The first track is SIZED FOR THE TABLE rather than taking an equal share: the
+   chain's ten nowrap columns need ~520px of scroller, and an equal quarter- or
+   third-share would put the whole PUTS block outside the viewport. The two
+   remaining tracks then still leave the charts wider than the old 4-up row. */
+.an-charts--dash {
+  grid-template-columns: 580px repeat(2, minmax(0, 1fr));
   margin-bottom: var(--sp-6);
 }
-/* Four charts need more room than three, so they fold to 2x2 earlier — while the
-   card is still wide enough to show a full title next to the controls. */
-@media (max-width: 1320px) {
-  .an-charts--4 {
+.an-card--chain {
+  grid-row: span 2;
+}
+/* The fifth chart (futures ΔOI) is the one card that gains from extra width —
+   more histogram buckets visible at once — so it takes the third row whole and
+   the grid has no empty cell. */
+.an-charts--dash > .an-chart-card:last-child {
+  grid-column: 1 / -1;
+}
+
+/* Below ~1240px the chain plus two chart columns can't both fit — the chart cards
+   fall under ~287px, where the card titles start ellipsising — so the chain stops
+   spanning rows and takes a full-width row of its own (where the table is never
+   clipped) with the charts 2-up beneath it. */
+@media (max-width: 1240px) {
+  .an-charts--dash {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-@media (max-width: 900px) {
-  .an-charts--3 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .an-card--chain {
+    grid-row: auto;
+    grid-column: 1 / -1;
   }
 }
-/* Below this the 2-up columns get too narrow for a title beside the controls. */
+/* Single column: everything stacks, chain first at its natural height. */
 @media (max-width: 700px) {
-  .an-charts--4 {
+  .an-charts--dash {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-@media (max-width: 600px) {
-  .an-charts--3 {
-    grid-template-columns: minmax(0, 1fr);
+  .an-card--chain,
+  .an-charts--dash > .an-chart-card:last-child {
+    grid-row: auto;
+    grid-column: auto;
   }
 }
 .an-chart-card {
@@ -2394,6 +2373,15 @@ body {
   position: relative;
   height: 100%;
 }
+/* The histogram canvas is a fixed px width (bar pitch is uniform across cards, so
+   it can't stretch), which leaves the full-width strip card looking half-empty
+   while the frame has few buckets. `margin-inline: auto` centres it there and
+   collapses to 0 once it overflows, so scrolling is untouched. Scoped to that one
+   card: in the narrow cards the canvas is nearly always wider than the scroller,
+   and centring it would drift the y-axis off the gutter its row-mates share. */
+.an-charts--dash > .an-chart-card:last-child .an-hist-inner {
+  margin-inline: auto;
+}
 .oi-hist-svg {
   display: block;
 }
@@ -2458,15 +2446,12 @@ body {
   stroke-width: 0.75px;
 }
 
-
-
-
-/* ---- Analytics: data tables embedded in a chart card ----
-   The option chain and straddle chain sit in the same 3-column card grid as
-   the charts. Their card BODY is the column flex container (via ChartCard's
-   bodyClass), so the scrollable table takes the leftover height — and the full
-   screen once expanded, where `.an-chart-card--expanded .an-chart-body` already
-   supplies `flex: 1; min-height: 0`. */
+/* ---- Analytics: the option chain embedded in a chart card ----
+   The chain sits in the same card grid as the charts. Its card BODY is the column
+   flex container (via ChartCard's bodyClass), so the scrollable table takes the
+   leftover height — and the full screen once expanded, where
+   `.an-chart-card--expanded .an-chart-body` already supplies
+   `flex: 1; min-height: 0`. */
 .an-table-card {
   display: flex;
   flex-direction: column;
@@ -2474,13 +2459,29 @@ body {
   min-width: 0;
   min-height: 0;
 }
+/* The chain spans two chart rows, so it gets both plots' height plus the gap and
+   the head/controls of the card it replaced (2 × 357 + 12, less this card's own
+   chrome), which keeps its bottom edge level with the second chart row. */
 .an-table-card .an-chain-wrap {
   flex: 1;
   min-height: 0;
-  max-height: 210px;
+  max-height: 520px;
 }
 .an-chart-card--expanded .an-table-card .an-chain-wrap {
   max-height: none;
+}
+@media (max-width: 1240px) {
+  /* Full-width row of its own: no row to match, so cap it low enough that the
+     charts below stay above the fold. */
+  .an-table-card .an-chain-wrap {
+    max-height: 460px;
+  }
+}
+@media (max-width: 700px) {
+  /* Stacked: keep the chain from dominating the scroll. */
+  .an-table-card .an-chain-wrap {
+    max-height: 60vh;
+  }
 }
 
 /* Compact in-card timeframe strip (option chain card). */
@@ -2492,6 +2493,40 @@ body {
   padding: 1px 1px 1px var(--sp-2);
 }
 
+/* ---- Analytics: inline chain totals (replaced the full-width summary strip) ---- */
+.an-chain-stats {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  flex-shrink: 0;
+  font-size: var(--fs-2);
+}
+.an-chain-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+.an-chain-stat-k {
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  font-size: var(--fs-1);
+}
+.an-chain-stat-v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+.an-chain-stat-sub {
+  margin-left: auto;
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
 /* Small footnote under an in-card table. */
 .an-card-note {
   flex-shrink: 0;
@@ -2500,17 +2535,7 @@ body {
   text-align: right;
 }
 
-/* ---- Analytics: straddle chain (ATM ± 10, premium = call + put) ---- */
-.an-straddle-chain td,
-.an-straddle-chain th {
-  padding: 3px var(--sp-2);
-}
-.an-straddle-chain .an-ce-ltp {
-  color: var(--neg);
-}
-.an-straddle-chain .an-pe-ltp {
-  color: var(--pos);
-}
+/* ---- Analytics: straddle premium column inside the option chain ---- */
 .an-straddle-v {
   font-weight: var(--fw-semibold);
   color: var(--text-1);
