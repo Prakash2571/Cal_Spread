@@ -9,6 +9,7 @@ import {
   streamUrl,
   type FuturesOiContract,
   type FuturesOiPoint,
+  OI_FRAME_OPTIONS,
   type OiFrame,
   type OptionChain,
   type OptionChainStrike,
@@ -22,13 +23,24 @@ import { fmt, fmtCompact, formatExpiry } from "./format.ts";
 
 type TickMap = Record<number, Tick>;
 /** Comparison window for the chain's OI Δ% and buildup columns. */
-type ChainInterval = 5 | 15 | "day";
-type MinuteInterval = 5 | 15;
+type ChainInterval = 1 | 5 | 15 | 60 | "day";
+type MinuteInterval = 1 | 5 | 15 | 60;
 type OptionBaseline = Record<number, { oi: number; ltp: number; t: number }>;
 
-const CHAIN_INTERVALS: ChainInterval[] = [5, 15, "day"];
-const intervalLabel = (i: ChainInterval) => (i === "day" ? "Day" : `${i}m`);
+const CHAIN_INTERVALS: ChainInterval[] = [1, 5, 15, 60, "day"];
+const intervalLabel = (i: ChainInterval) =>
+  i === "day" ? "Day" : i === 60 ? "1h" : `${i}m`;
 const isMinuteInterval = (i: ChainInterval): i is MinuteInterval => i !== "day";
+/** Human phrase for a window, used in the toggle tooltips. */
+const intervalPhrase = (i: MinuteInterval) =>
+  i === 60 ? "hour" : i === 1 ? "minute" : `${i} minutes`;
+/** One empty baseline per window. Every key must exist — the record is total. */
+const emptyBaselines = (): Record<MinuteInterval, OptionBaseline> => ({
+  1: {},
+  5: {},
+  15: {},
+  60: {},
+});
 
 /** No previous-session baseline yet (or not one that applies to today). */
 const EMPTY_PREV_CLOSE: OptionPrevClose = {
@@ -59,7 +71,42 @@ const FUT_COLOR = "var(--series-1)";
  *  bucket-END boundary, so consecutive buckets are exactly this far apart —
  *  which is what lets the change histograms detect a gap. */
 const frameMs = (frame: OiFrame): number =>
-  frame === "1m" ? 60_000 : frame === "5m" ? 5 * 60_000 : 15 * 60_000;
+  frame === "1m"
+    ? 60_000
+    : frame === "5m"
+      ? 5 * 60_000
+      : frame === "15m"
+        ? 15 * 60_000
+        : 60 * 60_000;
+
+/**
+ * Are two frame buckets consecutive, so a difference between them is one bucket's
+ * worth of change?
+ *
+ * Not an equality test on the spacing, because buckets at a session EDGE are
+ * short: the server clamps the last bucket to the 15:30 close, so the final 1h
+ * bucket spans 15:00–15:30. Requiring an exact hour silently dropped the closing
+ * bar of every session on the change histograms. A genuine hole always leaves a
+ * gap of at least two buckets, so "positive and no wider than one bucket" accepts
+ * the short edge buckets while still rejecting overnight and downtime gaps.
+ */
+const isAdjacentBucket = (prevT: number, t: number, step: number) =>
+  t - prevT > 0 && t - prevT <= step;
+
+/** What each chart timeframe covers, mirroring the server's Redis retention. */
+const FRAME_TITLE: Record<OiFrame, string> = {
+  "1m": "1-minute buckets · last 1 day",
+  "5m": "5-minute buckets · last 3 days",
+  "15m": "15-minute buckets · last 1 week",
+  "1h": "1-hour buckets · last 4 days",
+};
+/** Same frames on the change histograms, where a bucket is a delta not a level. */
+const FRAME_TITLE_DELTA: Record<OiFrame, string> = {
+  "1m": "change per minute · last 1 day",
+  "5m": "change per 5 minutes · last 3 days",
+  "15m": "change per 15 minutes · last 1 week",
+  "1h": "change per hour · last 4 days",
+};
 
 /** IST calendar day, matching the backend's day key. */
 const istDayKey = () =>
@@ -189,12 +236,14 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [ceOiSeries, setCeOiSeries] = useState<{ date: string; value: number }[]>([]);
   const [peOiSeries, setPeOiSeries] = useState<{ date: string; value: number }[]>([]);
 
-  // Server-provided OI + LTP baselines keyed by timeframe. Keeping both
-  // caches lets OI Δ% and buildup use independent 5m/15m selections.
-  const [baselines, setBaselines] = useState<Record<MinuteInterval, OptionBaseline>>({
-    5: {},
-    15: {},
-  });
+  // Server-provided OI + LTP baselines keyed by timeframe. Keeping one cache per
+  // window lets OI Δ% and buildup hold independent selections.
+  const [baselines, setBaselines] =
+    useState<Record<MinuteInterval, OptionBaseline>>(emptyBaselines);
+  // Oldest snapshot the server's chain cache holds. A window is only offered once
+  // the cache reaches that far back, so "1h" is disabled with a reason in the
+  // morning rather than being selectable and rendering a column of dashes.
+  const [baselineOldest, setBaselineOldest] = useState<number | null>(null);
   // Previous session's close per token — the "Day" comparison baseline. Unlike the
   // minute baselines this needs no freshness window: it is a fixed reference point
   // the server only publishes while it is valid for today. Polled regardless of the
@@ -226,7 +275,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
         setStraddleRaw([]);
         setCeOiSeries([]);
         setPeOiSeries([]);
-        setBaselines({ 5: {}, 15: {} });
+        setBaselines(emptyBaselines());
+        setBaselineOldest(null);
         // Token-keyed, so a different expiry invalidates it.
         setPrevClose(EMPTY_PREV_CLOSE);
         setTicks({});
@@ -310,26 +360,33 @@ export default function Analytics({ authenticated, onBack }: Props) {
       new Set<ChainInterval>([oiInterval, bldInterval]),
     );
     const minuteFrames = selected.filter(isMinuteInterval);
+    // Always request at least one window, even when both toggles are on "day":
+    // every response reports how far back the snapshot cache reaches, and that is
+    // what lets the 1m/1h buttons be disabled up front instead of being selectable
+    // and then empty. Frame 1 is the cheapest probe.
+    const framesToLoad: MinuteInterval[] =
+      minuteFrames.length > 0 ? minuteFrames : [1];
     // Never expose a retained baseline under a newly selected timeframe while
     // its fresh request is still pending. The previous-session baseline is NOT
     // cleared here: it is a fixed reference for the day, so switching a toggle
-    // between 5m and 15m must not blank a Day column that is already correct.
+    // between windows must not blank a Day column that is already correct.
     setBaselines((prev) => {
       const next = { ...prev };
-      for (const frame of minuteFrames) next[frame] = {};
+      for (const frame of framesToLoad) next[frame] = {};
       return next;
     });
 
     const load = () => {
-      for (const frame of minuteFrames) {
+      for (const frame of framesToLoad) {
         fetchOptionOiBaseline(UNDERLYING, frame)
           .then((r) => {
-            if (!cancelled) {
-              setBaselines((prev) => ({
-                ...prev,
-                [frame]: r.minutes === frame ? r.tokens ?? {} : {},
-              }));
-            }
+            if (cancelled) return;
+            // `oldest` is window-independent, so any response updates it.
+            setBaselineOldest(typeof r.oldest === "number" ? r.oldest : null);
+            setBaselines((prev) => ({
+              ...prev,
+              [frame]: r.minutes === frame ? r.tokens ?? {} : {},
+            }));
           })
           .catch(() => {
             if (!cancelled) {
@@ -482,7 +539,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       // collapsed to nothing" — differencing against it would draw a bar the
       // size of the entire open interest.
       if (p.totalCe <= 0 || p.totalPe <= 0) continue;
-      if (prev && p.t - prev.t === step) {
+      if (prev && isAdjacentBucket(prev.t, p.t, step)) {
         out.push({
           t: p.t,
           values: [p.totalCe - prev.ce, p.totalPe - prev.pe],
@@ -657,6 +714,33 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const isoFmtFor = (frame: OiFrame) => (iso: string) => fmtTs(frame, new Date(iso).getTime());
   const tsFmtFor = (frame: OiFrame) => (t: number) => fmtTs(frame, t);
 
+  /**
+   * The timeframe strip every chart card carries.
+   *
+   * One helper rather than five copies: the frame list and its tooltips were
+   * duplicated per card, so adding the 1h frame would have meant the same edit in
+   * five places (and the labels had already drifted).
+   */
+  const frameToggle = (
+    label: string,
+    value: OiFrame,
+    onPick: (f: OiFrame) => void,
+    kind: "level" | "delta" = "level",
+  ) => (
+    <div className="an-toggle" role="group" aria-label={label}>
+      {OI_FRAME_OPTIONS.map((f) => (
+        <button
+          key={f}
+          className={`btn${value === f ? " btn--primary" : ""}`}
+          onClick={() => onPick(f)}
+          title={(kind === "delta" ? FRAME_TITLE_DELTA : FRAME_TITLE)[f]}
+        >
+          {f}
+        </button>
+      ))}
+    </div>
+  );
+
   // Memoised: a fresh array identity here would re-trigger LineChart's
   // follow-to-latest layout effect on every 500ms tick flush.
   const oiChart = useMemo<ChartSeries[]>(
@@ -718,7 +802,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       // A non-positive reading means "no data", not "OI collapsed to zero".
       if (oi <= 0) continue;
       // Only difference genuinely adjacent buckets — see histPoints above.
-      if (prevOi !== null && prevT !== null && p.t - prevT === step) {
+      if (prevOi !== null && prevT !== null && isAdjacentBucket(prevT, p.t, step)) {
         out.push({ t: p.t, values: [oi - prevOi] });
       }
       prevOi = oi;
@@ -754,6 +838,29 @@ export default function Analytics({ authenticated, onBack }: Props) {
   }, [chain, prevClose]);
   const chainTokenCount = (chain?.strikes.length ?? 0) * 2;
   const dayAvailable = dayBaselineTokens > 0;
+
+  /**
+   * Can the server serve a window this long yet?
+   *
+   * Early in a session the snapshot cache doesn't reach back an hour, and the
+   * server deliberately returns nothing rather than a newer reading. Checking here
+   * lets the button say why instead of rendering a column of dashes. Recomputed on
+   * every render, which is often — live ticks drive this component.
+   */
+  const minuteAvailable = (m: MinuteInterval) =>
+    baselineOldest !== null &&
+    Date.now() - baselineOldest >= m * 60 * 1000 - BASELINE_OLDER_TOLERANCE_MS;
+  const intervalAvailable = (i: ChainInterval) =>
+    i === "day" ? dayAvailable : minuteAvailable(i);
+
+  /** Tooltip for one window button — what it compares, or why it can't yet. */
+  const intervalTitle = (i: ChainInterval, what: "Change" | "Buildup") => {
+    if (i === "day") return dayTitle(what);
+    if (!minuteAvailable(i)) {
+      return `Not enough history cached yet for a ${intervalPhrase(i)} comparison`;
+    }
+    return `${what} over the last ${intervalPhrase(i)}`;
+  };
 
   // The chain now holds every strike the API returned, so the collapsed card
   // shows a band around ATM and expanding reveals the whole ladder.
@@ -803,7 +910,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     ) : (
       <span className={v > 0 ? "pos" : v < 0 ? "neg" : ""}>
         {v > 0 ? "+" : ""}
-        {v.toFixed(1)}%
+        {/* A decimal place is signal at 12.3% and noise at 1234.5% — and the
+            extra two characters were enough to ellipsise the column. */}
+        {Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1)}%
       </span>
     );
 
@@ -907,15 +1016,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
                         key={String(m)}
                         className={`btn${oiInterval === m ? " btn--primary" : ""}`}
                         onClick={() => setOiInterval(m)}
-                        // Never disable the live selection: the baseline can go
+                        // Never disable the live selection: a baseline can go
                         // missing after it was picked (expiry switch), and a
                         // disabled-but-active button would trap the user there.
-                        disabled={m === "day" && !dayAvailable && oiInterval !== m}
-                        title={
-                          m === "day"
-                            ? dayTitle("Change")
-                            : `Change over the last ${m} minutes`
-                        }
+                        disabled={!intervalAvailable(m) && oiInterval !== m}
+                        title={intervalTitle(m, "Change")}
                       >
                         {intervalLabel(m)}
                       </button>
@@ -930,12 +1035,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
                         key={String(m)}
                         className={`btn${bldInterval === m ? " btn--primary" : ""}`}
                         onClick={() => setBldInterval(m)}
-                        disabled={m === "day" && !dayAvailable && bldInterval !== m}
-                        title={
-                          m === "day"
-                            ? dayTitle("Buildup")
-                            : `Buildup over the last ${m} minutes`
-                        }
+                        disabled={!intervalAvailable(m) && bldInterval !== m}
+                        title={intervalTitle(m, "Buildup")}
                       >
                         {intervalLabel(m)}
                       </button>
@@ -945,6 +1046,24 @@ export default function Analytics({ authenticated, onBack }: Props) {
               </div>
               <div className="an-chain-wrap">
                 <table className="an-chain">
+                  {/* Explicit widths + `table-layout: fixed` (see styles.css).
+                      Without them the auto algorithm distributes the card's spare
+                      width in proportion to each column's CONTENT, so the columns
+                      moved every time the card was expanded and the values no
+                      longer sat under their headers. Percentages are mirrored
+                      around the strike so calls and puts line up exactly. */}
+                  <colgroup>
+                    <col className="an-col-oi" />
+                    <col className="an-col-pct" />
+                    <col className="an-col-bld" />
+                    <col className="an-col-ltp" />
+                    <col className="an-col-level" />
+                    <col className="an-col-straddle" />
+                    <col className="an-col-ltp" />
+                    <col className="an-col-bld" />
+                    <col className="an-col-pct" />
+                    <col className="an-col-oi" />
+                  </colgroup>
                   <thead>
                     <tr className="an-chain-side">
                       <th colSpan={4} className="an-calls">CALLS</th>
@@ -952,14 +1071,18 @@ export default function Analytics({ authenticated, onBack }: Props) {
                       <th colSpan={4} className="an-puts">PUTS</th>
                     </tr>
                     <tr>
+                      {/* Each header's alignment matches its cells: numbers right,
+                          badges and the strike centred. They used to disagree on
+                          Bld (right header over a centred badge) and Straddle
+                          (centred header over a right-aligned number). */}
                       <th>OI</th>
                       <th>OI Δ%</th>
-                      <th>Bld</th>
+                      <th className="an-bld-h">Bld</th>
                       <th>LTP</th>
                       <th className="an-strike-h">Level</th>
-                      <th className="an-strike-h">Straddle</th>
+                      <th>Straddle</th>
                       <th>LTP</th>
-                      <th>Bld</th>
+                      <th className="an-bld-h">Bld</th>
                       <th>OI Δ%</th>
                       <th>OI</th>
                     </tr>
@@ -999,26 +1122,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               onToggle={() =>
                 setExpandedCard((c) => (c === "straddle" ? null : "straddle"))
               }
-              controls={
-                <div className="an-toggle" role="group" aria-label="Straddle timeframe">
-                  {(["1m", "5m", "15m"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`btn${straddleFrame === f ? " btn--primary" : ""}`}
-                      onClick={() => setStraddleFrame(f)}
-                      title={
-                        f === "1m"
-                          ? "1-minute · last 1 day"
-                          : f === "5m"
-                            ? "5-minute · last 3 days"
-                            : "15-minute · last 1 week"
-                      }
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              }
+              controls={frameToggle("Straddle timeframe", straddleFrame, setStraddleFrame)}
             >
               {hasStraddle ? (
                 <LineChart
@@ -1027,7 +1131,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   format={fmt}
                   formatX={isoFmtFor(straddleFrame)}
                   height={expandedCard === "straddle" ? bigChartH : 210}
-                  canvasWidth={Math.max(760, straddleRaw.length * 7)}
+                  fit
                   expanded={expandedCard === "straddle"}
                 />
               ) : (
@@ -1042,26 +1146,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               title="Call vs Put OI"
               expanded={expandedCard === "oi"}
               onToggle={() => setExpandedCard((c) => (c === "oi" ? null : "oi"))}
-              controls={
-                <div className="an-toggle" role="group" aria-label="OI chart timeframe">
-                  {(["1m", "5m", "15m"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`btn${oiFrame === f ? " btn--primary" : ""}`}
-                      onClick={() => setOiFrame(f)}
-                      title={
-                        f === "1m"
-                          ? "1-minute · last 1 day"
-                          : f === "5m"
-                            ? "5-minute · last 3 days"
-                            : "15-minute · last 1 week"
-                      }
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              }
+              controls={frameToggle("OI chart timeframe", oiFrame, setOiFrame)}
             >
               {ceOiSeries.length > 1 || peOiSeries.length > 1 ? (
                 <LineChart
@@ -1070,10 +1155,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   format={fmtCompact}
                   formatX={isoFmtFor(oiFrame)}
                   height={expandedCard === "oi" ? bigChartH : 210}
-                  canvasWidth={Math.max(
-                    760,
-                    Math.max(ceOiSeries.length, peOiSeries.length) * 7,
-                  )}
+                  fit
                   expanded={expandedCard === "oi"}
                 />
               ) : (
@@ -1088,26 +1170,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
               title="Call/Put ΔOI"
               expanded={expandedCard === "hist"}
               onToggle={() => setExpandedCard((c) => (c === "hist" ? null : "hist"))}
-              controls={
-                <div className="an-toggle" role="group" aria-label="OI-change histogram timeframe">
-                  {(["1m", "5m", "15m"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`btn${histFrame === f ? " btn--primary" : ""}`}
-                      onClick={() => setHistFrame(f)}
-                      title={
-                        f === "1m"
-                          ? "per-minute change · last 1 day"
-                          : f === "5m"
-                            ? "per-5-min change · last 3 days"
-                            : "per-15-min change · last 1 week"
-                      }
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              }
+              controls={frameToggle(
+                "OI-change histogram timeframe",
+                histFrame,
+                setHistFrame,
+                "delta",
+              )}
             >
               <OiHistogram
                 key={histFrame}
@@ -1123,26 +1191,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
               title="Futures OI"
               expanded={expandedCard === "futoi"}
               onToggle={() => setExpandedCard((c) => (c === "futoi" ? null : "futoi"))}
-              controls={
-                <div className="an-toggle" role="group" aria-label="Futures OI timeframe">
-                  {(["1m", "5m", "15m"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`btn${futFrame === f ? " btn--primary" : ""}`}
-                      onClick={() => setFutFrame(f)}
-                      title={
-                        f === "1m"
-                          ? "1-minute · last 1 day"
-                          : f === "5m"
-                            ? "5-minute · last 3 days"
-                            : "15-minute · last 1 week"
-                      }
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              }
+              controls={frameToggle("Futures OI timeframe", futFrame, setFutFrame)}
             >
               {hasFutOi ? (
                 <LineChart
@@ -1151,7 +1200,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   format={fmtCompact}
                   formatX={isoFmtFor(futFrame)}
                   height={expandedCard === "futoi" ? bigChartH : 210}
-                  canvasWidth={Math.max(760, futRaw.length * 7)}
+                  fit
                   expanded={expandedCard === "futoi"}
                 />
               ) : (
@@ -1168,30 +1217,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
               onToggle={() =>
                 setExpandedCard((c) => (c === "futhist" ? null : "futhist"))
               }
-              controls={
-                <div
-                  className="an-toggle"
-                  role="group"
-                  aria-label="Futures OI-change timeframe"
-                >
-                  {(["1m", "5m", "15m"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={`btn${futHistFrame === f ? " btn--primary" : ""}`}
-                      onClick={() => setFutHistFrame(f)}
-                      title={
-                        f === "1m"
-                          ? "per-minute change · last 1 day"
-                          : f === "5m"
-                            ? "per-5-min change · last 3 days"
-                            : "per-15-min change · last 1 week"
-                      }
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
-              }
+              controls={frameToggle(
+                "Futures OI-change timeframe",
+                futHistFrame,
+                setFutHistFrame,
+                "delta",
+              )}
             >
               <OiHistogram
                 key={futHistFrame}

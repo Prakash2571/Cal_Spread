@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import ChartReadout, { type ReadoutItem } from "./ChartReadout.tsx";
 import { smoothPath } from "./chartPath.ts";
 
@@ -40,11 +40,26 @@ interface Props {
    * a 760-unit viewBox across a 2600px canvas smeared them by >3x.
    */
   canvasWidth?: number;
+  /**
+   * Size the canvas to its CONTAINER rather than to the data, and drop the
+   * scroller.
+   *
+   * `canvasWidth` mode sizes the canvas per point (e.g. 7px each), which means a
+   * full session of 1-minute buckets is several times wider than the card. Since
+   * the scroller opens pinned to the newest data, the chart then silently showed
+   * only its last ~60 points — reading as "the chart starts at 12:22" when the
+   * series actually began at 09:15. Fitting shows the WHOLE range at a glance and
+   * still renders 1:1 (no viewBox), so strokes and text stay crisp; expanding the
+   * card is what buys back horizontal detail.
+   */
+  fit?: boolean;
   /** Re-pin the scroller to the latest data when the card is expanded. */
   expanded?: boolean;
 }
 
 const DEFAULT_W = 760;
+/** Below this a fitted plot has no usable room between the axis gutters. */
+const MIN_FIT_W = 280;
 const DEFAULT_H = 280;
 const PAD = { l: 58, r: 18, t: 16, b: 28 };
 /** Approximate width of a "06 Aug, 14:35" x-axis label at --fs-1 mono. */
@@ -93,21 +108,62 @@ export default function LineChart({
   signed = false,
   height,
   canvasWidth,
+  fit = false,
   expanded = false,
 }: Props) {
   const valid = (v: number) => (signed ? Number.isFinite(v) : v > 0);
   const svgRef = useRef<SVGSVGElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
   const atEndRef = useRef(true);
   const [hover, setHover] = useState<number | null>(null);
+  const [fitW, setFitW] = useState(0);
+
+  // Measure the SCROLLER in `fit` mode — not the wrapper. Its clientWidth already
+  // excludes the scrollbar gutter, so a canvas of exactly that width never
+  // overflows, while the gutter itself stays reserved. That keeps a fitted line
+  // card the same height as a histogram card, which matters because they share
+  // grid rows: a 15px difference makes the shorter one stretch and leaves dead
+  // space under its plot.
+  //
+  // A CALLBACK REF rather than an effect, because the scroller isn't always
+  // mounted: this component returns an empty state before any data arrives, and an
+  // effect keyed on props would not re-run when the real node finally appears —
+  // leaving the canvas at its 760px fallback inside a ~570px card, i.e. exactly the
+  // pinned-scroller bug `fit` exists to remove. A ref callback fires on mount.
+  const attachScroller = useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el;
+      roRef.current?.disconnect();
+      roRef.current = null;
+      if (!el || !fit) return;
+      // A zero width means "not measurable yet" (a hidden container), not "zero
+      // wide" — storing it would pin the canvas to its fallback width. The observer
+      // fires with a real width as soon as the element is laid out.
+      const measure = () => {
+        if (el.clientWidth > 0) setFitW(el.clientWidth);
+      };
+      measure();
+      if (typeof ResizeObserver === "undefined") return;
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      roRef.current = ro;
+    },
+    [fit],
+  );
+
   const H = height ?? DEFAULT_H;
-  const W = canvasWidth ?? DEFAULT_W;
-  const fixedCanvas = canvasWidth !== undefined;
+  const W = fit
+    ? Math.max(MIN_FIT_W, fitW || DEFAULT_W)
+    : (canvasWidth ?? DEFAULT_W);
+  // 1:1 pixel rendering (no viewBox) for both explicit widths and fitted ones.
+  const fixedCanvas = fit || canvasWidth !== undefined;
   const plotH = H - PAD.t - PAD.b;
   const plotW = W - PAD.l - PAD.r;
 
-  // Fixed-canvas mode scrolls horizontally; follow new data to the right only
-  // when the user is already pinned there (matching the other charts).
+  // A per-point canvas scrolls horizontally; follow new data to the right only
+  // when the user is already pinned there (matching the other charts). A fitted
+  // canvas never overflows, so there is nothing to follow.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el && atEndRef.current) el.scrollLeft = el.scrollWidth;
@@ -385,7 +441,7 @@ export default function LineChart({
       {fixedCanvas ? (
         <div
           className="an-scrollx"
-          ref={scrollRef}
+          ref={attachScroller}
           onScroll={(e) => {
             const el = e.currentTarget;
             atEndRef.current = el.scrollWidth - el.clientWidth - el.scrollLeft < 24;

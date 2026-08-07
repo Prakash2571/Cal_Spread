@@ -670,14 +670,23 @@ export async function fetchOptionChain(
 
 
 /**
- * Per-token OI + LTP as of `minutes` ago, from the backend's per-day intraday
- * cache. Used as the baseline for 5m/15m OI-change % and OI-buildup, so those
- * values are correct immediately on load at any time of day.
+ * Per-token OI + LTP as of `minutes` ago, from the backend's Redis-backed chain
+ * snapshots. Used as the baseline for the 1m/5m/15m/1h OI-change % and buildup
+ * columns, so those values are correct immediately on load at any time of day.
+ *
+ * `tokens` is EMPTY when the cache doesn't reach back `minutes` — the server
+ * returns nothing rather than a newer reading, so a 20-minute-old value can never
+ * be presented as a 1-hour change.
  */
 export interface OptionOiBaseline {
   day: string;
   expiry: string | null;
   minutes: number;
+  /** Oldest/newest snapshot the cache holds (epoch ms), or null when empty. */
+  oldest: number | null;
+  newest: number | null;
+  /** Timestamp of the snapshot actually used, or null when none was old enough. */
+  baseT: number | null;
   tokens: Record<number, { oi: number; ltp: number; t: number }>;
 }
 
@@ -754,8 +763,16 @@ export async function fetchOptionOiSeries(underlying: string): Promise<OptionOiS
 }
 
 
-/** Timeframe for the multi-frame Call/Put OI history chart. */
-export type OiFrame = "1m" | "5m" | "15m";
+/**
+ * Timeframe for the multi-frame OI history charts.
+ *
+ * Retention per frame on the server: 1m -> 1 day, 5m -> 3 days, 15m -> 7 days,
+ * 1h -> 4 days. The longer frames are what make a 2-day or 1-week look-back
+ * possible without holding every minute.
+ */
+export type OiFrame = "1m" | "5m" | "15m" | "1h";
+/** Selectable frames, in display order. */
+export const OI_FRAME_OPTIONS: OiFrame[] = ["1m", "5m", "15m", "1h"];
 
 export interface OptionOiFramePoint {
   t: number;

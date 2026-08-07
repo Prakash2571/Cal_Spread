@@ -2109,10 +2109,44 @@ body {
   border-radius: var(--r-lg);
   background: var(--surface-0);
 }
+/* `fixed` so the <colgroup> widths below are honoured exactly and the columns are
+   IDENTICAL collapsed and expanded. Under the default `auto` layout the spare
+   width of a full-screen card was shared out in proportion to each column's
+   content, which pushed every value away from its header. min-width keeps the
+   ten columns legible in the narrow card and lets the wrapper scroll instead of
+   crushing them. */
 .an-chain {
   width: 100%;
+  min-width: 560px;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: var(--fs-2);
+}
+/* Expanded, the card is the whole viewport. Letting a 10-column table stretch to
+   2560px would leave each value marooned in a 250px cell, so cap it and centre. */
+.an-chart-card--expanded .an-chain {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+/* Mirrored around the strike: calls and puts get identical widths, so the two
+   halves of the chain are directly comparable. Sums to 100%. */
+.an-col-oi {
+  width: 11%;
+}
+.an-col-pct {
+  width: 11.5%;
+}
+.an-col-bld {
+  width: 7.5%;
+}
+.an-col-ltp {
+  width: 10%;
+}
+.an-col-level {
+  width: 8.5%;
+}
+.an-col-straddle {
+  width: 11.5%;
 }
 .an-chain thead {
   position: sticky;
@@ -2121,7 +2155,7 @@ body {
   background: var(--surface-2);
 }
 .an-chain th {
-  padding: 6px var(--sp-2);
+  padding: 6px 6px;
   font-size: var(--fs-1);
   color: var(--text-3);
   text-transform: uppercase;
@@ -2133,6 +2167,10 @@ body {
   text-align: center;
   color: var(--text-2);
 }
+/* Matches the centred badge in .an-bld-cell. */
+.an-chain th.an-bld-h {
+  text-align: center;
+}
 .an-chain th.an-calls {
   text-align: center;
   color: var(--neg);
@@ -2142,8 +2180,10 @@ body {
   color: var(--pos);
 }
 .an-chain td {
-  padding: 2px var(--sp-2);
+  padding: 2px 6px;
   text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-bottom: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
   color: var(--text-1);
@@ -2224,7 +2264,7 @@ body {
    third-share would put the whole PUTS block outside the viewport. The two
    remaining tracks then still leave the charts wider than the old 4-up row. */
 .an-charts--dash {
-  grid-template-columns: 580px repeat(2, minmax(0, 1fr));
+  grid-template-columns: 620px repeat(2, minmax(0, 1fr));
   margin-bottom: var(--sp-6);
 }
 .an-card--chain {
@@ -2237,11 +2277,11 @@ body {
   grid-column: 1 / -1;
 }
 
-/* Below ~1240px the chain plus two chart columns can't both fit — the chart cards
+/* Below ~1360px the chain plus two chart columns can't both fit — the chart cards
    fall under ~287px, where the card titles start ellipsising — so the chain stops
    spanning rows and takes a full-width row of its own (where the table is never
    clipped) with the charts 2-up beneath it. */
-@media (max-width: 1240px) {
+@media (max-width: 1360px) {
   .an-charts--dash {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2459,18 +2499,22 @@ body {
   min-width: 0;
   min-height: 0;
 }
-/* The chain spans two chart rows, so it gets both plots' height plus the gap and
-   the head/controls of the card it replaced (2 × 357 + 12, less this card's own
-   chrome), which keeps its bottom edge level with the second chart row. */
+/* The chain spans the two chart rows, and the cap is what keeps it in step with
+   them. The rows are `auto`, so they size to this card's MAX-content — drop the cap
+   and 29 strikes push both rows ~95px taller than their plots need. Set it just
+   UNDER the two rows' natural height instead (318 + 12 + 333 for a fitted line card
+   and a histogram card, less this card's own 157px of chrome): the grid then
+   stretches the card the last half-pixel and `flex: 1` absorbs it, so no chart in
+   either row is stretched and no plot gets dead space beneath it. */
 .an-table-card .an-chain-wrap {
   flex: 1;
   min-height: 0;
-  max-height: 520px;
+  max-height: 505px;
 }
 .an-chart-card--expanded .an-table-card .an-chain-wrap {
   max-height: none;
 }
-@media (max-width: 1240px) {
+@media (max-width: 1360px) {
   /* Full-width row of its own: no row to match, so cap it low enough that the
      charts below stay above the fold. */
   .an-table-card .an-chain-wrap {
@@ -2491,6 +2535,12 @@ body {
 }
 .an-table-card .an-chain-control {
   padding: 1px 1px 1px var(--sp-2);
+}
+/* Five windows per group (1m/5m/15m/1h/Day) across two groups has to stay on ONE
+   line. A wrapped strip makes the chain card taller than the two chart rows it
+   spans, which stretches both rows and leaves dead space under every plot. */
+.an-chain-bar .btn {
+  padding: 0 8px;
 }
 
 /* ---- Analytics: inline chain totals (replaced the full-width summary strip) ---- */
