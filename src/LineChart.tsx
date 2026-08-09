@@ -111,7 +111,11 @@ export default function LineChart({
   fit = false,
   expanded = false,
 }: Props) {
-  const valid = (v: number) => (signed ? Number.isFinite(v) : v > 0);
+  // `Number.isFinite` in BOTH modes. `v > 0` alone rejects NaN but happily accepts
+  // Infinity, which then becomes vMax, makes vRange Infinity and turns every other
+  // y coordinate into NaN — so one bad value silently erased the whole plot rather
+  // than just its own point.
+  const valid = (v: number) => Number.isFinite(v) && (signed || v > 0);
   const svgRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);

@@ -93,6 +93,96 @@ const frameMs = (frame: OiFrame): number =>
 const isAdjacentBucket = (prevT: number, t: number, step: number) =>
   t - prevT > 0 && t - prevT <= step;
 
+/** The shape of a frame bucket this page reads (see api.ts OptionOiFramePoint). */
+type FrameBucket = { t: number; totalCe: number; totalPe: number; partial?: 1 };
+
+/**
+ * Is a total a real reading?
+ *
+ * Three things it can be instead. Non-finite, from a truncated or older payload —
+ * and `undefined <= 0` is `false`, so a plain `> 0` test lets it through, after
+ * which one NaN propagates into every bar coordinate and blanks the whole chart.
+ * Zero, which for these aggregates means "nothing captured" (a pre-open bucket),
+ * not "open interest went to nothing". And `partial`, the server's own admission
+ * that it could not cover every strike in the window.
+ *
+ * All three have to be skipped rather than plotted: on a level chart they draw a
+ * dip that never happened, and on a change histogram they cost two bars — a false
+ * collapse followed by a false recovery of the same size.
+ */
+const isRealTotal = (v: number | undefined): v is number =>
+  typeof v === "number" && Number.isFinite(v) && v > 0;
+const isUsableBucket = (p: FrameBucket): boolean =>
+  !p.partial && isRealTotal(p.totalCe) && isRealTotal(p.totalPe);
+
+/**
+ * First-difference a Call/Put frame series into per-bucket OI changes.
+ *
+ * Module scope, and pure, so it can be tested without mounting the page.
+ * Non-adjacent buckets are never differenced: capture only runs during market
+ * hours, so subtracting across an overnight or weekend hole would draw the entire
+ * close-to-open move as one bucket's worth of change. A skipped bucket also
+ * refuses to become the next one's baseline, which is what makes the gap two
+ * buckets wide and drops that delta too.
+ */
+function oiDeltaPoints(raw: FrameBucket[], step: number): HistPoint[] {
+  const out: HistPoint[] = [];
+  let prev: { t: number; ce: number; pe: number } | null = null;
+  for (const p of raw) {
+    if (!isUsableBucket(p)) continue;
+    if (prev && isAdjacentBucket(prev.t, p.t, step)) {
+      out.push({ t: p.t, values: [p.totalCe - prev.ce, p.totalPe - prev.pe] });
+    }
+    prev = { t: p.t, ce: p.totalCe, pe: p.totalPe };
+  }
+  return out;
+}
+
+/** The same first-difference for one futures contract's OI leg. */
+function futDeltaPoints(
+  raw: FuturesOiPoint[],
+  expiry: string,
+  step: number,
+): HistPoint[] {
+  const out: HistPoint[] = [];
+  let prev: { t: number; oi: number } | null = null;
+  for (const p of raw) {
+    const oi = p.legs.find((l) => l.expiry === expiry)?.oi;
+    if (!isRealTotal(oi)) continue;
+    if (prev && isAdjacentBucket(prev.t, p.t, step)) {
+      out.push({ t: p.t, values: [oi - prev.oi] });
+    }
+    prev = { t: p.t, oi };
+  }
+  return out;
+}
+
+/**
+ * Is a server baseline really the reading from `minutes` ago?
+ *
+ * Graded against the cutoff AS OF WHEN THE RESPONSE ARRIVED, not a moving
+ * `Date.now()`. The server answers a fixed question — "the newest snapshot at or
+ * before T minus the window" — so `baseT` is a fixed answer, and it can sit up to
+ * one snapshot cadence (a minute) older than that cutoff. Re-grading it against
+ * "now" meant the same correct baseline aged out of tolerance partway through
+ * every 30s poll cycle and the entire OI Δ% column blanked until the next poll.
+ * Anchoring to the fetch time leaves the tolerance covering only the cadence,
+ * which is what it was sized for — and it still rejects a genuinely wrong
+ * baseline, such as the hourly snapshot the server falls back to when a session's
+ * minute snapshots were lost.
+ */
+const isServerBaselineFresh = (
+  baseT: number,
+  fetchedAt: number,
+  minutes: MinuteInterval,
+) => {
+  const cutoff = fetchedAt - minutes * 60 * 1000;
+  return (
+    baseT >= cutoff - BASELINE_OLDER_TOLERANCE_MS &&
+    baseT <= cutoff + BASELINE_NEWER_TOLERANCE_MS
+  );
+};
+
 /** What each chart timeframe covers, mirroring the server's Redis retention. */
 const FRAME_TITLE: Record<OiFrame, string> = {
   "1m": "1-minute buckets · last 1 day",
@@ -209,9 +299,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const [histFrame, setHistFrame] = useState<OiFrame>("5m"); // OI-change histogram frame
   const [futFrame, setFutFrame] = useState<OiFrame>("5m"); // futures-OI chart timeframe
   const [futHistFrame, setFutHistFrame] = useState<OiFrame>("5m"); // futures OI-change frame
-  const [histRaw, setHistRaw] = useState<
-    { t: number; totalCe: number; totalPe: number }[]
-  >([]);
+  // `partial` is carried through deliberately: structural typing would otherwise
+  // drop it here and the histogram would difference an understated bucket.
+  const [histRaw, setHistRaw] = useState<FrameBucket[]>([]);
   const [expandedCard, setExpandedCard] = useState<
     | "chain"
     | "straddle"
@@ -240,6 +330,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
   // window lets OI Δ% and buildup hold independent selections.
   const [baselines, setBaselines] =
     useState<Record<MinuteInterval, OptionBaseline>>(emptyBaselines);
+  // When each window's baseline was fetched. The server resolves a baseline
+  // against its OWN clock at request time, so this is the instant its answer is
+  // relative to — see isServerBaselineFresh. 0 means "nothing fetched yet".
+  const [baselineAt, setBaselineAt] = useState<Record<MinuteInterval, number>>({
+    1: 0,
+    5: 0,
+    15: 0,
+    60: 0,
+  });
   // Oldest snapshot the server's chain cache holds. A window is only offered once
   // the cache reaches that far back, so "1h" is disabled with a reason in the
   // morning rather than being selectable and rendering a column of dashes.
@@ -305,16 +404,23 @@ export default function Analytics({ authenticated, onBack }: Props) {
       ...chain.strikes.flatMap((s) => [s.ce_token, s.pe_token]),
     ];
 
+    // Guarded like every other effect: switching expiry tears this down and clears
+    // `ticks`, and without the check an in-flight seed for the OLD instrument set
+    // resolved afterwards and wrote itself over the fresh state — including a spot
+    // price, which is shared across expiries and so looked plausible.
+    let cancelled = false;
     fetchQuotes(tokens)
       .then((seed) => {
-        if (seed.length === 0) return;
+        if (cancelled || seed.length === 0) return;
         setTicks((prev) => {
           const next = { ...prev };
           for (const t of seed) next[t.token] = t;
           return next;
         });
-        ticksRef.current = { ...ticksRef.current };
-        for (const t of seed) ticksRef.current[t.token] = t;
+        // Mirror into the ref from the same seed, so ticksRef and ticks agree.
+        const nextRef = { ...ticksRef.current };
+        for (const t of seed) nextRef[t.token] = t;
+        ticksRef.current = nextRef;
       })
       .catch(() => {
         /* stream may still fill values during market hours */
@@ -347,6 +453,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     es.onerror = () => setLive(false);
 
     return () => {
+      cancelled = true;
       window.clearInterval(flush);
       es.close();
     };
@@ -378,6 +485,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
     const load = () => {
       for (const frame of framesToLoad) {
+        // Captured BEFORE the request: the server's cutoff is its own receive
+        // time, so anchoring to the moment we asked can only ever make the
+        // baseline look slightly older than it is — never fresher, which is the
+        // direction that would let a stale reading through.
+        const askedAt = Date.now();
         fetchOptionOiBaseline(UNDERLYING, frame)
           .then((r) => {
             if (cancelled) return;
@@ -387,10 +499,12 @@ export default function Analytics({ authenticated, onBack }: Props) {
               ...prev,
               [frame]: r.minutes === frame ? r.tokens ?? {} : {},
             }));
+            setBaselineAt((prev) => ({ ...prev, [frame]: askedAt }));
           })
           .catch(() => {
             if (!cancelled) {
               setBaselines((prev) => ({ ...prev, [frame]: {} }));
+              setBaselineAt((prev) => ({ ...prev, [frame]: 0 }));
             }
           });
       }
@@ -423,7 +537,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, straddleFrame)
         .then((r) => {
-          if (cancelled) return;
+          if (cancelled || r.frame !== straddleFrame) return;
+          // No `partial` filter here: that flag is about STRIKE coverage of the OI
+          // window, and the straddle is just the two ATM legs. When an ATM leg is
+          // the one missing, the server already publishes straddle 0, which the
+          // chart's own `> 0` filter drops.
           setStraddleRaw(r.points.map((p) => ({ t: p.t, straddle: p.straddle })));
         })
         .catch(() => {
@@ -445,15 +563,18 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, oiFrame)
         .then((r) => {
-          if (cancelled) return;
+          if (cancelled || r.frame !== oiFrame) return;
+          // Each side is filtered on its OWN total plus the shared `partial` flag,
+          // so a bucket the server couldn't fully cover leaves a gap instead of a
+          // dip that never happened.
           setCeOiSeries(
             r.points
-              .filter((p) => p.totalCe > 0)
+              .filter((p) => !p.partial && isRealTotal(p.totalCe))
               .map((p) => ({ date: iso(p.t), value: p.totalCe })),
           );
           setPeOiSeries(
             r.points
-              .filter((p) => p.totalPe > 0)
+              .filter((p) => !p.partial && isRealTotal(p.totalPe))
               .map((p) => ({ date: iso(p.t), value: p.totalPe })),
           );
         })
@@ -472,10 +593,16 @@ export default function Analytics({ authenticated, onBack }: Props) {
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
+    // Drop the previous frame's buckets immediately. Unlike the level charts, this
+    // card's arithmetic depends on the frame: histPoints differences any two points
+    // spaced within frameMs(histFrame), so holding 1m points while the label says
+    // "per hour" drew ~375 per-MINUTE deltas as if each were an hour's change.
+    // Briefly empty is the honest state until the new frame's data lands.
+    setHistRaw([]);
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, histFrame)
         .then((r) => {
-          if (!cancelled) setHistRaw(r.points);
+          if (!cancelled && r.frame === histFrame) setHistRaw(r.points);
         })
         .catch(() => {
           /* keep whatever we have */
@@ -526,29 +653,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, futFrame, futHistFrame]);
 
-  // First-difference of the frame series → per-bucket OI change (Call & Put).
-  // Buckets that aren't adjacent are skipped: capture only runs during market
-  // hours, so differencing across an overnight or weekend hole would draw the
-  // whole close→open move as if it happened in one 5m/15m bucket.
-  const histPoints = useMemo<HistPoint[]>(() => {
-    const step = frameMs(histFrame);
-    const out: HistPoint[] = [];
-    let prev: { t: number; ce: number; pe: number } | null = null;
-    for (const p of histRaw) {
-      // A zero total means "no reading" (e.g. a pre-open bucket), not "OI
-      // collapsed to nothing" — differencing against it would draw a bar the
-      // size of the entire open interest.
-      if (p.totalCe <= 0 || p.totalPe <= 0) continue;
-      if (prev && isAdjacentBucket(prev.t, p.t, step)) {
-        out.push({
-          t: p.t,
-          values: [p.totalCe - prev.ce, p.totalPe - prev.pe],
-        });
-      }
-      prev = { t: p.t, ce: p.totalCe, pe: p.totalPe };
-    }
-    return out;
-  }, [histRaw, histFrame]);
+  // Per-bucket OI change (Call & Put) — see oiDeltaPoints for the gap handling.
+  const histPoints = useMemo<HistPoint[]>(
+    () => oiDeltaPoints(histRaw, frameMs(histFrame)),
+    [histRaw, histFrame],
+  );
 
   // ---- Periodic sampling: rolling per-token OI/price history ----
   // Powers the 5m/15m OI-change % + buildup fallback when the server baseline
@@ -578,9 +687,23 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const metrics = useMemo(() => {
     if (!chain || chain.strikes.length === 0) return null;
     const strikes = chain.strikes;
-    const spot = ticks[chain.spot_token]?.last_price ?? chain.spot;
-    const atmIdx = nearestStrikeIdx(strikes, spot);
+    // The backend reports spot 0 when its own quote call failed, and no tick has
+    // arrived on the very first render. Anchoring ATM on 0 would pick the LOWEST
+    // strike, which then moves the isAtm row, the auto-scroll target and the whole
+    // 26↓/ATM/24↑ totals window to the bottom of the ladder. The chain API's own
+    // atm_strike is the right fallback: it has a median-strike default, so it is
+    // always a plausible centre.
+    const tickSpot = ticks[chain.spot_token]?.last_price;
+    const spot = isRealTotal(tickSpot)
+      ? tickSpot
+      : chain.spot > 0
+        ? chain.spot
+        : 0;
+    const atmIdx = nearestStrikeIdx(strikes, spot > 0 ? spot : chain.atm_strike);
     const atmStrike = strikes[atmIdx]?.strike ?? chain.atm_strike;
+    // Only the client's own rolling samples are graded against "now" — they are
+    // taken continuously, so now IS their cutoff. Server baselines are graded
+    // against when they were fetched; see isServerBaselineFresh.
     const cutoffFor = (frame: MinuteInterval) => Date.now() - frame * 60 * 1000;
 
     const isValidBaselineTime = (sampleTime: number, cutoff: number) =>
@@ -603,7 +726,8 @@ export default function Analytics({ authenticated, onBack }: Props) {
       }
       const cutoff = cutoffFor(frame);
       const b = baselines[frame][token];
-      if (b && isValidBaselineTime(b.t, cutoff)) return b;
+      const fetchedAt = baselineAt[frame];
+      if (b && fetchedAt > 0 && isServerBaselineFresh(b.t, fetchedAt, frame)) return b;
       const arr = histRef.current.get(token);
       if (!arr || arr.length === 0) return null;
       let base: Sample | null = null;
@@ -615,20 +739,22 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
 
     const changeFor = (token: number) => {
+      const none = { oiPct: null as number | null, buildup: null as Buildup };
       const cur = ticks[token];
-      if (!cur) return { oiPct: null as number | null, buildup: null as Buildup };
+      if (!cur) return none;
+      // `oi` is optional on a tick, and a missing one is NOT zero open interest.
+      // Coercing it with `?? 0` printed a confident red -100% for any contract
+      // whose tick hadn't carried OI yet, and fed classifyBuildup a full-size
+      // negative ΔOI — labelling it short covering or long unwinding.
+      const curOi = cur.oi;
+      if (curOi == null || !Number.isFinite(curOi)) return none;
 
       const oiBase = baseOf(token, oiInterval);
       const bldBase = baseOf(token, bldInterval);
       const oiPct =
-        oiBase && oiBase.oi > 0
-          ? (((cur.oi ?? 0) - oiBase.oi) / oiBase.oi) * 100
-          : null;
+        oiBase && oiBase.oi > 0 ? ((curOi - oiBase.oi) / oiBase.oi) * 100 : null;
       const buildup = bldBase
-        ? classifyBuildup(
-            (cur.oi ?? 0) - bldBase.oi,
-            (cur.last_price ?? 0) - bldBase.ltp,
-          )
+        ? classifyBuildup(curOi - bldBase.oi, (cur.last_price ?? 0) - bldBase.ltp)
         : null;
       return { oiPct, buildup };
     };
@@ -663,14 +789,31 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const totHi = clamp(atmIdx + TOTAL_UP, 0, strikes.length - 1);
     let totalCe = 0;
     let totalPe = 0;
+    // Legs still waiting for their first OI-bearing tick. Ticks arrive over
+    // several seconds for a ~100-token chain, so right after load the sums are
+    // genuinely incomplete. They are shown anyway (they converge visibly), but PCR
+    // is a RATIO of two of them: publishing it while legs are missing prints a
+    // precise-looking number that is simply wrong, and it would disagree with the
+    // Call-vs-Put chart, which is served from the server's own aggregate.
+    let missingLegs = 0;
+    // Note this accepts 0: a deep strike genuinely carrying no open interest is a
+    // real reading, unlike an absent one. Only the ABSENCE is counted as missing.
+    const readOi = (token: number): number | null => {
+      const oi = ticks[token]?.oi;
+      return typeof oi === "number" && Number.isFinite(oi) ? oi : null;
+    };
     for (let i = totLo; i <= totHi; i++) {
-      totalCe += ticks[strikes[i]!.ce_token]?.oi ?? 0;
-      totalPe += ticks[strikes[i]!.pe_token]?.oi ?? 0;
+      const ceOi = readOi(strikes[i]!.ce_token);
+      const peOi = readOi(strikes[i]!.pe_token);
+      if (ceOi === null) missingLegs++;
+      else totalCe += ceOi;
+      if (peOi === null) missingLegs++;
+      else totalPe += peOi;
     }
-    const pcr = totalCe > 0 ? totalPe / totalCe : null;
+    const pcr = missingLegs === 0 && totalCe > 0 ? totalPe / totalCe : null;
 
-    return { rows, atmStrike, spot, totalCe, totalPe, pcr };
-  }, [chain, ticks, oiInterval, bldInterval, baselines, prevClose]);
+    return { rows, atmStrike, spot, totalCe, totalPe, pcr, missingLegs };
+  }, [chain, ticks, oiInterval, bldInterval, baselines, baselineAt, prevClose]);
 
   // Center the ATM row once the chain + first ticks are in.
   useEffect(() => {
@@ -702,10 +845,20 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
   // Timestamp formatting per frame: 1m shows time only; 5m/15m span multiple
   // days so they show date + time.
+  // Always IST, never the browser's zone. Every bucket boundary these charts show
+  // is an NSE session time the server aligned to the IST calendar, so rendering it
+  // in local time put the open at "03:45" for a UTC viewer and shifted the
+  // multi-day frames onto the wrong calendar day — while istDayKey right above was
+  // already IST, so the page disagreed with itself.
   const fmtTs = (frame: OiFrame, ms: number) =>
     frame === "1m"
-      ? new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+      ? new Date(ms).toLocaleTimeString("en-GB", {
+          timeZone: "Asia/Kolkata",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
       : new Date(ms).toLocaleString("en-GB", {
+          timeZone: "Asia/Kolkata",
           day: "2-digit",
           month: "short",
           hour: "2-digit",
@@ -791,25 +944,13 @@ export default function Analytics({ authenticated, onBack }: Props) {
     () => currentMonthOf(futHistContracts),
     [futHistContracts],
   );
-  const futHistPoints = useMemo<HistPoint[]>(() => {
-    if (!currentFutHist) return [];
-    const step = frameMs(futHistFrame);
-    const out: HistPoint[] = [];
-    let prevOi: number | null = null;
-    let prevT: number | null = null;
-    for (const p of futHistRaw) {
-      const oi = p.legs.find((l) => l.expiry === currentFutHist.expiry)?.oi ?? 0;
-      // A non-positive reading means "no data", not "OI collapsed to zero".
-      if (oi <= 0) continue;
-      // Only difference genuinely adjacent buckets — see histPoints above.
-      if (prevOi !== null && prevT !== null && isAdjacentBucket(prevT, p.t, step)) {
-        out.push({ t: p.t, values: [oi - prevOi] });
-      }
-      prevOi = oi;
-      prevT = p.t;
-    }
-    return out;
-  }, [currentFutHist, futHistRaw, futHistFrame]);
+  const futHistPoints = useMemo<HistPoint[]>(
+    () =>
+      currentFutHist
+        ? futDeltaPoints(futHistRaw, currentFutHist.expiry, frameMs(futHistFrame))
+        : [],
+    [currentFutHist, futHistRaw, futHistFrame],
+  );
   const futHistSeries = useMemo<HistSeries[]>(
     () => [{ label: "Futures ΔOI", color: FUT_COLOR }],
     [],
@@ -1001,7 +1142,16 @@ export default function Analytics({ authenticated, onBack }: Props) {
                 </span>
                 <span className="an-chain-stat">
                   <span className="an-chain-stat-k">PCR</span>
-                  <span className="an-chain-stat-v">
+                  <span
+                    className="an-chain-stat-v"
+                    title={
+                      metrics.pcr !== null
+                        ? "Put OI / Call OI over the 26↓ · ATM · 24↑ window"
+                        : metrics.missingLegs > 0
+                          ? `Waiting on open interest for ${metrics.missingLegs} contract(s) in the window — a ratio of incomplete sums would be wrong`
+                          : "No open interest in the window yet"
+                    }
+                  >
                     {metrics.pcr === null ? "—" : metrics.pcr.toFixed(2)}
                   </span>
                 </span>

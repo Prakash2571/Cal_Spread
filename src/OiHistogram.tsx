@@ -84,9 +84,14 @@ export default function OiHistogram({
   const half = plotH / 2;
   const y0 = PAD.t + half; // zero baseline (center)
 
+  // Skip non-finite values rather than folding them in: Math.max(1, NaN) is NaN,
+  // so a single bad bar used to poison maxAbs and with it every bar height, every
+  // gridline and every tick label — blanking the entire chart.
   let maxAbs = 1;
   for (const p of points) {
-    for (const v of p.values) maxAbs = Math.max(maxAbs, Math.abs(v));
+    for (const v of p.values) {
+      if (Number.isFinite(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
+    }
   }
 
   const lastI = points.length - 1;

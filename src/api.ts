@@ -780,6 +780,13 @@ export interface OptionOiFramePoint {
   totalPe: number;
   straddle: number;
   spot: number;
+  /**
+   * Present when the server knows this bucket UNDERSTATES its window — a quote
+   * response that missed strikes, or a reconstruction whose history for one of
+   * them was unavailable. The server publishes it and keeps trying to rebuild it,
+   * so a client must treat it as "no reading" rather than as a real dip.
+   */
+  partial?: 1;
 }
 
 export interface OptionOiFrameResponse {
