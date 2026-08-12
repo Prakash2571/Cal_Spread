@@ -201,7 +201,7 @@ export interface OiHistory {
   futures: OiFutureSeries[];
 }
 
-/** Fetch ~1 month of daily closing open interest for a symbol's futures. */
+/** Fetch ~3 months of daily closing price + open interest for a symbol's futures. */
 export async function fetchOiHistory(symbol: string): Promise<OiHistory> {
   const res = await fetch(
     `${API_BASE_URL}/api/history/${encodeURIComponent(symbol)}`,

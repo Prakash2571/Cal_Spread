@@ -101,7 +101,13 @@ export default function StockDetail({
   const [minute, setMinute] = useState<IntradayHistory | null>(null);
   const [fiveMin, setFiveMin] = useState<IntradayHistory | null>(null);
   const [spreadStats, setSpreadStats] = useState<SpreadStats | null>(null);
-  const [intradayMode, setIntradayMode] = useState<"1m" | "5m">("1m");
+  // One timeframe selector each for the price and spread charts. Both switch
+  // between already-fetched series (daily/hourly/5m/1m) with no refetch, so the
+  // toggle is instant and the detail page shows a single price chart instead of a
+  // vertical stack the reader has to scroll through.
+  const [priceMode, setPriceMode] = useState<"daily" | "hourly" | "5m" | "1m">(
+    "daily",
+  );
   const [spreadMode, setSpreadMode] = useState<"daily" | "hourly" | "5m" | "1m">(
     "daily",
   );
@@ -144,6 +150,15 @@ export default function StockDetail({
       alive = false;
     };
   }, [symbol, showIntraday]);
+
+  // The 5m/1m price windows only exist for live symbols. If intraday data isn't
+  // shown (e.g. a closed trade), fall the selector back to the daily view so it
+  // never sits on a hidden, empty timeframe.
+  useEffect(() => {
+    if (!showIntraday && (priceMode === "5m" || priceMode === "1m")) {
+      setPriceMode("daily");
+    }
+  }, [showIntraday, priceMode]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -191,10 +206,9 @@ export default function StockDetail({
       };
     });
 
-  // Minute (last 2 hours) + 5-minute (today) — toggled on one chart.
+  // Minute (last 2 hours) + 5-minute (today) — both feed the single price chart.
   const minuteSeries = toIntradaySeries(minute);
   const fiveMinSeries = toIntradaySeries(fiveMin);
-  const intradaySeries = intradayMode === "1m" ? minuteSeries : fiveMinSeries;
 
   // Trade entry/exit markers (drawn on charts whose window contains them).
   const markers: ChartMarker[] = [];
@@ -237,12 +251,23 @@ export default function StockDetail({
   }));
 
   const spreadConfig = {
-    daily: { futs: dailyFuts, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily · last 1 month" },
+    daily: { futs: dailyFuts, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily · last 3 months" },
     hourly: { futs: hourlyFuts, formatX: fmtHour, sub: "Hourly · last 1 week" },
     "5m": { futs: fiveFuts, formatX: fmtMinute, sub: "5-min · today" },
     "1m": { futs: minFuts, formatX: fmtMinute, sub: "1-min · last 2 hours" },
   }[spreadMode];
   const spreadSeries = spreadFrom(spreadConfig.futs);
+
+  // Price chart timeframes, mirroring the spread selector. "3M" is the daily
+  // window (now ~3 months from the backend); the rest reuse the intraday caches.
+  // 5m/1m only exist when intraday data was loaded (live symbols), so they are
+  // offered only then.
+  const priceConfig = {
+    daily: { series: priceSeries, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily close · last 3 months" },
+    hourly: { series: hourlySeries, formatX: fmtHour, sub: "Hourly close · last 1 week" },
+    "5m": { series: fiveMinSeries, formatX: fmtMinute, sub: "5-min close · today" },
+    "1m": { series: minuteSeries, formatX: fmtMinute, sub: "1-min close · last 2 hours" },
+  }[priceMode];
 
   return (
     <div className="app">
@@ -423,7 +448,7 @@ export default function StockDetail({
                       className={spreadMode === "daily" ? "active" : ""}
                       onClick={() => setSpreadMode("daily")}
                     >
-                      1M
+                      3M
                     </button>
                     <button
                       className={spreadMode === "hourly" ? "active" : ""}
@@ -457,62 +482,51 @@ export default function StockDetail({
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Price</h2>
-                  <span className="chart-sub">Daily close · last 1 month · 3 futures</span>
-                </div>
-                <LineChart series={priceSeries} format={fmtPrice} markers={markers} />
-              </div>
-
-              <div className="detail-chart">
-                <div className="chart-head">
-                  <h2>Price · Hourly</h2>
-                  <span className="chart-sub">Hourly close · last 1 week · 3 futures</span>
+                  <span className="chart-sub">{priceConfig.sub} · 3 futures · hover for spread</span>
+                  <div className="chart-toggle">
+                    <button
+                      className={priceMode === "daily" ? "active" : ""}
+                      onClick={() => setPriceMode("daily")}
+                    >
+                      3M
+                    </button>
+                    <button
+                      className={priceMode === "hourly" ? "active" : ""}
+                      onClick={() => setPriceMode("hourly")}
+                    >
+                      1W
+                    </button>
+                    {showIntraday && (
+                      <>
+                        <button
+                          className={priceMode === "5m" ? "active" : ""}
+                          onClick={() => setPriceMode("5m")}
+                        >
+                          5m
+                        </button>
+                        <button
+                          className={priceMode === "1m" ? "active" : ""}
+                          onClick={() => setPriceMode("1m")}
+                        >
+                          1m
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <LineChart
-                  series={hourlySeries}
+                  series={priceConfig.series}
                   format={fmtPrice}
-                  formatX={fmtHour}
+                  formatX={priceConfig.formatX}
                   markers={markers}
+                  showSpreadReadout
                 />
               </div>
-
-              {showIntraday && (
-                <div className="detail-chart">
-                  <div className="chart-head">
-                    <h2>Price · Intraday</h2>
-                    <span className="chart-sub">
-                      {intradayMode === "1m"
-                        ? "1-min close · last 2 hours"
-                        : "5-min close · today"}{" "}
-                      · 3 futures
-                    </span>
-                    <div className="chart-toggle">
-                      <button
-                        className={intradayMode === "1m" ? "active" : ""}
-                        onClick={() => setIntradayMode("1m")}
-                      >
-                        1m
-                      </button>
-                      <button
-                        className={intradayMode === "5m" ? "active" : ""}
-                        onClick={() => setIntradayMode("5m")}
-                      >
-                        5m
-                      </button>
-                    </div>
-                  </div>
-                  <LineChart
-                    series={intradaySeries}
-                    format={fmtPrice}
-                    formatX={fmtMinute}
-                    markers={markers}
-                  />
-                </div>
-              )}
 
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Open Interest</h2>
-                  <span className="chart-sub">Daily closing OI · last 1 month</span>
+                  <span className="chart-sub">Daily closing OI · last 3 months</span>
                 </div>
                 <LineChart series={oiSeries} format={fmtCompact} markers={markers} />
               </div>

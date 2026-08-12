@@ -352,6 +352,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
   const tickBuffer = useRef<TickMap>({});
   const ticksRef = useRef<TickMap>({});
+  // Last LTP seen per token plus the direction of its most recent change, so the
+  // chain can green an up-tick and red a down-tick. `dir` is sticky: it holds the
+  // last real move's colour until the next differing tick, and stays 0 until the
+  // very first change so a freshly-seeded price is never coloured on nothing.
+  const ltpDirRef = useRef<Map<number, { ltp: number; dir: -1 | 0 | 1 }>>(new Map());
   const chainRef = useRef<OptionChain | null>(null);
   const histRef = useRef<Map<number, Sample[]>>(new Map());
   const atmRowRef = useRef<HTMLTableRowElement | null>(null);
@@ -370,6 +375,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         if (cancelled) return;
         // Reset per-chain accumulators when the instrument set changes.
         histRef.current = new Map();
+        ltpDirRef.current = new Map();
         didCenterRef.current = false;
         setStraddleRaw([]);
         setCeOiSeries([]);
@@ -759,6 +765,21 @@ export default function Analytics({ authenticated, onBack }: Props) {
       return { oiPct, buildup };
     };
 
+    // Direction of the latest LTP move for one token, comparing this tick to the
+    // one before it. Sticky: an unchanged price keeps the last colour, so the
+    // memo re-running for a toggle change (not a new tick) never clears it.
+    const ltpDir = (token: number, ltp: number | null): -1 | 0 | 1 => {
+      if (ltp === null || !Number.isFinite(ltp)) return 0;
+      const prev = ltpDirRef.current.get(token);
+      let dir: -1 | 0 | 1 = prev?.dir ?? 0;
+      if (prev) {
+        if (ltp > prev.ltp) dir = 1;
+        else if (ltp < prev.ltp) dir = -1;
+      }
+      ltpDirRef.current.set(token, { ltp, dir });
+      return dir;
+    };
+
     // Every strike the chain API returned — the straddle column makes the whole
     // ladder useful, not just the band around ATM.
     const rows = strikes.map((s, i) => {
@@ -771,11 +792,17 @@ export default function Analytics({ authenticated, onBack }: Props) {
       return {
         strike: s.strike,
         isAtm: i === atmIdx,
+        // A call is in the money below spot, a put above it — only once we have a
+        // real spot to compare against (0 means no quote/tick yet).
+        ceItm: spot > 0 && s.strike < spot,
+        peItm: spot > 0 && s.strike > spot,
         ceLtp,
+        ceLtpDir: ltpDir(s.ce_token, ceLtp),
         ceOi: ce?.oi ?? null,
         ceOiPct: ceCh.oiPct,
         ceBuildup: ceCh.buildup,
         peLtp,
+        peLtpDir: ltpDir(s.pe_token, peLtp),
         peOi: pe?.oi ?? null,
         peOiPct: peCh.oiPct,
         peBuildup: peCh.buildup,
@@ -1057,6 +1084,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
       </span>
     );
 
+  // Tick-direction class for an LTP cell: green on an up-tick, red on a down-tick.
+  const ltpClass = (dir: -1 | 0 | 1) =>
+    dir > 0 ? " an-ltp-up" : dir < 0 ? " an-ltp-down" : "";
+
   const buildupBadge = (b: Buildup) =>
     b === null ? null : (
       <span className={`an-bld an-bld--${b}`} title={BUILDUP_TITLE[b]}>
@@ -1244,16 +1275,32 @@ export default function Analytics({ authenticated, onBack }: Props) {
                         ref={r.isAtm ? atmRowRef : undefined}
                         className={`${r.isAtm ? "an-atm" : ""} an-row`}
                       >
-                        <td className="num an-ce">{fmtCompact(r.ceOi)}</td>
-                        <td className="num">{pctCell(r.ceOiPct)}</td>
-                        <td className="an-bld-cell">{buildupBadge(r.ceBuildup)}</td>
-                        <td className="num an-ce-ltp">{fmt(r.ceLtp)}</td>
-                        <td className="num an-strike">{r.strike}</td>
-                        <td className="num an-straddle-v">{fmt(r.straddle)}</td>
-                        <td className="num an-pe-ltp">{fmt(r.peLtp)}</td>
-                        <td className="an-bld-cell">{buildupBadge(r.peBuildup)}</td>
-                        <td className="num">{pctCell(r.peOiPct)}</td>
-                        <td className="num an-pe">{fmtCompact(r.peOi)}</td>
+                        {(() => {
+                          const ce = r.ceItm ? " an-itm" : "";
+                          const pe = r.peItm ? " an-itm" : "";
+                          return (
+                            <>
+                              <td className={`num an-ce${ce}`}>{fmtCompact(r.ceOi)}</td>
+                              <td className={`num${ce}`}>{pctCell(r.ceOiPct)}</td>
+                              <td className={`an-bld-cell${ce}`}>
+                                {buildupBadge(r.ceBuildup)}
+                              </td>
+                              <td className={`num an-ce-ltp${ce}${ltpClass(r.ceLtpDir)}`}>
+                                {fmt(r.ceLtp)}
+                              </td>
+                              <td className="num an-strike">{r.strike}</td>
+                              <td className="num an-straddle-v">{fmt(r.straddle)}</td>
+                              <td className={`num an-pe-ltp${pe}${ltpClass(r.peLtpDir)}`}>
+                                {fmt(r.peLtp)}
+                              </td>
+                              <td className={`an-bld-cell${pe}`}>
+                                {buildupBadge(r.peBuildup)}
+                              </td>
+                              <td className={`num${pe}`}>{pctCell(r.peOiPct)}</td>
+                              <td className={`num an-pe${pe}`}>{fmtCompact(r.peOi)}</td>
+                            </>
+                          );
+                        })()}
                       </tr>
                     ))}
                   </tbody>

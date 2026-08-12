@@ -55,6 +55,12 @@ interface Props {
   fit?: boolean;
   /** Re-pin the scroller to the latest data when the card is expanded. */
   expanded?: boolean;
+  /**
+   * Append a "next − current" spread value to the readout, computed from the
+   * first two series at the reported point. Lets the price chart show the
+   * calendar spread under the cursor without a second plot.
+   */
+  showSpreadReadout?: boolean;
 }
 
 const DEFAULT_W = 760;
@@ -110,6 +116,7 @@ export default function LineChart({
   canvasWidth,
   fit = false,
   expanded = false,
+  showSpreadReadout = false,
 }: Props) {
   // `Number.isFinite` in BOTH modes. `v > 0` alone rejects NaN but happily accepts
   // Infinity, which then becomes vMax, makes vRange Infinity and turns every other
@@ -274,6 +281,39 @@ export default function LineChart({
       value: v === null || v === undefined ? "—" : format(v),
     };
   });
+
+  // Calendar-spread readout: next month − current month at the reported point.
+  // Hovering targets that x; idle falls back to the newest date both legs share,
+  // so the strip always names a real spread instead of "—" at the very edge.
+  if (showSpreadReadout && plotted.length >= 2) {
+    const cur = plotted[0]!;
+    const nxt = plotted[1]!;
+    let dateKey = hoverDate;
+    if (dateKey === null) {
+      for (let i = n - 1; i >= 0; i--) {
+        const d = allDates[i]!;
+        const cv = cur.byDate.get(d);
+        const nv = nxt.byDate.get(d);
+        if (cv !== undefined && nv !== undefined && valid(cv) && valid(nv)) {
+          dateKey = d;
+          break;
+        }
+      }
+    }
+    const cv = dateKey === null ? undefined : cur.byDate.get(dateKey);
+    const nv = dateKey === null ? undefined : nxt.byDate.get(dateKey);
+    const spreadVal =
+      cv !== undefined && nv !== undefined && valid(cv) && valid(nv) ? nv - cv : null;
+    readoutItems.push({
+      label: "Spread (next − current)",
+      color: "var(--series-1)",
+      value:
+        spreadVal === null
+          ? "—"
+          : `${spreadVal >= 0 ? "+" : ""}${format(spreadVal)}`,
+    });
+  }
+
   const start =
     n > 1
       ? {

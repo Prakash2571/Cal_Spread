@@ -2162,6 +2162,9 @@ body {
   letter-spacing: var(--tracking-caps);
   border-bottom: 1px solid var(--border);
   text-align: right;
+  /* Headers must never wrap: a two-line "OI Δ%" or "STRADDLE" in a narrow column
+     grows the header row and drops its labels out of line with the values. */
+  white-space: nowrap;
 }
 .an-chain th.an-strike-h {
   text-align: center;
@@ -2207,6 +2210,21 @@ body {
   font-weight: var(--fw-semibold);
   color: var(--text-2);
   background: var(--surface-2);
+}
+/* In-the-money side: a subtle blue wash across every cell of whichever side is
+   ITM (calls below spot, puts above it). Higher specificity than the call/put
+   OI tints so it takes over the whole ITM half without disturbing OTM rows. */
+.an-chain td.an-itm {
+  background: color-mix(in srgb, var(--accent-surface) 85%, transparent);
+}
+/* Tick-wise LTP colour: green when the last price rose vs the previous tick,
+   red when it fell. Beats the base `.an-chain td` text colour; the ITM wash is a
+   background, so the two combine cleanly on an ITM LTP cell. */
+.an-chain td.an-ltp-up {
+  color: var(--pos);
+}
+.an-chain td.an-ltp-down {
+  color: var(--neg);
 }
 .an-atm {
   outline: 1px solid var(--accent);
