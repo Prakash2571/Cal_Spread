@@ -1049,8 +1049,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     let best: number | null = null;
     let strike: number | null = null;
     for (const r of chainRows) {
-      if (r.straddle > 0 && (best === null || r.straddle < best)) {
-        best = r.straddle;
+      const s = r.straddle;
+      if (s !== null && s > 0 && (best === null || s < best)) {
+        best = s;
         strike = r.strike;
       }
     }
