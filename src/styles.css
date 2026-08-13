@@ -113,25 +113,26 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* Neutral light-grey page with WHITE cards, instead of the old blue-tinted
-     wash (#f2f5f9 read as pale blue). The page sits a clear step below the
-     cards so every card/table reads as a raised white surface on grey — the
-     clean, high-contrast look of the Zerodha/Sensibull shell next to it. */
-  --surface-0: #e8eaec;
-  --surface-1: #ffffff;
-  --surface-2: #f1f2f4;
-  --surface-3: #e4e6e8;
+  /* WHITE page with light-grey cards (the inverse of the earlier grey-page /
+     white-card scheme). The page is the brightest surface and the cards step
+     DOWN into grey, so a card reads as a panel inset on a white sheet. The
+     inner accents (table header, strike column) step down once more so they
+     still separate from the grey card body. */
+  --surface-0: #ffffff;
+  --surface-1: #e8eaec;
+  --surface-2: #dee1e5;
+  --surface-3: #d5d9de;
 
-  --border-subtle: #e3e5e7;
-  --border: #cfd2d6;
-  --border-strong: #aab0b7;
+  /* Deeper than the grey card so internal table lines/borders stay visible. */
+  --border-subtle: #d9dce1;
+  --border: #c6cbd1;
+  --border-strong: #a6acb4;
 
-  /* Data surfaces (chart cards, trade cards, the option chain) are WHITE so
-     they separate cleanly from the grey page; the grey steps are kept for the
-     inner accents (table header, strike column, hover). */
-  --data-surface: #ffffff;
-  --data-surface-strong: #f1f2f4;
-  --data-border: #d6d9dd;
+  /* Data surfaces (chart cards, trade cards, the option chain) share the card
+     grey; their inner accent/hover steps down from it. */
+  --data-surface: #e8eaec;
+  --data-surface-strong: #dee1e5;
+  --data-border: #c9cdd3;
 
   --text-1: #162033;
   --text-2: #46566b;
