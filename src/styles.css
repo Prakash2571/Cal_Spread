@@ -2666,13 +2666,16 @@ body {
 }
 
 /* ---- Analytics: straddle premium, stacked UNDER the strike ---- */
-/* Small, quiet second line inside the (widened) strike cell. */
+/* Second line inside the (widened) strike cell — the straddle premium. Sized up
+   and set in the medium body-text colour (not the faint --text-3, which washed
+   out in light mode) with a clear gap under the strike, so it reads as its own
+   value rather than a caption. */
 .an-strad-v {
   display: block;
-  margin-top: 1px;
-  font-size: var(--fs-1);
-  font-weight: var(--fw-regular);
-  color: var(--text-3);
+  margin-top: 3px;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
