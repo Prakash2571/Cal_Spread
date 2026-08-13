@@ -155,7 +155,10 @@
 
   --prem: #175eb5;
   --prem-surface: #eaf3ff;
-  --disc: #7b5900;
+  /* A clean, warm amber that stays readable on white (a bright gold like the
+     dark theme's would wash out). Replaces the old olive-mustard #7b5900 that
+     read as a muddy "poop" yellow. */
+  --disc: #b45309;
   --disc-surface: #fff6d9;
 
   --oi: #0a6674;
@@ -894,11 +897,11 @@ body {
 }
 
 .chip {
+  /* No filled box: chips are plain COLOURED NUMBERS everywhere (the day-change
+     % and the Prem/Disc column). The pill background read as heavy in the dense
+     grid. Only the text colour distinguishes them now. */
   display: inline-block;
-  min-width: 60px;
   text-align: right;
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--r-sm);
   font-size: var(--fs-3);
   font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
@@ -907,39 +910,22 @@ body {
 
 .chip.prem {
   color: var(--prem);
-  background: var(--prem-surface);
 }
 
 .chip.disc {
   color: var(--disc);
-  background: var(--disc-surface);
 }
 
 .chip.pos {
   color: var(--pos);
-  background: var(--pos-surface);
 }
 
 .chip.neg {
   color: var(--neg);
-  background: var(--neg-surface);
 }
 
 .chip.muted {
   color: var(--text-3);
-  background: var(--data-surface);
-}
-
-/* PREM/DISC column: a plain COLOURED NUMBER (blue premium / amber discount)
-   rather than a filled chip — the boxes read as heavy in the dense card grid.
-   Scoped to the card table, so the header day-change chip keeps its pill.
-   Colours come from the .chip.prem/.disc/.muted rules above and are theme
-   tokens, so this holds in both light and dark. */
-.card-table td .chip {
-  min-width: 0;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
 }
 
 /* ================ States ================ */
