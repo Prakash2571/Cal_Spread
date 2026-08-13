@@ -162,9 +162,13 @@
   --disc-surface: #fff6d9;
 
   --oi: #0a6674;
-  --series-1: #175eb5;
-  --series-2: #16752f;
-  --series-3: #895c00;
+  /* Three futures lines that stay clearly apart on white: a strong blue, a
+     vivid grass green, and a clean orange (replacing the old muddy amber that
+     read too close to the green/blue). Distinct in hue AND lightness so they're
+     tellable even where the contracts run close. */
+  --series-1: #1565c0;
+  --series-2: #1f9d42;
+  --series-3: #e2660a;
   --series-expired: #526174;
   --chart-grid: #d9e0e8;
   --chart-guide: #8b98a8;
