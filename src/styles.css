@@ -119,20 +119,24 @@
      inner accents (table header, strike column) step down once more so they
      still separate from the grey card body. */
   --surface-0: #ffffff;
-  --surface-1: #e8eaec;
-  --surface-2: #dee1e5;
-  --surface-3: #d5d9de;
+  /* Cards are a clean, slightly-cool light-grey "panel" tone — deep enough to
+     read as a distinct surface on the white page rather than as another white.
+     (Kept a hair cool for a crisp fintech feel, NOT the pale-lavender wash the
+     old #f2f5f9 had.) Inner accents step down from it. */
+  --surface-1: #e3e7ec;
+  --surface-2: #d7dce2;
+  --surface-3: #ccd2d9;
 
-  /* Deeper than the grey card so internal table lines/borders stay visible. */
-  --border-subtle: #d9dce1;
-  --border: #c6cbd1;
-  --border-strong: #a6acb4;
+  /* Deeper than the card so internal table lines/borders stay visible. */
+  --border-subtle: #d0d6dd;
+  --border: #bcc3cc;
+  --border-strong: #9ea6b0;
 
   /* Data surfaces (chart cards, trade cards, the option chain) share the card
-     grey; their inner accent/hover steps down from it. */
-  --data-surface: #e8eaec;
-  --data-surface-strong: #dee1e5;
-  --data-border: #c9cdd3;
+     tone; their inner accent/hover steps down from it. */
+  --data-surface: #e3e7ec;
+  --data-surface-strong: #d7dce2;
+  --data-border: #c2c9d1;
 
   --text-1: #162033;
   --text-2: #46566b;
