@@ -113,18 +113,25 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --surface-0: #f2f5f9;
+  /* Neutral light-grey page with WHITE cards, instead of the old blue-tinted
+     wash (#f2f5f9 read as pale blue). The page sits a clear step below the
+     cards so every card/table reads as a raised white surface on grey — the
+     clean, high-contrast look of the Zerodha/Sensibull shell next to it. */
+  --surface-0: #e8eaec;
   --surface-1: #ffffff;
-  --surface-2: #edf2f7;
-  --surface-3: #e2e9f1;
+  --surface-2: #f1f2f4;
+  --surface-3: #e4e6e8;
 
-  --border-subtle: #c7d1dd;
-  --border: #8799ae;
-  --border-strong: #647991;
+  --border-subtle: #e3e5e7;
+  --border: #cfd2d6;
+  --border-strong: #aab0b7;
 
-  --data-surface: #edf2f7;
-  --data-surface-strong: #e2e9f1;
-  --data-border: #aebdce;
+  /* Data surfaces (chart cards, trade cards, the option chain) are WHITE so
+     they separate cleanly from the grey page; the grey steps are kept for the
+     inner accents (table header, strike column, hover). */
+  --data-surface: #ffffff;
+  --data-surface-strong: #f1f2f4;
+  --data-border: #d6d9dd;
 
   --text-1: #162033;
   --text-2: #46566b;
@@ -1403,6 +1410,21 @@ body {
   color: var(--text-3);
 }
 
+/* Gross P&L + the charges taken off it, under the trade's meta line. Its own
+   row (not inline with the qty/margin text) so the money reads as a figure
+   rather than as part of the sentence. */
+.trade-charges {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.trade-charges--none {
+  font-family: var(--font-ui);
+  font-style: italic;
+}
+
 .trade-right {
   display: flex;
   flex-direction: column;
@@ -2131,28 +2153,48 @@ body {
 /* Mirrored around the strike: calls and puts get identical widths, so the two
    halves of the chain are directly comparable. Sums to 100%. */
 .an-col-oi {
-  width: 11%;
+  width: 10.5%;
 }
 .an-col-pct {
-  width: 11.5%;
+  width: 11%;
 }
+/* Wide enough for the buildup badge PLUS the cell's own padding: at 7.5% the
+   badge's min-width + padding exceeded the content box and `overflow: hidden`
+   clipped it, so the LB/SB/SC/LU pills looked cropped and ragged against the
+   centred header. */
 .an-col-bld {
-  width: 7.5%;
+  width: 8.5%;
 }
 .an-col-ltp {
   width: 10%;
 }
-.an-col-level {
+.an-col-strike {
   width: 8.5%;
 }
 .an-col-straddle {
   width: 11.5%;
 }
+/* The whole <thead> is pinned as ONE unit. Pinning each row separately (row 2
+   offset by row 1's height) needs that height as a constant, and any drift
+   between the constant and the real row height opens a gap that the scrolling
+   body shows through — so the two-row header stays a single sticky block.
+   `border-collapse: collapse` drops a sticky header's own border-bottom, so the
+   rule under the labels is an inset shadow, which does survive. */
 .an-chain thead {
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--surface-2);
+}
+.an-chain thead tr:last-child th {
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+/* Vertical rules at the CALLS | strike | straddle | PUTS boundaries. With the
+   group labels now sitting over single columns, these are what keep the three
+   blocks reading as blocks while the per-row ITM/OI tints change underneath. */
+.an-chain th.an-gsep,
+.an-chain td.an-gsep {
+  border-left: 1px solid var(--data-border);
 }
 .an-chain th {
   padding: 6px 6px;
@@ -2211,11 +2253,13 @@ body {
   color: var(--text-2);
   background: var(--surface-2);
 }
-/* In-the-money side: a subtle blue wash across every cell of whichever side is
-   ITM (calls below spot, puts above it). Higher specificity than the call/put
+/* In-the-money side: a LIGHT blue wash across every cell of whichever side is
+   ITM (calls below spot, puts above it). Kept faint (was 85%, which flooded the
+   cells and swallowed the red/green LTP tick colours) so the up/down LTP and the
+   OI tints still read clearly through it. Higher specificity than the call/put
    OI tints so it takes over the whole ITM half without disturbing OTM rows. */
 .an-chain td.an-itm {
-  background: color-mix(in srgb, var(--accent-surface) 85%, transparent);
+  background: color-mix(in srgb, var(--accent-surface) 38%, transparent);
 }
 /* Tick-wise LTP colour: green when the last price rose vs the previous tick,
    red when it fell. Beats the base `.an-chain td` text colour; the ITM wash is a
@@ -2238,8 +2282,8 @@ body {
 }
 .an-bld {
   display: inline-block;
-  min-width: 22px;
-  padding: 1px 5px;
+  min-width: 20px;
+  padding: 1px 4px;
   border-radius: var(--r-sm);
   font-size: var(--fs-1);
   font-weight: var(--fw-bold);
@@ -2403,9 +2447,18 @@ body {
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-gutter: stable;
   overscroll-behavior-inline: contain;
   -webkit-overflow-scrolling: touch;
+  /* No visible scrollbar "roller": these charts open pinned to the newest data
+     and are panned by wheel / trackpad / touch-drag, not read off a bar. The
+     content still scrolls on action — only the bar chrome is hidden. Dropping
+     `scrollbar-gutter: stable` also reclaims the gutter the bar used to reserve,
+     so a fitted canvas now measures the full card width. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+.an-scrollx::-webkit-scrollbar {
+  display: none; /* Chromium / WebKit */
 }
 .an-chart-card--expanded .an-scrollx {
   height: 100%;

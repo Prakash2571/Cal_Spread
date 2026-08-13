@@ -1238,7 +1238,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                     <col className="an-col-pct" />
                     <col className="an-col-bld" />
                     <col className="an-col-ltp" />
-                    <col className="an-col-level" />
+                    <col className="an-col-strike" />
                     <col className="an-col-straddle" />
                     <col className="an-col-ltp" />
                     <col className="an-col-bld" />
@@ -1246,10 +1246,20 @@ export default function Analytics({ authenticated, onBack }: Props) {
                     <col className="an-col-oi" />
                   </colgroup>
                   <thead>
+                    {/* Strike and Straddle span BOTH header rows instead of
+                        sharing a 2-column "STRIKE" group. A group label is
+                        centred over its span, so grouping them put "STRIKE"
+                        midway between the strike and straddle columns —
+                        directly over neither — and left the straddle premium
+                        filed under a heading it isn't. One column, one heading,
+                        each sitting over its own values. */}
                     <tr className="an-chain-side">
                       <th colSpan={4} className="an-calls">CALLS</th>
-                      <th colSpan={2} className="an-strike-h">STRIKE</th>
-                      <th colSpan={4} className="an-puts">PUTS</th>
+                      <th rowSpan={2} className="an-strike-h an-gsep">
+                        Strike
+                      </th>
+                      <th rowSpan={2}>Straddle</th>
+                      <th colSpan={4} className="an-puts an-gsep">PUTS</th>
                     </tr>
                     <tr>
                       {/* Each header's alignment matches its cells: numbers right,
@@ -1260,9 +1270,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                       <th>OI Δ%</th>
                       <th className="an-bld-h">Bld</th>
                       <th>LTP</th>
-                      <th className="an-strike-h">Level</th>
-                      <th>Straddle</th>
-                      <th>LTP</th>
+                      <th className="an-gsep">LTP</th>
                       <th className="an-bld-h">Bld</th>
                       <th>OI Δ%</th>
                       <th>OI</th>
@@ -1288,9 +1296,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
                               <td className={`num an-ce-ltp${ce}${ltpClass(r.ceLtpDir)}`}>
                                 {fmt(r.ceLtp)}
                               </td>
-                              <td className="num an-strike">{r.strike}</td>
+                              <td className="num an-strike an-gsep">{r.strike}</td>
                               <td className="num an-straddle-v">{fmt(r.straddle)}</td>
-                              <td className={`num an-pe-ltp${pe}${ltpClass(r.peLtpDir)}`}>
+                              <td
+                                className={`num an-pe-ltp an-gsep${pe}${ltpClass(r.peLtpDir)}`}
+                              >
                                 {fmt(r.peLtp)}
                               </td>
                               <td className={`an-bld-cell${pe}`}>

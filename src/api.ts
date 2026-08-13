@@ -135,6 +135,43 @@ export interface TradeLeg {
   entry: number;
 }
 
+/** One order's charges from Zerodha's virtual contract note. */
+export interface TradeLegCharges {
+  side: "BUY" | "SELL";
+  tradingsymbol: string;
+  quantity: number;
+  price: number;
+  value: number;
+  brokerage: number;
+  stt: number;
+  stt_type: string;
+  exchange_txn: number;
+  sebi: number;
+  stamp_duty: number;
+  gst: number;
+  total: number;
+}
+
+/**
+ * Charges for one side of a trade (both legs), as billed by Zerodha.
+ * `source` is "kite" for the real contract note and "kite_estimate" when the
+ * exit is projected at the entry fills (an open trade, or a close where the
+ * charges call failed).
+ */
+export interface TradeCharges {
+  legs: TradeLegCharges[];
+  value: number;
+  brokerage: number;
+  stt: number;
+  exchange_txn: number;
+  sebi: number;
+  stamp_duty: number;
+  gst: number;
+  total: number;
+  source: "kite" | "kite_estimate";
+  at: string;
+}
+
 export interface Trade {
   id: string;
   symbol: string;
@@ -146,10 +183,25 @@ export interface Trade {
   status: "open" | "closed";
   opened_at: string;
   closed_at: string | null;
+  /** GROSS realized P&L (price move only) — see net_pnl for after charges. */
   close_pnl: number | null;
   buy_close: number | null;
   sell_close: number | null;
   margin: number | null;
+  /** Real charges on the entry fills. Null for trades taken before charges
+   *  were tracked, or when Zerodha couldn't price them. */
+  entry_charges: TradeCharges | null;
+  /** Real charges on the exit fills — set when the trade is closed. */
+  exit_charges: TradeCharges | null;
+  /** Exit charges projected at the entry fills, so an open trade can be shown
+   *  net of the whole round trip. */
+  est_exit_charges: TradeCharges | null;
+  entry_value: number | null;
+  exit_value: number | null;
+  /** entry + exit charges, set on close. */
+  total_charges: number | null;
+  /** close_pnl - total_charges. */
+  net_pnl: number | null;
 }
 
 /** Take a 1-lot calendar-spread trade for a symbol (buy discount / sell premium). */
