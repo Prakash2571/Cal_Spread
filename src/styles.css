@@ -930,6 +930,18 @@ body {
   background: var(--data-surface);
 }
 
+/* PREM/DISC column: a plain COLOURED NUMBER (blue premium / amber discount)
+   rather than a filled chip — the boxes read as heavy in the dense card grid.
+   Scoped to the card table, so the header day-change chip keeps its pill.
+   Colours come from the .chip.prem/.disc/.muted rules above and are theme
+   tokens, so this holds in both light and dark. */
+.card-table td .chip {
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 /* ================ States ================ */
 .empty {
   padding: var(--sp-10) var(--sp-5);
