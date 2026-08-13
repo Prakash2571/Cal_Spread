@@ -2134,6 +2134,13 @@ body {
   border: 1px solid var(--data-border);
   border-radius: var(--r-lg);
   background: var(--surface-0);
+  /* Hide the scrollbar "roller" but keep the table scrollable (wheel / trackpad
+     / touch), matching the charts' .an-scrollx. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+.an-chain-wrap::-webkit-scrollbar {
+  display: none; /* Chromium / WebKit */
 }
 /* `fixed` so the <colgroup> widths below are honoured exactly and the columns are
    IDENTICAL collapsed and expanded. Under the default `auto` layout the spare
