@@ -1306,22 +1306,20 @@ export default function Analytics({ authenticated, onBack }: Props) {
                               <td className={`num an-ce-ltp${ce}${ltpClass(r.ceLtpDir)}`}>
                                 {fmt(r.ceLtp)}
                               </td>
-                              <td className="num an-strike an-gsep">
+                              <td
+                                className={`num an-strike an-gsep${
+                                  r.strike === minStraddleStrike && !r.isAtm
+                                    ? " an-strike--min"
+                                    : ""
+                                }`}
+                                title={
+                                  r.strike === minStraddleStrike
+                                    ? "Lowest straddle in view (cheapest to be long / richest to be short)"
+                                    : undefined
+                                }
+                              >
                                 {r.strike}
-                                <span
-                                  className={`an-strad-v${
-                                    r.strike === minStraddleStrike
-                                      ? " an-strad-min"
-                                      : ""
-                                  }`}
-                                  title={
-                                    r.strike === minStraddleStrike
-                                      ? "Lowest straddle in view (cheapest to be long / richest to be short)"
-                                      : "Straddle = call LTP + put LTP"
-                                  }
-                                >
-                                  {fmt(r.straddle)}
-                                </span>
+                                <span className="an-strad-v">{fmt(r.straddle)}</span>
                               </td>
                               <td
                                 className={`num an-pe-ltp an-gsep${pe}${ltpClass(r.peLtpDir)}`}

@@ -2286,9 +2286,8 @@ body {
 .an-chain td.an-ltp-down {
   color: var(--neg);
 }
-.an-atm {
-  outline: 1px solid var(--accent);
-}
+/* ATM: mark only the STRIKE block (no full-row outline) — the filled strike
+   cell is enough to anchor the eye at the money. */
 .an-atm .an-strike {
   color: var(--on-accent);
   background: var(--accent);
@@ -2692,16 +2691,18 @@ body {
 .an-atm .an-strad-v {
   color: var(--on-accent);
 }
-/* Lowest straddle in view — marked green the way the ATM strike is marked with
-   the accent, so the cheapest straddle is findable at a glance. The compound
-   selector outranks `.an-atm .an-strad-v`, so it stays green even when the
-   minimum sits on the ATM row (which it usually does). */
-.an-chain td.an-strike .an-strad-min {
-  color: var(--pos);
+/* Lowest straddle in view — the STRIKE block is filled YELLOW, mirroring the way
+   the ATM block is filled with the accent, so the cheapest straddle stands out
+   as its own marker. (Applied only when it isn't the ATM row, so the two block
+   colours never collide.) The yellow highlight reads the same in both themes,
+   so it uses fixed values rather than a theme token. */
+.an-chain td.an-strike.an-strike--min {
+  background: #f2c94c;
+}
+.an-chain td.an-strike.an-strike--min,
+.an-chain td.an-strike.an-strike--min .an-strad-v {
+  color: #3f2f00;
   font-weight: var(--fw-semibold);
-  background: var(--pos-surface);
-  border-radius: var(--r-sm);
-  padding: 0 5px;
 }
 /* Small "straddle" sub-label under the STRIKE header. */
 .an-chain th.an-strike-h .an-strad-h {

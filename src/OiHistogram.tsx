@@ -96,7 +96,18 @@ export default function OiHistogram({
 
   const lastI = points.length - 1;
   const svgW = PAD.l + points.length * GROUP_W + PAD.r;
-  const yFor = (v: number) => y0 - (v / maxAbs) * half;
+  // Sub-linear (power) height scale: lifts the many small changes into
+  // visibility while the largest bar still reaches the axis extreme. Both the
+  // bars and the gridlines below run through this same transform, so every
+  // labelled tick still sits on its own line — only the spacing is non-linear
+  // (compressed toward the extremes), like a gentle log axis. Exact values are
+  // always available in the readout, so the emphasis doesn't mislead.
+  const BAR_SCALE_EXP = 0.6;
+  const yFor = (v: number) => {
+    if (!Number.isFinite(v) || maxAbs <= 0) return y0;
+    const scaled = Math.pow(Math.abs(v) / maxAbs, BAR_SCALE_EXP);
+    return y0 - Math.sign(v) * scaled * half;
+  };
   const groupX = (i: number) => PAD.l + i * GROUP_W;
   const centreX = (i: number) => groupX(i) + GROUP_W / 2;
 
