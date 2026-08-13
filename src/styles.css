@@ -188,6 +188,26 @@
   box-sizing: border-box;
 }
 
+/* ---- Theme-switch crossfade ----
+   Active ONLY while `.theme-anim` is on <html> — ThemeToggle adds it on a user
+   toggle and removes it ~320ms later. For that brief window every surface
+   eases its colours from one palette to the other, so light/dark glides in
+   instead of snapping, while hovers, focus and other interactions stay instant
+   the rest of the time. ThemeToggle does not add the class under
+   prefers-reduced-motion, so motion-sensitive users get an immediate swap. */
+:root.theme-anim,
+:root.theme-anim *,
+:root.theme-anim *::before,
+:root.theme-anim *::after {
+  transition:
+    background-color 320ms var(--ease),
+    border-color 320ms var(--ease),
+    color 320ms var(--ease),
+    fill 320ms var(--ease),
+    stroke 320ms var(--ease),
+    box-shadow 320ms var(--ease) !important;
+}
+
 html,
 body {
   margin: 0;

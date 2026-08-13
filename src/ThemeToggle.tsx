@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type Theme = "dark" | "light";
 
 const THEME_STORAGE_KEY = "cal_spread_theme";
+/** Length of the palette crossfade on a theme toggle (kept in sync with the
+ *  `.theme-anim` transition in styles.css). */
+const THEME_ANIM_MS = 320;
+let themeAnimTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function readStoredTheme(): Theme {
   try {
@@ -12,21 +16,49 @@ export function readStoredTheme(): Theme {
   }
 }
 
-export function applyTheme(theme: Theme) {
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme;
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/**
+ * Apply a theme. When `animate` is set (a user toggle, never the initial load)
+ * a short `.theme-anim` window is opened on <html> so the colours glide from
+ * one palette to the other; it's removed right after so the transition never
+ * touches hovers, focus, or any other interaction. Skipped under
+ * prefers-reduced-motion, which keeps the swap instant.
+ */
+export function applyTheme(theme: Theme, animate = false) {
+  const root = document.documentElement;
+  if (animate && !prefersReducedMotion()) {
+    root.classList.add("theme-anim");
+    clearTimeout(themeAnimTimer);
+    themeAnimTimer = setTimeout(
+      () => root.classList.remove("theme-anim"),
+      THEME_ANIM_MS,
+    );
+  }
+  root.dataset.theme = theme;
+  root.style.colorScheme = theme;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "light" ? "#f2f5f9" : "#0f1216");
+    ?.setAttribute("content", theme === "light" ? "#ffffff" : "#0f1216");
 }
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const isLight = theme === "light";
   const nextTheme = isLight ? "dark" : "light";
+  // Don't animate the palette on first mount (or on page navigation that
+  // remounts the toggle) — only on an actual user-initiated switch.
+  const firstRun = useRef(true);
 
   useEffect(() => {
-    applyTheme(theme);
+    applyTheme(theme, !firstRun.current);
+    firstRun.current = false;
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
