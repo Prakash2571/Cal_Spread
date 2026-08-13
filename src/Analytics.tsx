@@ -1042,6 +1042,21 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return rows.slice(lo, hi + 1);
   }, [metrics, expandedCard]);
 
+  // Strike of the cheapest straddle among the visible rows — marked green in the
+  // chain (the ATM-ish minimum, i.e. the least time value / lowest breakeven
+  // width). Computed over the rendered rows so the highlight is always on screen.
+  const minStraddleStrike = useMemo(() => {
+    let best: number | null = null;
+    let strike: number | null = null;
+    for (const r of chainRows) {
+      if (r.straddle > 0 && (best === null || r.straddle < best)) {
+        best = r.straddle;
+        strike = r.strike;
+      }
+    }
+    return strike;
+  }, [chainRows]);
+
   // ATM straddle premium over time — the NIFTY spot overlay was dropped, so this
   // is a single-series chart and uses the shared LineChart like the others.
   const straddleChart = useMemo<ChartSeries[]>(
@@ -1239,33 +1254,27 @@ export default function Analytics({ authenticated, onBack }: Props) {
                     <col className="an-col-bld" />
                     <col className="an-col-ltp" />
                     <col className="an-col-strike" />
-                    <col className="an-col-straddle" />
                     <col className="an-col-ltp" />
                     <col className="an-col-bld" />
                     <col className="an-col-pct" />
                     <col className="an-col-oi" />
                   </colgroup>
                   <thead>
-                    {/* Strike and Straddle span BOTH header rows instead of
-                        sharing a 2-column "STRIKE" group. A group label is
-                        centred over its span, so grouping them put "STRIKE"
-                        midway between the strike and straddle columns —
-                        directly over neither — and left the straddle premium
-                        filed under a heading it isn't. One column, one heading,
-                        each sitting over its own values. */}
+                    {/* One middle column holds the strike with the straddle
+                        premium stacked beneath it, so the header is a single
+                        "STRIKE / straddle" label spanning both rows — nothing
+                        floats between columns. */}
                     <tr className="an-chain-side">
                       <th colSpan={4} className="an-calls">CALLS</th>
                       <th rowSpan={2} className="an-strike-h an-gsep">
                         Strike
+                        <span className="an-strad-h">straddle</span>
                       </th>
-                      <th rowSpan={2}>Straddle</th>
                       <th colSpan={4} className="an-puts an-gsep">PUTS</th>
                     </tr>
                     <tr>
                       {/* Each header's alignment matches its cells: numbers right,
-                          badges and the strike centred. They used to disagree on
-                          Bld (right header over a centred badge) and Straddle
-                          (centred header over a right-aligned number). */}
+                          badges centred. */}
                       <th>OI</th>
                       <th>OI Δ%</th>
                       <th className="an-bld-h">Bld</th>
@@ -1296,8 +1305,23 @@ export default function Analytics({ authenticated, onBack }: Props) {
                               <td className={`num an-ce-ltp${ce}${ltpClass(r.ceLtpDir)}`}>
                                 {fmt(r.ceLtp)}
                               </td>
-                              <td className="num an-strike an-gsep">{r.strike}</td>
-                              <td className="num an-straddle-v">{fmt(r.straddle)}</td>
+                              <td className="num an-strike an-gsep">
+                                {r.strike}
+                                <span
+                                  className={`an-strad-v${
+                                    r.strike === minStraddleStrike
+                                      ? " an-strad-min"
+                                      : ""
+                                  }`}
+                                  title={
+                                    r.strike === minStraddleStrike
+                                      ? "Lowest straddle in view (cheapest to be long / richest to be short)"
+                                      : "Straddle = call LTP + put LTP"
+                                  }
+                                >
+                                  {fmt(r.straddle)}
+                                </span>
+                              </td>
                               <td
                                 className={`num an-pe-ltp an-gsep${pe}${ltpClass(r.peLtpDir)}`}
                               >

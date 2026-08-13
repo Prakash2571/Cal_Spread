@@ -2148,8 +2148,8 @@ body {
   border-collapse: collapse;
   font-size: var(--fs-2);
 }
-/* Expanded, the card is the whole viewport. Letting a 10-column table stretch to
-   2560px would leave each value marooned in a 250px cell, so cap it and centre. */
+/* Expanded, the card is the whole viewport. Letting a 9-column table stretch to
+   2560px would leave each value marooned in a wide cell, so cap it and centre. */
 .an-chart-card--expanded .an-chain {
   max-width: 1180px;
   margin-inline: auto;
@@ -2157,10 +2157,10 @@ body {
 /* Mirrored around the strike: calls and puts get identical widths, so the two
    halves of the chain are directly comparable. Sums to 100%. */
 .an-col-oi {
-  width: 10.5%;
+  width: 11%;
 }
 .an-col-pct {
-  width: 11%;
+  width: 11.5%;
 }
 /* Wide enough for the buildup badge PLUS the cell's own padding: at 7.5% the
    badge's min-width + padding exceeded the content box and `overflow: hidden`
@@ -2170,13 +2170,13 @@ body {
   width: 8.5%;
 }
 .an-col-ltp {
-  width: 10%;
+  width: 10.5%;
 }
+/* The strike column now stacks the strike over the straddle premium, so it's
+   wider than the others (its content is two lines, not one). Sum of all nine
+   columns is still 100%. */
 .an-col-strike {
-  width: 8.5%;
-}
-.an-col-straddle {
-  width: 11.5%;
+  width: 17%;
 }
 /* The whole <thead> is pinned as ONE unit. Pinning each row separately (row 2
    offset by row 1's height) needs that height as a constant, and any drift
@@ -2238,9 +2238,14 @@ body {
   color: var(--text-1);
   white-space: nowrap;
 }
-/* Center the strike value (higher specificity than `.an-chain td`). */
+/* Center the strike value (higher specificity than `.an-chain td`). It now
+   holds two stacked lines (strike over straddle), so give it a little more
+   vertical room and a tight line-height. */
 .an-chain td.an-strike {
   text-align: center;
+  padding-block: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .an-row:hover {
   background: var(--surface-1);
@@ -2660,13 +2665,41 @@ body {
   text-align: right;
 }
 
-/* ---- Analytics: straddle premium column inside the option chain ---- */
-.an-straddle-v {
-  font-weight: var(--fw-semibold);
-  color: var(--text-1);
-  background: var(--data-surface);
+/* ---- Analytics: straddle premium, stacked UNDER the strike ---- */
+/* Small, quiet second line inside the (widened) strike cell. */
+.an-strad-v {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--fs-1);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
-.an-atm .an-straddle-v {
-  background: var(--accent-surface);
-  color: var(--accent-text);
+/* On the ATM row the strike cell is filled with the accent colour, so the
+   straddle beneath it needs the on-accent text to stay legible. */
+.an-atm .an-strad-v {
+  color: var(--on-accent);
+}
+/* Lowest straddle in view — marked green the way the ATM strike is marked with
+   the accent, so the cheapest straddle is findable at a glance. The compound
+   selector outranks `.an-atm .an-strad-v`, so it stays green even when the
+   minimum sits on the ATM row (which it usually does). */
+.an-chain td.an-strike .an-strad-min {
+  color: var(--pos);
+  font-weight: var(--fw-semibold);
+  background: var(--pos-surface);
+  border-radius: var(--r-sm);
+  padding: 0 5px;
+}
+/* Small "straddle" sub-label under the STRIKE header. */
+.an-chain th.an-strike-h .an-strad-h {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--fs-1);
+  font-weight: var(--fw-medium);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
 }
