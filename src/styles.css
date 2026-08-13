@@ -113,30 +113,27 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  /* WHITE page with light-grey cards (the inverse of the earlier grey-page /
-     white-card scheme). The page is the brightest surface and the cards step
-     DOWN into grey, so a card reads as a panel inset on a white sheet. The
-     inner accents (table header, strike column) step down once more so they
-     still separate from the grey card body. */
+  /* WHITE page with BRIGHT WHITE cards. A card is separated from the page by a
+     hairline border + a soft shadow, not by a grey fill — so cards read clean
+     and bright (the grey-panel look felt dull/heavy). Inner accents (table
+     header, strike column) use a faint cool grey so structure still shows
+     inside the white card. */
   --surface-0: #ffffff;
-  /* Cards are a clean, slightly-cool light-grey "panel" tone — deep enough to
-     read as a distinct surface on the white page rather than as another white.
-     (Kept a hair cool for a crisp fintech feel, NOT the pale-lavender wash the
-     old #f2f5f9 had.) Inner accents step down from it. */
-  --surface-1: #e3e7ec;
-  --surface-2: #d7dce2;
-  --surface-3: #ccd2d9;
+  --surface-1: #ffffff;
+  --surface-2: #eef1f5;
+  --surface-3: #e4e8ed;
 
-  /* Deeper than the card so internal table lines/borders stay visible. */
-  --border-subtle: #d0d6dd;
-  --border: #bcc3cc;
-  --border-strong: #9ea6b0;
+  /* Hairline borders — the primary way a bright card separates from the bright
+     page, so they carry a touch more weight than a grey-fill scheme needs. */
+  --border-subtle: #e6eaef;
+  --border: #d5dbe2;
+  --border-strong: #b7bfc9;
 
-  /* Data surfaces (chart cards, trade cards, the option chain) share the card
-     tone; their inner accent/hover steps down from it. */
-  --data-surface: #e3e7ec;
-  --data-surface-strong: #d7dce2;
-  --data-border: #c2c9d1;
+  /* Data surfaces (chart cards, trade cards, the option chain) are white too;
+     their inner accent/hover steps to the faint grey. */
+  --data-surface: #ffffff;
+  --data-surface-strong: #eef1f5;
+  --data-border: #dde2e8;
 
   --text-1: #162033;
   --text-2: #46566b;
@@ -186,26 +183,6 @@
 
 * {
   box-sizing: border-box;
-}
-
-/* ---- Theme-switch crossfade ----
-   Active ONLY while `.theme-anim` is on <html> — ThemeToggle adds it on a user
-   toggle and removes it ~320ms later. For that brief window every surface
-   eases its colours from one palette to the other, so light/dark glides in
-   instead of snapping, while hovers, focus and other interactions stay instant
-   the rest of the time. ThemeToggle does not add the class under
-   prefers-reduced-motion, so motion-sensitive users get an immediate swap. */
-:root.theme-anim,
-:root.theme-anim *,
-:root.theme-anim *::before,
-:root.theme-anim *::after {
-  transition:
-    background-color 320ms var(--ease),
-    border-color 320ms var(--ease),
-    color 320ms var(--ease),
-    fill 320ms var(--ease),
-    stroke 320ms var(--ease),
-    box-shadow 320ms var(--ease) !important;
 }
 
 html,
