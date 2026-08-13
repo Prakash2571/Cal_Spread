@@ -448,13 +448,13 @@ export default function StockDetail({
                       className={spreadMode === "daily" ? "active" : ""}
                       onClick={() => setSpreadMode("daily")}
                     >
-                      3M
+                      Daily
                     </button>
                     <button
                       className={spreadMode === "hourly" ? "active" : ""}
                       onClick={() => setSpreadMode("hourly")}
                     >
-                      1W
+                      Hourly
                     </button>
                     <button
                       className={spreadMode === "5m" ? "active" : ""}
@@ -488,13 +488,13 @@ export default function StockDetail({
                       className={priceMode === "daily" ? "active" : ""}
                       onClick={() => setPriceMode("daily")}
                     >
-                      3M
+                      Daily
                     </button>
                     <button
                       className={priceMode === "hourly" ? "active" : ""}
                       onClick={() => setPriceMode("hourly")}
                     >
-                      1W
+                      Hourly
                     </button>
                     {showIntraday && (
                       <>
