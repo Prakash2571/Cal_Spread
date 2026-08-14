@@ -1042,9 +1042,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return rows.slice(lo, hi + 1);
   }, [metrics, expandedCard]);
 
-  // Strike of the cheapest straddle among the visible rows — marked green in the
-  // chain (the ATM-ish minimum, i.e. the least time value / lowest breakeven
-  // width). Computed over the rendered rows so the highlight is always on screen.
+  // Strike of the cheapest straddle among the visible rows — its strike block is
+  // filled yellow in the chain (the ATM-ish minimum, i.e. the least time value /
+  // lowest breakeven width). Computed over the RENDERED rows, so the highlight is
+  // always on screen.
   const minStraddleStrike = useMemo(() => {
     let best: number | null = null;
     let strike: number | null = null;
@@ -1313,9 +1314,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                               </td>
                               <td
                                 className={`num an-strike an-gsep${
-                                  r.strike === minStraddleStrike && !r.isAtm
-                                    ? " an-strike--min"
-                                    : ""
+                                  r.strike === minStraddleStrike ? " an-strike--min" : ""
                                 }`}
                                 title={
                                   r.strike === minStraddleStrike
@@ -1345,11 +1344,6 @@ export default function Analytics({ authenticated, onBack }: Props) {
                     ))}
                   </tbody>
                 </table>
-              </div>
-              <div className="an-card-note">
-                {expandedCard === "chain"
-                  ? `${chainRows.length} strikes · straddle = call LTP + put LTP`
-                  : `${chainRows.length} of ${metrics.rows.length} strikes — expand for the full ladder`}
               </div>
             </ChartCard>
 

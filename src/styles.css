@@ -193,13 +193,15 @@
     0 14px 30px rgba(22, 32, 51, 0.13);
   --shadow-control: 0 1px 2px rgba(22, 32, 51, 0.13),
     0 3px 8px rgba(22, 32, 51, 0.08);
-  /* Option-chain tints: real pastels, used UNDILUTED. The dark theme's washes
-     are pale surfaces mixed toward transparent, which on a white card would be
-     invisible — so light mode gets its own, stronger set. The ITM blue stays
-     light enough that the red/green LTP text still reads through it. */
-  --chain-ce-tint: #ffe3e0;
-  --chain-pe-tint: #dff3e6;
-  --chain-itm-tint: #d8e7fd;
+  /* Option-chain tints. Saturated hues at low alpha rather than the dark theme's
+     pale-surface mixes, which were invisible on a white card. Kept TRANSLUCENT
+     (not flat pastels) so they layer the same way dark mode does: the ITM wash
+     blends over the call/put tint instead of erasing it, and the row-hover
+     background still shows through a tinted cell. Alpha is low enough that the
+     red/green LTP text stays readable. */
+  --chain-ce-tint: rgba(229, 57, 53, 0.13);
+  --chain-pe-tint: rgba(22, 145, 58, 0.13);
+  --chain-itm-tint: rgba(21, 101, 192, 0.13);
   --bld-pos-bg: #c7e9d3;
   --bld-neg-bg: #ffd6d2;
 
@@ -2203,7 +2205,7 @@ body {
    IDENTICAL collapsed and expanded. Under the default `auto` layout the spare
    width of a full-screen card was shared out in proportion to each column's
    content, which pushed every value away from its header. min-width keeps the
-   ten columns legible in the narrow card and lets the wrapper scroll instead of
+   nine columns legible in the narrow card and lets the wrapper scroll instead of
    crushing them. */
 .an-chain {
   width: 100%;
@@ -2365,7 +2367,10 @@ body {
   color: var(--on-accent);
   background: var(--accent);
 }
-.an-bld-cell {
+/* Scoped to `.an-chain td` so it actually WINS: a bare `.an-bld-cell` (0,1,0)
+   loses to `.an-chain td { text-align: right }` (0,1,1) no matter the order, so
+   the badges sat at the right edge of their column under a centred header. */
+.an-chain td.an-bld-cell {
   text-align: center;
 }
 .an-bld {
@@ -2412,7 +2417,7 @@ body {
 /* Dashboard: the option chain is a tall card spanning both chart rows on the
    left, with four charts beside it and the fifth as a full-width strip below.
    The first track is SIZED FOR THE TABLE rather than taking an equal share: the
-   chain's ten nowrap columns need ~520px of scroller, and an equal quarter- or
+   chain's nine nowrap columns need ~520px of scroller, and an equal quarter- or
    third-share would put the whole PUTS block outside the viewport. The two
    remaining tracks then still leave the charts wider than the old 4-up row. */
 .an-charts--dash {
@@ -2735,14 +2740,6 @@ body {
   white-space: nowrap;
 }
 
-/* Small footnote under an in-card table. */
-.an-card-note {
-  flex-shrink: 0;
-  font-size: var(--fs-1);
-  color: var(--text-3);
-  text-align: right;
-}
-
 /* ---- Analytics: straddle premium, stacked UNDER the strike ---- */
 /* Second line inside the (widened) strike cell — the straddle premium. Sized up
    and set in the medium body-text colour (not the faint --text-3, which washed
@@ -2770,6 +2767,13 @@ body {
    so it uses fixed values rather than a theme token. */
 .an-chain td.an-strike.an-strike--min {
   background: #f2c94c;
+}
+/* The cheapest straddle is usually AT the money, so the two markers land on the
+   same cell. Rather than suppressing one (which left the chain with no minimum
+   marker at all in the common case), the yellow fill wins and the ATM keeps its
+   identity as an inset accent ring. */
+.an-atm .an-strike.an-strike--min {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 .an-chain td.an-strike.an-strike--min,
 .an-chain td.an-strike.an-strike--min .an-strad-v {

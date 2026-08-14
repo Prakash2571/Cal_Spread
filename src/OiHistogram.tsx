@@ -104,7 +104,7 @@ export default function OiHistogram({
   // always available in the readout, so the emphasis doesn't mislead.
   const BAR_SCALE_EXP = 0.6;
   const yFor = (v: number) => {
-    if (!Number.isFinite(v) || maxAbs <= 0) return y0;
+    if (!Number.isFinite(v)) return y0; // maxAbs starts at 1, so it's never 0
     const scaled = Math.pow(Math.abs(v) / maxAbs, BAR_SCALE_EXP);
     return y0 - Math.sign(v) * scaled * half;
   };
@@ -131,7 +131,7 @@ export default function OiHistogram({
     return <rect key={key} x={x} y={y} width={BAR_W} height={h} fill={color} rx={2} />;
   }
 
-  /** Band covering one bucket's bars (hover highlight + latest marker). */
+  /** Band covering one bucket's bars — used for the hover highlight only. */
   const band = (i: number, className: string) => (
     <rect
       x={groupX(i) + GROUP_PAD - 5}

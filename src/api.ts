@@ -183,7 +183,8 @@ export interface Trade {
   status: "open" | "closed";
   opened_at: string;
   closed_at: string | null;
-  /** GROSS realized P&L (price move only) — see net_pnl for after charges. */
+  /** Realized P&L from the price move (the fills are real bid/ask, so slippage
+   *  is included). Charges are reported separately and NOT deducted. */
   close_pnl: number | null;
   buy_close: number | null;
   sell_close: number | null;

@@ -41,7 +41,8 @@ function roiPct(pnl: number | null, margin: number | null): number | null {
 
 /** A cost, formatted unsigned (₹648.36) — charges are reported, not netted. */
 function fmtCost(v: number | null | undefined): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  // isFinite, not !isNaN: a malformed payload could otherwise render "₹∞".
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
   return `₹${Math.abs(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
@@ -257,7 +258,11 @@ function TradeCard({
           )}
         </div>
         <div className="trade-net">
-          <span className="trade-pnl-label">NET</span>
+          {/* "P&L", not "NET": this figure is the price move (slippage included,
+              since the fills are real bid/ask), and charges are reported beside
+              it rather than deducted — calling it NET contradicted the charges
+              note directly above. */}
+          <span className="trade-pnl-label">P&amp;L</span>
           <span className={`trade-pnl ${pnlClass(pnl)}`}>{fmtMoney(pnl)}</span>
           {roi !== null && (
             <span className={`trade-roi ${pnlClass(pnl)}`}>
