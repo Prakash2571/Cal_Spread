@@ -1414,15 +1414,24 @@ body {
   color: var(--text-3);
 }
 
-/* Gross P&L + the charges taken off it, under the trade's meta line. Its own
-   row (not inline with the qty/margin text) so the money reads as a figure
-   rather than as part of the sentence. */
+/* Zerodha's charges for the round trip, under the trade's meta line. Reported
+   only — NOT deducted from the P&L — so it reads as a cost note rather than part
+   of the result. Its own row so the money reads as a figure, not as part of the
+   qty/margin sentence. */
 .trade-charges {
   display: block;
   margin-top: 2px;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   cursor: help;
+}
+/* Per-head split (brokerage / STT / stamp duty / exchange / SEBI / GST) under
+   the total: smaller and quieter, so the total stays the headline. */
+.trade-charge-heads {
+  display: block;
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  line-height: 1.35;
 }
 .trade-charges--none {
   font-family: var(--font-ui);

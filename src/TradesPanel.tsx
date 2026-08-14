@@ -39,14 +39,18 @@ function roiPct(pnl: number | null, margin: number | null): number | null {
   return (pnl / margin) * 100;
 }
 
+/** A cost, formatted unsigned (₹648.36) — charges are reported, not netted. */
+function fmtCost(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return `₹${Math.abs(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
 /**
- * The two charge sides that make up a trade's round trip.
- *
- * An OPEN trade pairs its real entry charges with the projected exit, because
- * both halves are paid before the position is flat — netting only the entry
- * would overstate every live P&L. A CLOSED trade uses the real exit contract
- * note (which itself falls back to the projection if Zerodha couldn't price the
- * close, flagged via `source`).
+ * The two charge sides that make up a trade's round trip: the real entry
+ * charges plus the exit. An OPEN trade uses the projected exit (priced at the
+ * entry fills); a CLOSED trade uses the real exit contract note, which itself
+ * falls back to the projection if Zerodha couldn't price the close (flagged
+ * via `source`).
  */
 function chargeSides(t: Trade): {
   sides: (TradeCharges | null)[];
@@ -67,28 +71,52 @@ function chargeSides(t: Trade): {
   };
 }
 
-/** Charge heads summed across both sides, for the breakdown tooltip. */
-function chargesTooltip(t: Trade): string {
-  const { sides, estimated } = chargeSides(t);
+/** Every charge head, summed across the entry and exit sides. */
+function chargeHeads(t: Trade) {
+  const { sides } = chargeSides(t);
   const head = (pick: (s: TradeCharges) => number) =>
     sides.reduce((acc, s) => acc + (s ? pick(s) : 0), 0);
+  return {
+    brokerage: head((s) => s.brokerage),
+    stt: head((s) => s.stt),
+    exchange_txn: head((s) => s.exchange_txn),
+    sebi: head((s) => s.sebi),
+    stamp_duty: head((s) => s.stamp_duty),
+    gst: head((s) => s.gst),
+  };
+}
+
+/** Hover detail for the charges line. */
+function chargesTooltip(t: Trade): string {
+  const h = chargeHeads(t);
+  const { estimated } = chargeSides(t);
   const parts = [
-    `Brokerage ${fmtMoney(head((s) => s.brokerage))}`,
-    `STT ${fmtMoney(head((s) => s.stt))}`,
-    `Exchange txn ${fmtMoney(head((s) => s.exchange_txn))}`,
-    `SEBI ${fmtMoney(head((s) => s.sebi))}`,
-    `Stamp duty ${fmtMoney(head((s) => s.stamp_duty))}`,
-    `GST ${fmtMoney(head((s) => s.gst))}`,
+    `Brokerage ${fmtCost(h.brokerage)}`,
+    `STT ${fmtCost(h.stt)}`,
+    `Exchange txn ${fmtCost(h.exchange_txn)}`,
+    `SEBI ${fmtCost(h.sebi)}`,
+    `Stamp duty ${fmtCost(h.stamp_duty)}`,
+    `GST ${fmtCost(h.gst)}`,
   ].join("\n");
   const note = estimated
     ? "\n\nThe exit side is priced at the entry fills until the trade is closed."
     : "";
-  return `Zerodha charges, entry + exit\n\n${parts}${note}`;
+  return (
+    `Zerodha charges for the round trip (entry + exit).\n` +
+    `Reported for reference — NOT deducted from the P&L, which already\n` +
+    `carries the bid/ask spread from the actual fills.\n\n${parts}${note}`
+  );
 }
 
-/** Current prices + per-leg / net P&L (live for open, close prices for closed).
- * For open trades we mark to the EXIT side (sell the long at bid, buy back the
- * short at ask) so the shown P&L matches what closing will actually realize. */
+/**
+ * Current prices + per-leg / total P&L (live for open, close prices for closed),
+ * plus the round-trip charges to report alongside it.
+ *
+ * An open trade is marked to LTP (the tick feed carries no depth), so the live
+ * figure still owes the exit half of the spread; the ENTRY spread is already in
+ * it, because the entry price is a book-walking fill. Closing re-prices both
+ * legs against the book, so the realized number carries the full round trip.
+ */
 function computePnl(t: Trade, ticks: Record<number, Tick>) {
   const buyTick = ticks[t.buy.token];
   const sellTick = ticks[t.sell.token];
@@ -106,34 +134,30 @@ function computePnl(t: Trade, ticks: Record<number, Tick>) {
   const buyPnl = buyValid !== null ? t.lot_size * (buyValid - t.buy.entry) : null;
   const sellPnl = sellValid !== null ? t.lot_size * (t.sell.entry - sellValid) : null;
 
-  // GROSS = price move only. A closed trade's gross is whatever was locked in.
-  const gross =
+  // The P&L is the PRICE MOVE. Both legs are filled by walking the live order
+  // book (buy into the asks, sell into the bids), so the bid/ask spread —
+  // slippage — is already inside this number.
+  //
+  // Brokerage and taxes are deliberately NOT subtracted: they're reported beside
+  // the figure so the cost is visible at entry and exit, while the P&L stays a
+  // clean read of the trade itself.
+  const pnl =
     t.status === "closed"
       ? t.close_pnl
       : buyPnl !== null && sellPnl !== null
         ? buyPnl + sellPnl
         : null;
 
-  // NET = gross less Zerodha's brokerage + taxes for the round trip. The fills
-  // above already walked the order book, so this is the last real cost missing
-  // from the number: what's shown is what the account actually keeps.
   const { total: charges, estimated: chargesEstimated } = chargeSides(t);
-  const net =
-    t.status === "closed" && t.net_pnl !== null
-      ? t.net_pnl // authoritative: computed server-side at close
-      : gross !== null && charges !== null
-        ? gross - charges
-        : gross;
 
   return {
     buyNow: buyValid,
     sellNow: sellValid,
     buyPnl,
     sellPnl,
-    gross,
+    pnl,
     charges,
     chargesEstimated,
-    net,
   };
 }
 
@@ -177,11 +201,10 @@ function TradeCard({
   onDeleteTrade: (id: string) => void;
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const { buyNow, sellNow, buyPnl, sellPnl, gross, charges, chargesEstimated, net } =
+  const { buyNow, sellNow, buyPnl, sellPnl, pnl, charges, chargesEstimated } =
     computePnl(t, ticks);
-  // ROI is measured on the NET result: margin is real capital, so the return on
-  // it has to be after costs.
-  const roi = roiPct(net, t.margin);
+  const heads = chargeHeads(t);
+  const roi = roiPct(pnl, t.margin);
   const closed = t.status === "closed";
 
   return (
@@ -215,13 +238,19 @@ function TradeCard({
           {closed && t.closed_at ? ` → ${fmtDateTime(t.closed_at)}` : ""}
           {charges !== null ? (
             <span className="trade-charges" title={chargesTooltip(t)}>
-              gross {fmtMoney(gross)} · charges {fmtMoney(-charges)}
+              charges {fmtCost(charges)}
               {chargesEstimated ? " (est)" : ""}
+              <span className="trade-charge-heads">
+                brokerage {fmtCost(heads.brokerage)} · STT {fmtCost(heads.stt)} ·
+                stamp {fmtCost(heads.stamp_duty)} · exch{" "}
+                {fmtCost(heads.exchange_txn)} · SEBI {fmtCost(heads.sebi)} · GST{" "}
+                {fmtCost(heads.gst)}
+              </span>
             </span>
           ) : (
             <span
               className="trade-charges trade-charges--none"
-              title="Zerodha's charges API didn't price this trade, so the P&L shown is gross of brokerage and taxes."
+              title="Zerodha's charges API didn't price this trade, so no brokerage/tax figures are available for it."
             >
               charges unavailable
             </span>
@@ -229,9 +258,9 @@ function TradeCard({
         </div>
         <div className="trade-net">
           <span className="trade-pnl-label">NET</span>
-          <span className={`trade-pnl ${pnlClass(net)}`}>{fmtMoney(net)}</span>
+          <span className={`trade-pnl ${pnlClass(pnl)}`}>{fmtMoney(pnl)}</span>
           {roi !== null && (
-            <span className={`trade-roi ${pnlClass(net)}`}>
+            <span className={`trade-roi ${pnlClass(pnl)}`}>
               {roi.toFixed(2)}% on margin
             </span>
           )}
