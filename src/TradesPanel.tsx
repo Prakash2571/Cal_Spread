@@ -278,27 +278,36 @@ function TradeCard({
           </button>
         ) : confirmingDelete ? (
           <div className="trade-del-confirm" onClick={(e) => e.stopPropagation()}>
-            <span>Delete?</span>
             <button
               className="btn btn--sm btn--danger"
               disabled={deletingId === t.id}
               onClick={() => onDeleteTrade(t.id)}
             >
-              {deletingId === t.id ? "…" : "Yes"}
+              {deletingId === t.id ? "Deleting…" : "Delete"}
             </button>
             <button className="btn btn--sm" onClick={() => setConfirmingDelete(false)}>
-              No
+              Cancel
             </button>
           </div>
         ) : (
+          /* Icon-only and quiet until hovered: deleting a closed trade is a rare,
+             destructive action, so it shouldn't compete with the P&L figure for
+             attention the way a red-outlined "Delete" button did. */
           <button
-            className="btn btn--sm btn--danger-ghost"
+            className="trade-del"
+            aria-label="Delete trade from history"
+            title="Delete trade from history"
             onClick={(e) => {
               e.stopPropagation();
               setConfirmingDelete(true);
             }}
           >
-            Delete
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16" />
+              <path d="M10 4h4a1 1 0 0 1 1 1v2H9V5a1 1 0 0 1 1-1Z" />
+              <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+              <path d="M10 11v6M14 11v6" />
+            </svg>
           </button>
         )}
       </div>

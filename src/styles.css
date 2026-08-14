@@ -1189,17 +1189,6 @@ body {
   border-color: var(--neg-hover);
 }
 
-.btn--danger-ghost {
-  background: transparent;
-  border-color: var(--neg);
-  color: var(--neg);
-}
-
-.btn--danger-ghost:hover:not(:disabled) {
-  background: var(--neg-surface);
-  border-color: var(--neg);
-}
-
 .trade-del-confirm {
   display: flex;
   align-items: center;
@@ -1207,6 +1196,44 @@ body {
   font-size: var(--fs-3);
   color: var(--text-2);
   white-space: nowrap;
+}
+
+/* Delete affordance on a closed trade: an icon-only button, muted until hovered.
+   A fixed square footprint (matching .btn--sm's height) keeps the card footer
+   from reflowing when it swaps to the Delete/Cancel confirm. */
+.trade-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.trade-del svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trade-del:hover {
+  color: var(--neg);
+  background: var(--neg-surface);
+  border-color: var(--neg);
 }
 
 /* ================ Small / trade buttons ================ */
