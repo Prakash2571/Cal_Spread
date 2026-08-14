@@ -155,17 +155,16 @@ export default function OiHistogram({
   // because the rolling window can shrink while a hover index is still held.
   const activeIdx = Math.min(hover ?? lastI, lastI);
   const active = points[activeIdx]!;
-  const first = points[0]!;
-  const start =
-    points.length > 1 ? { time: formatX(first.t), items: itemsFor(first) } : null;
 
   return (
     <div className="an-hist">
+      {/* No "From <first bucket>" row here: the bars already show the whole
+          window at a glance, so the strip stays a single line reporting the
+          CURRENT bucket when idle (and the hovered one while tracking). */}
       <ChartReadout
         time={formatX(active.t)}
         items={itemsFor(active)}
         hovering={hover !== null}
-        start={start}
       />
       <div
         className="an-scrollx"
@@ -212,10 +211,11 @@ export default function OiHistogram({
               strokeWidth={1}
             />
 
-            {/* The newest bucket stays marked at all times — matching the
-                always-visible end dots on the line charts — with the hover band
-                drawn over it while tracking. */}
-            {band(lastI, "an-hist-latest-band")}
+            {/* Only the HOVERED bucket gets a band. The newest bucket used to
+                carry a permanent translucent tint to mark it as "current", but a
+                see-through slab sitting over the bars just muddied them — and the
+                readout above already names the current bucket and its values
+                whenever the cursor is away. */}
             {hover !== null && band(activeIdx, "an-hist-hover-band")}
 
             {points.map((p, i) => {

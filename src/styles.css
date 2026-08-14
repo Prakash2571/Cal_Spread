@@ -2546,18 +2546,15 @@ body {
 .oi-hist-svg rect {
   transition: opacity var(--dur-fast) var(--ease);
 }
-.oi-hist-svg:hover rect:not(.an-hist-hover-band):not(.an-hist-latest-band) {
+.oi-hist-svg:hover rect:not(.an-hist-hover-band) {
   opacity: 0.92;
 }
+/* Hover only. There is deliberately no permanent band on the newest bucket: a
+   translucent slab over the bars muddied them, and the readout already reports
+   the current bucket whenever the cursor is away. */
 .oi-hist-svg .an-hist-hover-band {
   fill: var(--surface-3);
   opacity: 0.32;
-}
-/* Idle marker on the newest bucket — quieter than the hover band, and tinted so
-   it reads as "current" rather than "selected". */
-.oi-hist-svg .an-hist-latest-band {
-  fill: var(--accent);
-  opacity: 0.1;
 }
 .an-chart-card--expanded .an-hist {
   height: 100%;
