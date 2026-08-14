@@ -104,6 +104,17 @@
   --scrim: rgba(6, 8, 10, 0.72);
   --ring: 0 0 0 3px rgba(47, 111, 237, 0.35);
 
+  /* ---- Option-chain tints ----
+     Own tokens per theme, because the two themes need OPPOSITE treatments: on a
+     dark card a saturated dark wash reads clearly, while on a white card the
+     same idea has to be a real pastel — diluting a near-white surface toward
+     transparent (which is what these used to do) leaves nothing visible. */
+  --chain-ce-tint: color-mix(in srgb, var(--neg-surface) 55%, transparent);
+  --chain-pe-tint: color-mix(in srgb, var(--pos-surface) 55%, transparent);
+  --chain-itm-tint: color-mix(in srgb, var(--accent-surface) 38%, transparent);
+  --bld-pos-bg: var(--pos-surface);
+  --bld-neg-bg: var(--neg-surface);
+
   /* ---- Motion ---- */
   --dur-fast: 110ms;
   --dur: 160ms;
@@ -182,6 +193,16 @@
     0 14px 30px rgba(22, 32, 51, 0.13);
   --shadow-control: 0 1px 2px rgba(22, 32, 51, 0.13),
     0 3px 8px rgba(22, 32, 51, 0.08);
+  /* Option-chain tints: real pastels, used UNDILUTED. The dark theme's washes
+     are pale surfaces mixed toward transparent, which on a white card would be
+     invisible — so light mode gets its own, stronger set. The ITM blue stays
+     light enough that the red/green LTP text still reads through it. */
+  --chain-ce-tint: #ffe3e0;
+  --chain-pe-tint: #dff3e6;
+  --chain-itm-tint: #d8e7fd;
+  --bld-pos-bg: #c7e9d3;
+  --bld-neg-bg: #ffd6d2;
+
   --shadow-data: 0 1px 2px rgba(22, 32, 51, 0.09),
     0 4px 10px rgba(22, 32, 51, 0.06);
   --scrim: rgba(15, 23, 42, 0.48);
@@ -2267,10 +2288,10 @@ body {
   background: var(--surface-1);
 }
 .an-ce {
-  background: color-mix(in srgb, var(--neg-surface) 55%, transparent);
+  background: var(--chain-ce-tint);
 }
 .an-pe {
-  background: color-mix(in srgb, var(--pos-surface) 55%, transparent);
+  background: var(--chain-pe-tint);
 }
 .an-strike {
   text-align: center;
@@ -2284,7 +2305,7 @@ body {
    OI tints still read clearly through it. Higher specificity than the call/put
    OI tints so it takes over the whole ITM half without disturbing OTM rows. */
 .an-chain td.an-itm {
-  background: color-mix(in srgb, var(--accent-surface) 38%, transparent);
+  background: var(--chain-itm-tint);
 }
 /* Tick-wise LTP colour: green when the last price rose vs the previous tick,
    red when it fell. Beats the base `.an-chain td` text colour; the ITM wash is a
@@ -2313,21 +2334,23 @@ body {
   font-weight: var(--fw-bold);
   font-family: var(--font-ui);
 }
-/* LB / SC = bullish-ish, SB / LU = bearish-ish */
+/* LB / SC = bullish-ish, SB / LU = bearish-ish. The pill background is a theme
+   token: light mode needs a stronger fill than the near-white --pos/neg-surface,
+   which disappeared against the white card and the ITM wash. */
 .an-bld--long_buildup {
-  background: var(--pos-surface);
+  background: var(--bld-pos-bg);
   color: var(--pos);
 }
 .an-bld--short_covering {
-  background: var(--pos-surface);
+  background: var(--bld-pos-bg);
   color: var(--pos);
 }
 .an-bld--short_buildup {
-  background: var(--neg-surface);
+  background: var(--bld-neg-bg);
   color: var(--neg);
 }
 .an-bld--long_unwinding {
-  background: var(--neg-surface);
+  background: var(--bld-neg-bg);
   color: var(--neg);
 }
 .an-muted {
