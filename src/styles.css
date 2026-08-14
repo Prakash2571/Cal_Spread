@@ -2302,6 +2302,22 @@ body {
   color: var(--text-1);
   white-space: nowrap;
 }
+/* ---- Mirrored halves ----
+   Every cell defaults to right-aligned, which quietly breaks the symmetry: a
+   right-aligned value sits at its column's RIGHT edge, so the calls LTP (the
+   last calls column) lands hard against the strike while the puts LTP (the first
+   puts column) sits a whole column-width away from it. The wider the columns,
+   the worse it reads — which is why the expanded card made it obvious.
+   Aligning the puts half LEFT makes it a true reflection of the calls half:
+   both sides' values sit toward the strike, and every header sits over its own
+   values. Applies to both the collapsed and expanded card (same rules).
+   The Bld badges stay centred on BOTH sides, so they're deliberately not
+   given .an-put. */
+.an-chain th.an-put,
+.an-chain td.an-put {
+  text-align: left;
+}
+
 /* Center the strike value (higher specificity than `.an-chain td`). It now
    holds two stacked lines (strike over straddle), so give it a little more
    vertical room and a tight line-height. */

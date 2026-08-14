@@ -1280,10 +1280,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
                       <th>OI Δ%</th>
                       <th className="an-bld-h">Bld</th>
                       <th>LTP</th>
-                      <th className="an-gsep">LTP</th>
+                      {/* The puts half is MIRRORED: its numeric headers and
+                          values align left (toward the strike), the reflection
+                          of the calls half aligning right. Right-aligning both
+                          halves put the calls LTP hard against the strike and
+                          the puts LTP a full column away from it. */}
+                      <th className="an-gsep an-put">LTP</th>
                       <th className="an-bld-h">Bld</th>
-                      <th>OI Δ%</th>
-                      <th>OI</th>
+                      <th className="an-put">OI Δ%</th>
+                      <th className="an-put">OI</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1322,15 +1327,17 @@ export default function Analytics({ authenticated, onBack }: Props) {
                                 <span className="an-strad-v">{fmt(r.straddle)}</span>
                               </td>
                               <td
-                                className={`num an-pe-ltp an-gsep${pe}${ltpClass(r.peLtpDir)}`}
+                                className={`num an-pe-ltp an-gsep an-put${pe}${ltpClass(r.peLtpDir)}`}
                               >
                                 {fmt(r.peLtp)}
                               </td>
                               <td className={`an-bld-cell${pe}`}>
                                 {buildupBadge(r.peBuildup)}
                               </td>
-                              <td className={`num${pe}`}>{pctCell(r.peOiPct)}</td>
-                              <td className={`num an-pe${pe}`}>{fmtCompact(r.peOi)}</td>
+                              <td className={`num an-put${pe}`}>{pctCell(r.peOiPct)}</td>
+                              <td className={`num an-pe an-put${pe}`}>
+                                {fmtCompact(r.peOi)}
+                              </td>
                             </>
                           );
                         })()}
