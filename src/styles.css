@@ -464,6 +464,20 @@ body {
   background: var(--warn);
 }
 
+/* The "Login for live" state. App.tsx builds this class from status.kind, which has
+   always been able to be "idle", but only --live and --wait were ever defined — so
+   that pill rendered with no colour treatment at all while its two siblings were
+   styled. Muted rather than coloured: nothing is wrong, there is just no session. */
+.status--idle {
+  color: var(--text-2);
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.status--idle .status-dot {
+  background: var(--text-3);
+}
+
 @keyframes pulse {
   0% { opacity: 0.5; }
   70% { opacity: 0; }
@@ -1837,14 +1851,19 @@ body {
   overflow: hidden;
 }
 
+/* Metrics deliberately match .btn (32px, --fs-4), because .an-toggle on the
+   analytics cards builds the same segmented control out of .btn instead. The two
+   were 28px/12px vs 32px/13px, so the same control was visibly a different size
+   depending on which page you were on. The joined-outline look is kept — that is a
+   style choice — but the sizing is now shared. */
 .chart-toggle button {
   border: none;
   border-radius: 0;
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 var(--sp-3);
   background: var(--surface-2);
   color: var(--text-2);
-  font-size: var(--fs-3);
+  font-size: var(--fs-4);
   font-weight: var(--fw-medium);
   font-family: inherit;
   cursor: pointer;
@@ -1888,8 +1907,12 @@ body {
     margin-left: 0;
     margin-top: var(--sp-2);
   }
-  /* Touch-target minimum wins over the 28px compact segment height */
-  .chart-toggle button {
+  /* Touch-target minimum wins over the compact segment height. Applied to BOTH
+     segmented controls: .an-toggle is built from .btn, which never got the 44px
+     treatment, so the analytics timeframe strips stayed 32px on a phone while the
+     equivalent control on the detail page grew. */
+  .chart-toggle button,
+  .an-toggle .btn {
     min-height: 44px;
     padding: 0 var(--sp-4);
     font-size: var(--fs-3);

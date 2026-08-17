@@ -24,6 +24,11 @@ export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const isLight = theme === "light";
   const nextTheme = isLight ? "dark" : "light";
+  // One string for both the tooltip and the accessible name. `aria-label` used to
+  // be a static "Light mode", so a screen reader announced the same thing in both
+  // states while the visible label and the title tracked the theme — the control
+  // was the only one on the page that couldn't be operated without sight.
+  const label = `Switch to ${nextTheme} mode`;
 
   useEffect(() => {
     applyTheme(theme);
@@ -38,9 +43,9 @@ export default function ThemeToggle() {
     <button
       type="button"
       className="btn theme-toggle"
-      aria-label="Light mode"
+      aria-label={label}
       aria-pressed={isLight}
-      title={`Switch to ${nextTheme} mode`}
+      title={label}
       onClick={() => setTheme(nextTheme)}
     >
       {isLight ? (

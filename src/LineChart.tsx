@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import ChartReadout, { type ReadoutItem } from "./ChartReadout.tsx";
 import { smoothPath } from "./chartPath.ts";
+import { CHART_EMPTY_NOTE } from "./format.ts";
 
 export interface ChartSeries {
   label: string; // already-formatted legend label (e.g. "28 Jul")
@@ -194,7 +195,7 @@ export default function LineChart({
     .filter(valid);
 
   if (n === 0 || allVals.length === 0) {
-    return <div className="chart-empty">No history available.</div>;
+    return <div className="chart-empty">{CHART_EMPTY_NOTE}</div>;
   }
 
   const vMin = Math.min(...allVals);

@@ -72,7 +72,7 @@ export default function TradeConfirmModal({
 
           {loading ? (
             <div className="empty" style={{ padding: "1rem" }}>
-              <span className="spinner" /> Loading spread stats...
+              <span className="spinner" /> Loading spread stats…
             </div>
           ) : stats ? (
             <div className="metric-list">
@@ -118,7 +118,7 @@ export default function TradeConfirmModal({
               disabled={busy}
               onClick={onConfirm}
             >
-              {busy ? "Executing..." : "Confirm Trade"}
+              {busy ? "Executing…" : "Confirm Trade"}
             </button>
             <button
               className="btn"

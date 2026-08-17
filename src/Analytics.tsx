@@ -19,7 +19,7 @@ import {
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
 import OiHistogram, { type HistPoint, type HistSeries } from "./OiHistogram.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
-import { fmt, fmtCompact, formatExpiry } from "./format.ts";
+import { CHART_EMPTY_NOTE, fmt, fmtCompact, formatExpiry } from "./format.ts";
 
 type TickMap = Record<number, Tick>;
 /** Comparison window for the chain's OI Δ% and buildup columns. */
@@ -540,6 +540,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
+    // Clear on a frame change — the x-axis formatter switches with the frame, so
+    // carrying a week of 15m/1h points into the 1m formatter would label them all
+    // with time-of-day only. See the futures level chart for the full reasoning.
+    setStraddleRaw([]);
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, straddleFrame)
         .then((r) => {
@@ -566,6 +570,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     if (!authenticated || !chain) return;
     let cancelled = false;
     const iso = (t: number) => new Date(t).toISOString();
+    // Clear on a frame change — same formatter reasoning as the other level charts.
+    setCeOiSeries([]);
+    setPeOiSeries([]);
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, oiFrame)
         .then((r) => {
@@ -621,43 +628,70 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, histFrame]);
 
-  // ---- NIFTY futures OI, for the level chart and the change histogram ----
-  // Both cards read the same endpoint (inheriting the server's per-frame cache
-  // and Kite backfill) but keep independent timeframes, so we fetch the DISTINCT
-  // selected frames — one request when they happen to match. Gated on `chain`
-  // because the cards only render once the chain-derived metrics exist.
+  // ---- NIFTY futures OI level chart ----
+  // One effect per card rather than one shared effect fetching both frames. The
+  // shared version could not clear on a frame change without also blanking the
+  // other card, and clearing is mandatory (see below). The cost is a second
+  // request per minute while both cards happen to sit on the same frame, which is
+  // nothing against a 150 req/min budget. Gated on `chain` because the cards only
+  // render once the chain-derived metrics exist.
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
-    const load = () => {
-      for (const frame of Array.from(new Set<OiFrame>([futFrame, futHistFrame]))) {
-        fetchFuturesOiFrame(UNDERLYING, frame)
-          .then((r) => {
-            if (cancelled) return;
-            // The server coerces an unknown frame to 5m; ignore a mismatched
-            // response rather than labelling it with the requested timeframe.
-            if (r.frame !== frame) return;
-            if (frame === futFrame) {
-              setFutRaw(r.points);
-              setFutContracts(r.contracts);
-            }
-            if (frame === futHistFrame) {
-              setFutHistRaw(r.points);
-              setFutHistContracts(r.contracts);
-            }
-          })
-          .catch(() => {
-            /* keep whatever we have */
-          });
-      }
-    };
+    // Drop the previous frame's points. `fmtTs` is frame-dependent, so holding
+    // 15m/1h points (a week of them) while the axis has already switched to the 1m
+    // formatter labels seven days with time-of-day only — five sessions drawn as
+    // one impossibly volatile day. `key={futFrame}` remounts the chart, so it is a
+    // full visible render of the wrong thing, not a flicker.
+    setFutRaw([]);
+    const load = () =>
+      fetchFuturesOiFrame(UNDERLYING, futFrame)
+        .then((r) => {
+          // The server coerces an unknown frame to 5m; ignore a mismatched
+          // response rather than labelling it with the requested timeframe.
+          if (cancelled || r.frame !== futFrame) return;
+          setFutRaw(r.points);
+          setFutContracts(r.contracts);
+        })
+        .catch(() => {
+          /* keep whatever we have */
+        });
     load();
     const id = window.setInterval(load, 60000); // OI moves slowly; 60s refresh
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [authenticated, chain, futFrame, futHistFrame]);
+  }, [authenticated, chain, futFrame]);
+
+  // ---- NIFTY futures ΔOI histogram ----
+  useEffect(() => {
+    if (!authenticated || !chain) return;
+    let cancelled = false;
+    // This reset is load-bearing, not cosmetic. futHistPoints re-differences
+    // whatever is held using the NEW frame's step as soon as futHistFrame changes,
+    // and isAdjacentBucket accepts any spacing up to that step — so 1m points
+    // surviving a switch to 1h drew ~375 per-MINUTE deltas as if each were an
+    // hour's change, under a "change per hour" label. The Call/Put histogram has
+    // always cleared for exactly this reason; this card was missed.
+    setFutHistRaw([]);
+    const load = () =>
+      fetchFuturesOiFrame(UNDERLYING, futHistFrame)
+        .then((r) => {
+          if (cancelled || r.frame !== futHistFrame) return;
+          setFutHistRaw(r.points);
+          setFutHistContracts(r.contracts);
+        })
+        .catch(() => {
+          /* keep whatever we have */
+        });
+    load();
+    const id = window.setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [authenticated, chain, futHistFrame]);
 
   // Per-bucket OI change (Call & Put) — see oiDeltaPoints for the gap handling.
   const histPoints = useMemo<HistPoint[]>(
@@ -1366,10 +1400,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   expanded={expandedCard === "straddle"}
                 />
               ) : (
-                <div className="chart-empty">
-                  No straddle history yet for this timeframe — it fills as the day
-                  progresses (or backfills from history).
-                </div>
+                <div className="chart-empty">{CHART_EMPTY_NOTE}</div>
               )}
             </ChartCard>
 
@@ -1390,10 +1421,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   expanded={expandedCard === "oi"}
                 />
               ) : (
-                <div className="chart-empty">
-                  No OI history yet for this timeframe — it fills as the day
-                  progresses (or backfills from history).
-                </div>
+                <div className="chart-empty">{CHART_EMPTY_NOTE}</div>
               )}
             </ChartCard>
 
@@ -1435,10 +1463,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   expanded={expandedCard === "futoi"}
                 />
               ) : (
-                <div className="chart-empty">
-                  No futures OI history yet for this timeframe — it fills as the
-                  day progresses (or backfills from history).
-                </div>
+                <div className="chart-empty">{CHART_EMPTY_NOTE}</div>
               )}
             </ChartCard>
 

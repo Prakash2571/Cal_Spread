@@ -308,7 +308,7 @@ export default function StockDetail({
                 disabled={tradeBusy || hasOpenTrade}
                 onClick={() => onTakeTrade?.(symbol)}
               >
-                {hasOpenTrade ? "Trade open" : tradeBusy ? "Taking..." : "Take Trade"}
+                {hasOpenTrade ? "Trade open" : tradeBusy ? "Taking…" : "Take Trade"}
               </button>
             </div>
           )}

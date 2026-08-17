@@ -44,6 +44,34 @@ function getHeaders(): HeadersInit {
   return headers;
 }
 
+/**
+ * Parse a JSON response, or throw an error that names what actually happened.
+ *
+ * `await res.json()` before checking `res.ok` looks harmless because the backend
+ * always answers JSON — but a proxy does not. An nginx 502 or a gateway timeout
+ * page is HTML, so `res.json()` threw FIRST and the carefully-worded
+ * "… (HTTP 502)." message on the next line was unreachable; what surfaced instead
+ * was `Unexpected token '<', "<html>"…`. Reading the body as text and parsing it
+ * ourselves means a non-JSON failure still reports its status.
+ *
+ * `what` is the bare description ("Failed to load OI frame"); the status is
+ * appended here so every endpoint phrases the failure the same way.
+ */
+async function readJson<T>(res: Response, what: string): Promise<T> {
+  const text = await res.text().catch(() => "");
+  let body: (T & { error?: string }) | null = null;
+  try {
+    body = text ? (JSON.parse(text) as T & { error?: string }) : null;
+  } catch {
+    // Not JSON — fall through to the status-based message below.
+  }
+  if (!res.ok) throw new Error(body?.error ?? `${what} (HTTP ${res.status}).`);
+  // A 200 that isn't JSON is still a failure, and saying so beats handing the
+  // caller `null` typed as if it were a valid payload.
+  if (body === null) throw new Error(`${what}: the server sent an unreadable reply.`);
+  return body;
+}
+
 export interface Instrument {
   instrument_token: number;
   exchange_token: number;
@@ -712,13 +740,7 @@ export async function fetchOptionChain(
     `${API_BASE_URL}/api/option-chain/${encodeURIComponent(underlying)}${qs}`,
     { headers: getHeaders() },
   );
-  const body = (await res.json()) as OptionChain & { error?: string };
-  if (!res.ok) {
-    throw new Error(
-      body.error ?? `Failed to load option chain (HTTP ${res.status}).`,
-    );
-  }
-  return body;
+  return readJson<OptionChain>(res, "Failed to load option chain");
 }
 
 
@@ -751,11 +773,7 @@ export async function fetchOptionOiBaseline(
     `${API_BASE_URL}/api/option-oi-baseline/${encodeURIComponent(underlying)}?minutes=${minutes}`,
     { headers: getHeaders() },
   );
-  const body = (await res.json()) as OptionOiBaseline & { error?: string };
-  if (!res.ok) {
-    throw new Error(body.error ?? `Failed to load OI baseline (HTTP ${res.status}).`);
-  }
-  return body;
+  return readJson<OptionOiBaseline>(res, "Failed to load OI baseline");
 }
 
 /**
@@ -779,13 +797,7 @@ export async function fetchOptionPrevClose(
     `${API_BASE_URL}/api/option-prev-close/${encodeURIComponent(underlying)}`,
     { headers: getHeaders() },
   );
-  const body = (await res.json()) as OptionPrevClose & { error?: string };
-  if (!res.ok) {
-    throw new Error(
-      body.error ?? `Failed to load previous close (HTTP ${res.status}).`,
-    );
-  }
-  return body;
+  return readJson<OptionPrevClose>(res, "Failed to load previous close");
 }
 
 /** One captured minute of aggregate intraday option-OI data. */
@@ -808,11 +820,7 @@ export async function fetchOptionOiSeries(underlying: string): Promise<OptionOiS
     `${API_BASE_URL}/api/option-oi-series/${encodeURIComponent(underlying)}`,
     { headers: getHeaders() },
   );
-  const body = (await res.json()) as OptionOiSeries & { error?: string };
-  if (!res.ok) {
-    throw new Error(body.error ?? `Failed to load OI series (HTTP ${res.status}).`);
-  }
-  return body;
+  return readJson<OptionOiSeries>(res, "Failed to load OI series");
 }
 
 
@@ -864,11 +872,7 @@ export async function fetchOptionOiFrame(
     `${API_BASE_URL}/api/option-oi-frame/${encodeURIComponent(underlying)}?frame=${frame}`,
     { headers: getHeaders() },
   );
-  const body = (await res.json()) as OptionOiFrameResponse & { error?: string };
-  if (!res.ok) {
-    throw new Error(body.error ?? `Failed to load OI frame (HTTP ${res.status}).`);
-  }
-  return body;
+  return readJson<OptionOiFrameResponse>(res, "Failed to load OI frame");
 }
 
 /** One NIFTY monthly futures contract tracked by the futures-OI frames. */
@@ -913,11 +917,5 @@ export async function fetchFuturesOiFrame(
     `${API_BASE_URL}/api/futures-oi-frame/${encodeURIComponent(underlying)}?frame=${frame}`,
     { headers: getHeaders() },
   );
-  const body = (await res.json()) as FuturesOiFrameResponse & { error?: string };
-  if (!res.ok) {
-    throw new Error(
-      body.error ?? `Failed to load futures OI frame (HTTP ${res.status}).`,
-    );
-  }
-  return body;
+  return readJson<FuturesOiFrameResponse>(res, "Failed to load futures OI frame");
 }

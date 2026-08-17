@@ -98,3 +98,34 @@ export function fairPrice(
   const q = (Number.isFinite(divYieldAnnualPct) ? divYieldAnnualPct : 0) / 100;
   return spot * (1 + (rf - q) * (days / 365));
 }
+
+
+/**
+ * Signed compact number for a CHANGE, e.g. "+4.00L" / "−7.45L" / "0".
+ *
+ * Lives here rather than inside the histogram so a level and its delta are
+ * formatted by the same code: it reuses fmtCompact for the magnitude and fmtMoney's
+ * U+2212 minus, which is what every other signed number in the app uses (the
+ * histogram's own copy used an ASCII hyphen).
+ *
+ * Zero is "0", not fmtCompact's "—": on a change series zero is a real reading —
+ * open interest genuinely did not move — rather than missing data.
+ */
+export function fmtSignedCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  const mag = fmtCompact(Math.abs(value));
+  // fmtCompact answers "—" for 0, which is the wrong reading of a delta.
+  if (value === 0 || mag === "—") return "0";
+  return `${value > 0 ? "+" : "−"}${mag}`;
+}
+
+/**
+ * The one "this chart has nothing to show yet" sentence.
+ *
+ * There were five near-identical variants — one inside each chart component and
+ * three hand-written into the Analytics card guards — which meant two cards sitting
+ * side by side in the same grid explained the same state in different words. Kept
+ * here rather than in a component so neither chart has to import the other.
+ */
+export const CHART_EMPTY_NOTE =
+  "No history yet for this timeframe — it fills as the day progresses (or backfills from history).";

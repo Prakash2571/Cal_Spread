@@ -97,7 +97,7 @@ export default function Admin({
             className="btn btn--primary btn--full"
             disabled={loading || !secret.trim()}
           >
-            {loading ? "Verifying..." : "Verify"}
+            {loading ? "Verifying…" : "Verify"}
           </button>
         </form>
       </div>

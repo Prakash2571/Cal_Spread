@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import ChartReadout, { type ReadoutItem } from "./ChartReadout.tsx";
-import { fmtCompact } from "./format.ts";
+import { CHART_EMPTY_NOTE, fmtSignedCompact } from "./format.ts";
 
 /** One bar series in the histogram (index-aligned with each point's `values`). */
 export interface HistSeries {
@@ -22,19 +22,15 @@ interface Props {
   expanded?: boolean;
 }
 
-const PAD = { l: 56, r: 14, t: 16, b: 30 };
+// Deliberately identical to LineChart's PAD. A line card and a histogram card sit
+// side by side in the same grid, so different padding put their y-tick text,
+// gridline ends and plot area a few pixels out of alignment with each other.
+const PAD = { l: 58, r: 18, t: 16, b: 28 };
 const BAR_W = 12;
 const BAR_GAP = 4; // between bars of the same time bucket
 const GROUP_GAP = 30; // blank space between adjacent time buckets
 /** Approximate width of a "06 Aug, 14:35" x-axis label at --fs-1 mono. */
 const LABEL_PX = 110;
-
-/** Signed compact OI change, e.g. "+4.00L" / "-7.45L" / "0". */
-function fmtDelta(v: number): string {
-  const mag = fmtCompact(Math.abs(v));
-  if (mag === "—" || v === 0) return "0";
-  return `${v > 0 ? "+" : "-"}${mag}`;
-}
 
 /**
  * Diverging change histogram: for each time bucket one bar per series, pointing
@@ -67,10 +63,7 @@ export default function OiHistogram({
 
   if (points.length === 0 || series.length === 0) {
     return (
-      <div className="chart-empty">
-        No history yet for this timeframe — it fills as the day progresses (or
-        backfills from history).
-      </div>
+      <div className="chart-empty">{CHART_EMPTY_NOTE}</div>
     );
   }
 
@@ -148,7 +141,7 @@ export default function OiHistogram({
     series.map((s, si) => ({
       label: s.label,
       color: s.color,
-      value: fmtDelta(p.values[si] ?? 0),
+      value: fmtSignedCompact(p.values[si] ?? 0),
     }));
 
   // The readout reports the hovered bucket, or the latest one when idle. Clamped
@@ -197,7 +190,7 @@ export default function OiHistogram({
                   className="chart-grid"
                 />
                 <text x={PAD.l - 8} y={yFor(v) + 3} className="chart-ylabel">
-                  {fmtDelta(v)}
+                  {fmtSignedCompact(v)}
                 </text>
               </g>
             ))}
