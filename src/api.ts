@@ -820,8 +820,10 @@ export async function fetchOptionOiSeries(underlying: string): Promise<OptionOiS
  * Timeframe for the multi-frame OI history charts.
  *
  * Retention per frame on the server: 1m -> 1 day, 5m -> 3 days, 15m -> 7 days,
- * 1h -> 4 days. The longer frames are what make a 2-day or 1-week look-back
- * possible without holding every minute.
+ * 1h -> 7 days. The longer frames are what make a 2-day or 1-week look-back
+ * possible without holding every minute. 1h matches 15m deliberately: retention is
+ * pruned against CALENDAR time, so anything shorter than a week is worth only two
+ * or three sessions once a weekend falls inside it.
  */
 export type OiFrame = "1m" | "5m" | "15m" | "1h";
 /** Selectable frames, in display order. */
@@ -851,7 +853,7 @@ export interface OptionOiFrameResponse {
 
 /**
  * Retained Call/Put total-OI (24↑/ATM/26↓) history for one timeframe:
- * 1m (last 1 day), 5m (last 3 days) or 15m (last 1 week). Backed by the
+ * 1m (last 1 day), 5m (last 3 days), 15m or 1h (last 1 week). Backed by the
  * server's per-frame caches (filled live + backfilled from Kite on downtime).
  */
 export async function fetchOptionOiFrame(
@@ -899,7 +901,7 @@ export interface FuturesOiFrameResponse {
 
 /**
  * Retained NIFTY futures open-interest history for one timeframe: 1m (last 1
- * day), 5m (last 3 days) or 15m (last 1 week). Each point carries one leg per
+ * day), 5m (last 3 days), 15m or 1h (last 1 week). Each point carries one leg per
  * tracked monthly contract (current/next/far), so the client can plot all three
  * as separate series.
  */

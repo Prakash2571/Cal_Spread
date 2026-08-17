@@ -188,14 +188,14 @@ const FRAME_TITLE: Record<OiFrame, string> = {
   "1m": "1-minute buckets · last 1 day",
   "5m": "5-minute buckets · last 3 days",
   "15m": "15-minute buckets · last 1 week",
-  "1h": "1-hour buckets · last 4 days",
+  "1h": "1-hour buckets · last 1 week",
 };
 /** Same frames on the change histograms, where a bucket is a delta not a level. */
 const FRAME_TITLE_DELTA: Record<OiFrame, string> = {
   "1m": "change per minute · last 1 day",
   "5m": "change per 5 minutes · last 3 days",
   "15m": "change per 15 minutes · last 1 week",
-  "1h": "change per hour · last 4 days",
+  "1h": "change per hour · last 1 week",
 };
 
 /** IST calendar day, matching the backend's day key. */
