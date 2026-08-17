@@ -84,8 +84,8 @@ const frameMs = (frame: OiFrame): number =>
  * worth of change?
  *
  * Not an equality test on the spacing, because buckets at a session EDGE are
- * short: the server clamps the last bucket to the 15:30 close, so the final 1h
- * bucket spans 15:00–15:30. Requiring an exact hour silently dropped the closing
+ * short: the server clamps the last bucket to the 15:40 close, so the final 1h
+ * bucket spans 15:00–15:40. Requiring an exact hour silently dropped the closing
  * bar of every session on the change histograms. A genuine hole always leaves a
  * gap of at least two buckets, so "positive and no wider than one bucket" accepts
  * the short edge buckets while still rejecting overnight and downtime gaps.
