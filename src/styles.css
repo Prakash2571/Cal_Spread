@@ -566,6 +566,14 @@ body {
   color: var(--accent-text);
 }
 
+/* "Something on screen may be out of date" — not an error (nothing is broken and
+   there is nothing to retry) but not neutral either. Uses --warn so it reads the
+   same as the .status--wait pill, which signals the equivalent state for ticks. */
+.banner--warn {
+  box-shadow: inset 3px 0 0 var(--warn);
+  color: var(--warn);
+}
+
 .link {
   color: var(--accent-text);
   font-weight: var(--fw-semibold);

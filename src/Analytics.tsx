@@ -94,7 +94,33 @@ const isAdjacentBucket = (prevT: number, t: number, step: number) =>
   t - prevT > 0 && t - prevT <= step;
 
 /** The shape of a frame bucket this page reads (see api.ts OptionOiFramePoint). */
-type FrameBucket = { t: number; totalCe: number; totalPe: number; partial?: 1 };
+type FrameBucket = {
+  t: number;
+  totalCe: number;
+  totalPe: number;
+  partial?: 1;
+  wLo?: number;
+  wHi?: number;
+};
+
+/**
+ * Were two buckets summed over the SAME strikes?
+ *
+ * A total is a sum over a strike window, so its difference with another total is a
+ * real OI change only when both cover the same window. The server used to recompute
+ * the window around each sample's live ATM, which slid it by a strike every time
+ * NIFTY crossed one — and the resulting delta was `OI(strike that entered) −
+ * OI(strike that left)`, lakhs of movement that never happened, biased in the
+ * direction of the trend. It now pins the window per session and ships the bounds,
+ * so this check normally passes for every consecutive pair and only rejects a
+ * genuine re-pin (a new session, or a backfill that pinned from a different start).
+ *
+ * `undefined === undefined` is true, which is exactly the migration behaviour we
+ * want: two buckets from before the server published bounds compare as they always
+ * did, while a legacy/current pair is treated as incomparable and costs one bar.
+ */
+const sameWindow = (a: FrameBucket, b: FrameBucket) =>
+  a.wLo === b.wLo && a.wHi === b.wHi;
 
 /**
  * Is a total a real reading?
@@ -127,13 +153,18 @@ const isUsableBucket = (p: FrameBucket): boolean =>
  */
 function oiDeltaPoints(raw: FrameBucket[], step: number): HistPoint[] {
   const out: HistPoint[] = [];
-  let prev: { t: number; ce: number; pe: number } | null = null;
+  let prev: FrameBucket | null = null;
   for (const p of raw) {
     if (!isUsableBucket(p)) continue;
-    if (prev && isAdjacentBucket(prev.t, p.t, step)) {
-      out.push({ t: p.t, values: [p.totalCe - prev.ce, p.totalPe - prev.pe] });
+    // Adjacent in TIME and identical in strike coverage — both are required for the
+    // subtraction to mean anything. See isAdjacentBucket and sameWindow.
+    if (prev && isAdjacentBucket(prev.t, p.t, step) && sameWindow(prev, p)) {
+      out.push({
+        t: p.t,
+        values: [p.totalCe - prev.totalCe, p.totalPe - prev.totalPe],
+      });
     }
-    prev = { t: p.t, ce: p.totalCe, pe: p.totalPe };
+    prev = p;
   }
   return out;
 }
@@ -201,6 +232,16 @@ const FRAME_TITLE_DELTA: Record<OiFrame, string> = {
 /** IST calendar day, matching the backend's day key. */
 const istDayKey = () =>
   new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+/**
+ * How long the chart polls may go without a success before the page says so.
+ *
+ * Two and a half minutes: the polls run every 60s, so this needs two consecutive
+ * failures before it fires. Long enough that a single blip stays invisible, short
+ * enough that a real outage is flagged while the numbers on screen are still only
+ * minutes old.
+ */
+const FEED_STALE_MS = 150_000;
 
 const SAMPLE_MS = 5000; // how often we snapshot OI/price for buildup history
 const HIST_MS = 20 * 60 * 1000; // keep 20 min of rolling samples per token
@@ -349,6 +390,17 @@ export default function Analytics({ authenticated, onBack }: Props) {
   // toggles so the Day option can be disabled up front rather than selected and
   // then found empty.
   const [prevClose, setPrevClose] = useState<OptionPrevClose>(EMPTY_PREV_CLOSE);
+
+  // Health of the chart REST polls, as opposed to the tick stream.
+  //
+  // Every chart poll swallows its own error to keep the last good data on screen,
+  // which is the right call for one blip and the wrong one for an outage: the page's
+  // only freshness signal is the `Live` pill, and that reflects ONLY the SSE tick
+  // stream. So a backend whose endpoints were all 5xx-ing kept a green pill above
+  // hour-old charts with nothing to say otherwise. These two stamps are the poll
+  // layer's own health; `feedStale` below turns them into something visible.
+  const [feedOkAt, setFeedOkAt] = useState(0);
+  const [feedFailAt, setFeedFailAt] = useState(0);
 
   const tickBuffer = useRef<TickMap>({});
   const ticksRef = useRef<TickMap>({});
@@ -547,6 +599,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, straddleFrame)
         .then((r) => {
+          // A response of any kind proves the poll layer is healthy, even when
+          // it is for a frame we have since switched away from.
+          if (!cancelled) setFeedOkAt(Date.now());
           if (cancelled || r.frame !== straddleFrame) return;
           // No `partial` filter here: that flag is about STRIKE coverage of the OI
           // window, and the straddle is just the two ATM legs. When an ATM leg is
@@ -555,7 +610,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
           setStraddleRaw(r.points.map((p) => ({ t: p.t, straddle: p.straddle })));
         })
         .catch(() => {
-          /* keep whatever we have */
+          // Keep whatever we have on screen, but record that it is no longer
+          // confirmed fresh — see feedStale.
+          if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
     const id = window.setInterval(load, 30000);
@@ -576,6 +633,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, oiFrame)
         .then((r) => {
+          // A response of any kind proves the poll layer is healthy, even when
+          // it is for a frame we have since switched away from.
+          if (!cancelled) setFeedOkAt(Date.now());
           if (cancelled || r.frame !== oiFrame) return;
           // Each side is filtered on its OWN total plus the shared `partial` flag,
           // so a bucket the server couldn't fully cover leaves a gap instead of a
@@ -592,7 +652,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
           );
         })
         .catch(() => {
-          /* keep whatever we have */
+          // Keep whatever we have on screen, but record that it is no longer
+          // confirmed fresh — see feedStale.
+          if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
     const id = window.setInterval(load, 60000); // OI moves slowly; 60s refresh
@@ -615,10 +677,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchOptionOiFrame(UNDERLYING, histFrame)
         .then((r) => {
+          // A response of any kind proves the poll layer is healthy, even when
+          // it is for a frame we have since switched away from.
+          if (!cancelled) setFeedOkAt(Date.now());
           if (!cancelled && r.frame === histFrame) setHistRaw(r.points);
         })
         .catch(() => {
-          /* keep whatever we have */
+          // Keep whatever we have on screen, but record that it is no longer
+          // confirmed fresh — see feedStale.
+          if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
     const id = window.setInterval(load, 60000);
@@ -647,6 +714,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchFuturesOiFrame(UNDERLYING, futFrame)
         .then((r) => {
+          // A response of any kind proves the poll layer is healthy, even when
+          // it is for a frame we have since switched away from.
+          if (!cancelled) setFeedOkAt(Date.now());
           // The server coerces an unknown frame to 5m; ignore a mismatched
           // response rather than labelling it with the requested timeframe.
           if (cancelled || r.frame !== futFrame) return;
@@ -654,7 +724,9 @@ export default function Analytics({ authenticated, onBack }: Props) {
           setFutContracts(r.contracts);
         })
         .catch(() => {
-          /* keep whatever we have */
+          // Keep whatever we have on screen, but record that it is no longer
+          // confirmed fresh — see feedStale.
+          if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
     const id = window.setInterval(load, 60000); // OI moves slowly; 60s refresh
@@ -678,12 +750,17 @@ export default function Analytics({ authenticated, onBack }: Props) {
     const load = () =>
       fetchFuturesOiFrame(UNDERLYING, futHistFrame)
         .then((r) => {
+          // A response of any kind proves the poll layer is healthy, even when
+          // it is for a frame we have since switched away from.
+          if (!cancelled) setFeedOkAt(Date.now());
           if (cancelled || r.frame !== futHistFrame) return;
           setFutHistRaw(r.points);
           setFutHistContracts(r.contracts);
         })
         .catch(() => {
-          /* keep whatever we have */
+          // Keep whatever we have on screen, but record that it is no longer
+          // confirmed fresh — see feedStale.
+          if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
     const id = window.setInterval(load, 60000);
@@ -927,6 +1004,29 @@ export default function Analytics({ authenticated, onBack }: Props) {
         });
   const isoFmtFor = (frame: OiFrame) => (iso: string) => fmtTs(frame, new Date(iso).getTime());
   const tsFmtFor = (frame: OiFrame) => (t: number) => fmtTs(frame, t);
+
+  /** IST wall clock for the staleness banner, matching the chart axes' timezone. */
+  const fmtClock = (ms: number) =>
+    new Date(ms).toLocaleTimeString("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  /**
+   * Have the chart polls stopped succeeding?
+   *
+   * Requires a failure NEWER than the last success, plus a grace period of two
+   * missed 60s cycles, so a single blip or one endpoint briefly 429-ing doesn't
+   * raise a warning the user can do nothing about. `feedOkAt > 0` keeps it quiet
+   * during the first load, when nothing has succeeded yet and the chain's own
+   * loading/error banners are the right thing to show.
+   *
+   * Evaluated during render, which is fine here: live ticks re-render this component
+   * several times a second, so the banner appears and clears promptly.
+   */
+  const feedStale =
+    feedOkAt > 0 && feedFailAt > feedOkAt && Date.now() - feedOkAt > FEED_STALE_MS;
 
   /**
    * The timeframe strip every chart card carries.
@@ -1196,6 +1296,15 @@ export default function Analytics({ authenticated, onBack }: Props) {
       )}
       {error && <div className="banner banner--error">{error}</div>}
       {loading && !chain && <div className="banner">Loading option chain…</div>}
+      {/* The charts keep their last good data when a poll fails, so without this the
+          page looked current while being arbitrarily stale — the `Live` pill above
+          only tracks the tick stream, not these polls. */}
+      {feedStale && (
+        <div className="banner banner--warn">
+          Chart data last refreshed at {fmtClock(feedOkAt)} IST — the requests since
+          then have failed, so the timeframes below may be out of date.
+        </div>
+      )}
 
       {metrics && (
         <>

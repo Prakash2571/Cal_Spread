@@ -844,6 +844,19 @@ export interface OptionOiFramePoint {
   straddle: number;
   spot: number;
   /**
+   * Inclusive strike bounds the totals were summed over.
+   *
+   * Two totals are only comparable when they cover the SAME strikes, so a change
+   * histogram must check these before differencing — see sameWindow in Analytics.
+   * The server pins the window per session, so within a session they are constant
+   * and every delta survives; they differ across a re-pin (a new session, or a
+   * backfill that started mid-session), and there the delta is correctly dropped.
+   *
+   * Absent on buckets the server wrote before it published them.
+   */
+  wLo?: number;
+  wHi?: number;
+  /**
    * Present when the server knows this bucket UNDERSTATES its window — a quote
    * response that missed strikes, or a reconstruction whose history for one of
    * them was unavailable. The server publishes it and keeps trying to rebuild it,
