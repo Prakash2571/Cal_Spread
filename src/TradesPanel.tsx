@@ -708,9 +708,6 @@ export default function TradesPanel({
         <header className="modal-head">
           <div>
             <h2>Trades</h2>
-            <p className="modal-sub">
-              Buy the discount leg, sell the premium leg · 1 lot · current &amp; next month
-            </p>
           </div>
           <button className="modal-x" onClick={onClose} aria-label="Close">
             ✕
