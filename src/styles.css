@@ -1385,6 +1385,299 @@ body {
   color: var(--text-1);
 }
 
+/* ================ Trades month filter ================
+   The log is scoped to one month at a time. The bar and the month's totals sit
+   outside .modal-body so they stay put while the list scrolls under them. */
+.month-head {
+  flex: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.month-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+}
+
+.month-nav {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-4);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.month-nav:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.month-nav:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.month-pick {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 28px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.month-pick:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.month-pick--open {
+  border-color: var(--accent);
+}
+
+.month-ico {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  color: var(--text-3);
+}
+
+.month-caret {
+  font-size: var(--fs-1);
+  color: var(--text-3);
+}
+
+.month-all {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.month-all:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.month-all--on {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
+/* A year of months at once, each with its trade count, so the months that hold
+   anything are visible without stepping through the empty ones. */
+.month-panel {
+  padding: 0 var(--sp-5) var(--sp-3);
+}
+
+.month-year {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.month-year-v {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  min-width: 44px;
+  text-align: center;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-2);
+}
+
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: var(--sp-2) 0;
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-md);
+  background: var(--data-surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.month-cell:hover:not(:disabled) {
+  background: var(--data-surface-strong);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+
+.month-cell--has {
+  color: var(--text-1);
+}
+
+.month-cell--sel {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
+.month-cell:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.month-cell-m {
+  font-size: var(--fs-2);
+  font-weight: var(--fw-semibold);
+}
+
+.month-cell-n {
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.month-cell--has .month-cell-n {
+  color: var(--accent-text);
+  font-weight: var(--fw-semibold);
+}
+
+/* The selected month's headline numbers. */
+.month-stats {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.month-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: var(--lh-tight);
+}
+
+.month-stat-k {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+}
+
+.month-stat-v {
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-stat-v.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.month-stat-est {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+}
+
+.month-stat-sub {
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "+3 open in other months" — open positions hidden by the filter are still
+   money at risk, so the count stays reachable from the Open heading. */
+.month-jump {
+  margin-left: auto;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.month-jump:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+@media (max-width: 560px) {
+  .month-bar,
+  .month-stats {
+    padding-left: var(--sp-3);
+    padding-right: var(--sp-3);
+  }
+  .month-panel {
+    padding-left: var(--sp-3);
+    padding-right: var(--sp-3);
+  }
+  .month-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .month-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-2) var(--sp-3);
+  }
+}
+
 .trade-section {
   padding: var(--sp-4) var(--sp-5);
 }
