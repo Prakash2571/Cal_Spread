@@ -459,6 +459,7 @@ function MonthBar({
   value,
   onChange,
   counts,
+  minMonth,
   maxMonth,
   home,
   total,
@@ -466,6 +467,8 @@ function MonthBar({
   value: string;
   onChange: (key: string) => void;
   counts: Record<string, number>;
+  /** The earliest month a trade reaches — the picker won't step before it. */
+  minMonth: string;
   /** The furthest month a trade reaches — the picker won't step past it. */
   maxMonth: string;
   /** The current month, and where "All" returns to when toggled back off. */
@@ -476,7 +479,9 @@ function MonthBar({
   const [openPicker, setOpenPicker] = useState(false);
   const [year, setYear] = useState(() => Number(anchor.slice(0, 4)));
 
+  const minYear = Number(minMonth.slice(0, 4));
   const maxYear = Number(maxMonth.slice(0, 4));
+  const canPrev = value !== ALL && value > minMonth;
   const canNext = value !== ALL && value < maxMonth;
 
   const pick = (key: string) => {
@@ -490,7 +495,8 @@ function MonthBar({
         <button
           className="month-nav"
           aria-label="Previous month"
-          onClick={() => pick(shiftMonth(anchor, -1))}
+          disabled={!canPrev}
+          onClick={() => canPrev && pick(shiftMonth(anchor, -1))}
         >
           ‹
         </button>
@@ -538,7 +544,8 @@ function MonthBar({
             <button
               className="month-nav"
               aria-label="Previous year"
-              onClick={() => setYear((y) => y - 1)}
+              disabled={year <= minYear}
+              onClick={() => setYear((y) => Math.max(minYear, y - 1))}
             >
               ‹
             </button>
@@ -557,7 +564,8 @@ function MonthBar({
             {MONTHS.map((label, i) => {
               const key = `${year}-${String(i + 1).padStart(2, "0")}`;
               const n = counts[key] ?? 0;
-              const future = key > maxMonth;
+              // Out of range: before the first trade's month, or after the last.
+              const outside = key < minMonth || key > maxMonth;
               return (
                 <button
                   key={key}
@@ -568,12 +576,12 @@ function MonthBar({
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  disabled={future}
+                  disabled={outside}
                   onClick={() => pick(key)}
-                  title={future ? "" : `${n} trade${n === 1 ? "" : "s"} in ${monthLabel(key)}`}
+                  title={outside ? "" : `${n} trade${n === 1 ? "" : "s"} in ${monthLabel(key)}`}
                 >
                   <span className="month-cell-m">{label}</span>
-                  <span className="month-cell-n">{future ? "—" : n || "·"}</span>
+                  <span className="month-cell-n">{outside ? "—" : n || "·"}</span>
                 </button>
               );
             })}
@@ -688,6 +696,15 @@ export default function TradesPanel({
     return m;
   }, [counts, thisMonth]);
 
+  // The earliest month the picker will reach: the first month that actually
+  // holds a trade, so paging back doesn't wander into years with no history at
+  // all. Never sits later than the current month, so "home" stays reachable.
+  const minMonth = useMemo(() => {
+    let m = thisMonth;
+    for (const k of Object.keys(counts)) if (k < m) m = k;
+    return m;
+  }, [counts, thisMonth]);
+
   const visible = month === ALL ? trades : trades.filter((t) => tradeMonth(t) === month);
   const open = visible.filter((t) => t.status === "open");
   const closed = visible.filter((t) => t.status === "closed");
@@ -718,6 +735,7 @@ export default function TradesPanel({
           value={month}
           onChange={setMonth}
           counts={counts}
+          minMonth={minMonth}
           maxMonth={maxMonth}
           home={thisMonth}
           total={trades.length}
