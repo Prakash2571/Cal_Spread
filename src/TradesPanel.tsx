@@ -30,11 +30,17 @@ function fmtDateTime(iso: string): string {
 }
 
 /* ---------------------------------------------------------------- months ---
- * The list is scoped to one calendar month at a time (the current one on open),
- * because a trading log grows without bound and "what did I do this month" is
- * the question actually being asked of it. A trade belongs to the month it was
- * TAKEN in (opened_at) — that's what "trades taken" counts, and it keeps a
- * position in one bucket for its whole life instead of moving when it closes.
+ * The list is scoped to one month at a time (the current one on open), because
+ * a trading log grows without bound and "what did I do this month" is the
+ * question actually being asked of it.
+ *
+ * The month is the F&O SERIES month, not the calendar date the trade was taken:
+ * an F&O month runs on the expiry cycle, so the August series opens in late
+ * July (once July has expired) rather than on the 1st. A calendar spread holds
+ * two consecutive expiries — a near ("current") leg and a far ("next") leg — so
+ * the trade belongs to the month of its NEAR leg. A position taken on 31 Jul
+ * with a 25 Aug front leg is an August trade, and it stays in that one bucket
+ * for its whole life instead of moving when it closes.
  */
 
 const MONTHS = [
@@ -50,10 +56,19 @@ function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** "YYYY-MM" for a trade's opened_at, or "" when the timestamp is unusable. */
+/**
+ * The "YYYY-MM" F&O series a trade belongs to: the expiry month of its FRONT
+ * (near) leg — the earlier of the two expiries. Expiries are "YYYY-MM-DD", so
+ * the earlier date sorts first as a plain string and its first 7 chars are the
+ * month key. Returns "" only when neither leg carries a usable expiry.
+ */
 function tradeMonth(t: Trade): string {
-  const d = new Date(t.opened_at);
-  return Number.isNaN(d.getTime()) ? "" : monthKey(d);
+  const valid = [t.buy.expiry, t.sell.expiry].filter(
+    (e): e is string => typeof e === "string" && /^\d{4}-\d{2}-\d{2}/.test(e),
+  );
+  if (valid.length === 0) return "";
+  const near = valid.reduce((a, b) => (a < b ? a : b));
+  return near.slice(0, 7);
 }
 
 /** "Aug 2026" for a "YYYY-MM" key. */
@@ -445,16 +460,19 @@ function MonthBar({
   onChange,
   counts,
   maxMonth,
+  home,
   total,
 }: {
   value: string;
   onChange: (key: string) => void;
   counts: Record<string, number>;
-  /** The current month — nothing after it can hold a trade. */
+  /** The furthest month a trade reaches — the picker won't step past it. */
   maxMonth: string;
+  /** The current month, and where "All" returns to when toggled back off. */
+  home: string;
   total: number;
 }) {
-  const anchor = value === ALL ? maxMonth : value;
+  const anchor = value === ALL ? home : value;
   const [openPicker, setOpenPicker] = useState(false);
   const [year, setYear] = useState(() => Number(anchor.slice(0, 4)));
 
@@ -507,7 +525,7 @@ function MonthBar({
 
         <button
           className={`month-all ${value === ALL ? "month-all--on" : ""}`}
-          onClick={() => pick(value === ALL ? maxMonth : ALL)}
+          onClick={() => pick(value === ALL ? home : ALL)}
           title="Show every trade, ignoring the month"
         >
           All <span className="pill-count">{total}</span>
@@ -660,6 +678,16 @@ export default function TradesPanel({
     return c;
   }, [trades]);
 
+  // The furthest month the picker will reach. It's expiry-driven now, so a
+  // trade's front leg can land in a FUTURE calendar month (a Sept-front spread
+  // taken in August): that bucket has to be selectable, so the cap follows the
+  // data rather than today's date.
+  const maxMonth = useMemo(() => {
+    let m = thisMonth;
+    for (const k of Object.keys(counts)) if (k > m) m = k;
+    return m;
+  }, [counts, thisMonth]);
+
   const visible = month === ALL ? trades : trades.filter((t) => tradeMonth(t) === month);
   const open = visible.filter((t) => t.status === "open");
   const closed = visible.filter((t) => t.status === "closed");
@@ -693,7 +721,8 @@ export default function TradesPanel({
           value={month}
           onChange={setMonth}
           counts={counts}
-          maxMonth={thisMonth}
+          maxMonth={maxMonth}
+          home={thisMonth}
           total={trades.length}
         />
         <MonthStats label={label} totals={totals} />
