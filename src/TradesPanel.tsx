@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Tick, Trade, TradeCharges } from "./api.ts";
 import { fmt, fmtMoney, formatExpiry } from "./format.ts";
 
@@ -27,6 +27,112 @@ function fmtDateTime(iso: string): string {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+/* ---------------------------------------------------------------- months ---
+ * The list is scoped to one calendar month at a time (the current one on open),
+ * because a trading log grows without bound and "what did I do this month" is
+ * the question actually being asked of it. A trade belongs to the month it was
+ * TAKEN in (opened_at) — that's what "trades taken" counts, and it keeps a
+ * position in one bucket for its whole life instead of moving when it closes.
+ */
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** Sentinel month selection: no filter at all. */
+const ALL = "all";
+
+/** "YYYY-MM" for a date — sortable and comparable as a plain string. */
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM" for a trade's opened_at, or "" when the timestamp is unusable. */
+function tradeMonth(t: Trade): string {
+  const d = new Date(t.opened_at);
+  return Number.isNaN(d.getTime()) ? "" : monthKey(d);
+}
+
+/** "Aug 2026" for a "YYYY-MM" key. */
+function monthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  if (!y || !m) return key;
+  return `${MONTHS[m - 1]} ${y}`;
+}
+
+/** Step a "YYYY-MM" key by whole months, rolling the year over. */
+function shiftMonth(key: string, delta: number): string {
+  const [y, m] = key.split("-").map(Number);
+  return monthKey(new Date(y, m - 1 + delta, 1));
+}
+
+interface MonthTotals {
+  count: number;
+  open: number;
+  closed: number;
+  margin: number | null;
+  /** Trades whose margin the backend never recorded — the total is a floor. */
+  marginMissing: number;
+  pnl: number | null;
+  /** Trades still open, so their P&L is a live mark rather than realized. */
+  pnlLive: number;
+  charges: number | null;
+  chargesEstimated: boolean;
+  /** Trades with no charge figures at all — the total is a floor. */
+  chargesMissing: number;
+}
+
+/**
+ * Roll a set of trades up into the month's headline numbers: how many were
+ * taken, the margin they tied up, the P&L (realized for closed, marked to LTP
+ * for open) and the round-trip charges.
+ *
+ * Missing pieces are counted rather than treated as zero, so a total that is
+ * only part of the picture can say so instead of quietly reading low.
+ */
+function monthTotals(trades: Trade[], ticks: Record<number, Tick>): MonthTotals {
+  const totals: MonthTotals = {
+    count: trades.length,
+    open: 0,
+    closed: 0,
+    margin: null,
+    marginMissing: 0,
+    pnl: null,
+    pnlLive: 0,
+    charges: null,
+    chargesEstimated: false,
+    chargesMissing: 0,
+  };
+
+  for (const t of trades) {
+    if (t.status === "open") totals.open++;
+    else totals.closed++;
+
+    if (t.margin !== null && Number.isFinite(t.margin)) {
+      totals.margin = (totals.margin ?? 0) + t.margin;
+    } else {
+      totals.marginMissing++;
+    }
+
+    const { pnl } = computePnl(t, ticks);
+    if (pnl !== null && Number.isFinite(pnl)) {
+      totals.pnl = (totals.pnl ?? 0) + pnl;
+      if (t.status === "open") totals.pnlLive++;
+    }
+
+    const { total, estimated } = chargeSides(t);
+    if (total !== null && Number.isFinite(total)) {
+      totals.charges = (totals.charges ?? 0) + total;
+      if (estimated) totals.chargesEstimated = true;
+    } else {
+      totals.chargesMissing++;
+    }
+  }
+
+  return totals;
 }
 
 function pnlClass(pnl: number | null): string {
@@ -320,6 +426,205 @@ function TradeCard({
   );
 }
 
+/**
+ * Month selector: arrows for the neighbouring months, and a click on the label
+ * opens a year of months at once, each showing how many trades it holds — so
+ * finding the months that actually have activity doesn't mean clicking back
+ * through the empty ones.
+ */
+function MonthBar({
+  value,
+  onChange,
+  counts,
+  maxMonth,
+  total,
+}: {
+  value: string;
+  onChange: (key: string) => void;
+  counts: Record<string, number>;
+  /** The current month — nothing after it can hold a trade. */
+  maxMonth: string;
+  total: number;
+}) {
+  const anchor = value === ALL ? maxMonth : value;
+  const [openPicker, setOpenPicker] = useState(false);
+  const [year, setYear] = useState(() => Number(anchor.slice(0, 4)));
+
+  const maxYear = Number(maxMonth.slice(0, 4));
+  const canNext = value !== ALL && value < maxMonth;
+
+  const pick = (key: string) => {
+    onChange(key);
+    setOpenPicker(false);
+  };
+
+  return (
+    <div className="month-head">
+      <div className="month-bar">
+        <button
+          className="month-nav"
+          aria-label="Previous month"
+          onClick={() => pick(shiftMonth(anchor, -1))}
+        >
+          ‹
+        </button>
+
+        <button
+          className={`month-pick ${openPicker ? "month-pick--open" : ""}`}
+          aria-expanded={openPicker}
+          onClick={() => {
+            setYear(Number(anchor.slice(0, 4)));
+            setOpenPicker((v) => !v);
+          }}
+          title="Pick a month"
+        >
+          <svg className="month-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          {value === ALL ? "All months" : monthLabel(value)}
+          <span className="month-caret" aria-hidden="true">
+            ▾
+          </span>
+        </button>
+
+        <button
+          className="month-nav"
+          aria-label="Next month"
+          disabled={!canNext}
+          onClick={() => canNext && pick(shiftMonth(anchor, 1))}
+        >
+          ›
+        </button>
+
+        <button
+          className={`month-all ${value === ALL ? "month-all--on" : ""}`}
+          onClick={() => pick(value === ALL ? maxMonth : ALL)}
+          title="Show every trade, ignoring the month"
+        >
+          All <span className="pill-count">{total}</span>
+        </button>
+      </div>
+
+      {openPicker && (
+        <div className="month-panel">
+          <div className="month-year">
+            <button
+              className="month-nav"
+              aria-label="Previous year"
+              onClick={() => setYear((y) => y - 1)}
+            >
+              ‹
+            </button>
+            <span className="month-year-v">{year}</span>
+            <button
+              className="month-nav"
+              aria-label="Next year"
+              disabled={year >= maxYear}
+              onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="month-grid">
+            {MONTHS.map((label, i) => {
+              const key = `${year}-${String(i + 1).padStart(2, "0")}`;
+              const n = counts[key] ?? 0;
+              const future = key > maxMonth;
+              return (
+                <button
+                  key={key}
+                  className={[
+                    "month-cell",
+                    key === value ? "month-cell--sel" : "",
+                    n > 0 ? "month-cell--has" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  disabled={future}
+                  onClick={() => pick(key)}
+                  title={future ? "" : `${n} trade${n === 1 ? "" : "s"} in ${monthLabel(key)}`}
+                >
+                  <span className="month-cell-m">{label}</span>
+                  <span className="month-cell-n">{future ? "—" : n || "·"}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The month's headline: trades taken, margin tied up, P&L, charges. */
+function MonthStats({ label, totals }: { label: string; totals: MonthTotals }) {
+  const roi = roiPct(totals.pnl, totals.margin);
+  const net =
+    totals.pnl !== null && totals.charges !== null ? totals.pnl - totals.charges : null;
+
+  return (
+    <div className="month-stats" aria-label={`${label} summary`}>
+      <div className="month-stat">
+        <span className="month-stat-k">Trades taken</span>
+        <span className="month-stat-v">{totals.count}</span>
+        <span className="month-stat-sub">
+          {totals.open} open · {totals.closed} closed
+        </span>
+      </div>
+
+      <div className="month-stat">
+        <span className="month-stat-k">Margin</span>
+        <span className="month-stat-v mono">{fmtCost(totals.margin)}</span>
+        <span className="month-stat-sub">
+          {totals.marginMissing > 0
+            ? `${totals.marginMissing} without margin`
+            : "required, at entry"}
+        </span>
+      </div>
+
+      <div className="month-stat">
+        <span className="month-stat-k">P&amp;L</span>
+        <span className={`month-stat-v mono ${pnlClass(totals.pnl)}`}>
+          {fmtMoney(totals.pnl)}
+        </span>
+        <span className="month-stat-sub">
+          {roi !== null ? `${roi.toFixed(2)}% on margin` : "—"}
+          {totals.pnlLive > 0 ? ` · ${totals.pnlLive} live` : ""}
+        </span>
+      </div>
+
+      <div
+        className="month-stat"
+        title={
+          "Zerodha charges for the round trip (entry + exit) on this month's trades.\n" +
+          "Reported for reference — the P&L beside it is the price move and does\n" +
+          "not have them deducted."
+        }
+      >
+        <span className="month-stat-k">Charges</span>
+        <span className="month-stat-v mono">
+          {fmtCost(totals.charges)}
+          {totals.chargesEstimated ? <span className="month-stat-est"> (est)</span> : null}
+        </span>
+        <span className="month-stat-sub">
+          {totals.chargesMissing > 0 ? (
+            `${totals.chargesMissing} unpriced`
+          ) : net !== null ? (
+            <>
+              after charges{" "}
+              <span className={pnlClass(net)}>{fmtMoney(net)}</span>
+            </>
+          ) : (
+            "entry + exit"
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function TradesPanel({
   trades,
   ticks,
@@ -333,8 +638,33 @@ export default function TradesPanel({
   onOpenTrade,
   onDeleteTrade,
 }: Props) {
-  const open = trades.filter((t) => t.status === "open");
-  const closed = trades.filter((t) => t.status === "closed");
+  // Opens on the current month: the log is a working view of "this month", not
+  // an archive to scroll through.
+  const thisMonth = monthKey(new Date());
+  const [month, setMonth] = useState(thisMonth);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const t of trades) {
+      const k = tradeMonth(t);
+      if (k) c[k] = (c[k] ?? 0) + 1;
+    }
+    return c;
+  }, [trades]);
+
+  const visible = month === ALL ? trades : trades.filter((t) => tradeMonth(t) === month);
+  const open = visible.filter((t) => t.status === "open");
+  const closed = visible.filter((t) => t.status === "closed");
+  const label = month === ALL ? "All months" : monthLabel(month);
+
+  // Recomputed every tick on purpose: the open legs are marked to LTP, so the
+  // month's P&L is live while a position is running.
+  const totals = monthTotals(visible, ticks);
+
+  // A position opened in an earlier month is still money at risk, so it can't
+  // just vanish behind the filter without a word.
+  const openElsewhere =
+    month === ALL ? [] : trades.filter((t) => t.status === "open" && tradeMonth(t) !== month);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -351,6 +681,15 @@ export default function TradesPanel({
           </button>
         </header>
 
+        <MonthBar
+          value={month}
+          onChange={setMonth}
+          counts={counts}
+          maxMonth={thisMonth}
+          total={trades.length}
+        />
+        <MonthStats label={label} totals={totals} />
+
         <div className="modal-body">
         {error && <div className="banner banner--error">{error}</div>}
         {loading && trades.length === 0 && (
@@ -363,9 +702,22 @@ export default function TradesPanel({
         <section className="trade-section">
           <h3 className="trade-section-title">
             Open <span className="pill-count">{open.length}</span>
+            {openElsewhere.length > 0 && (
+              <button
+                className="month-jump"
+                onClick={() => setMonth(ALL)}
+                title="These positions are still running, but were taken in another month"
+              >
+                +{openElsewhere.length} open in other months
+              </button>
+            )}
           </h3>
           {open.length === 0 ? (
-            <p className="trade-empty">No open trades. Use “Take Trade” on any stock.</p>
+            <p className="trade-empty">
+              {month === ALL || month === thisMonth
+                ? "No open trades. Use “Take Trade” on any stock."
+                : `No trades were open from ${label}.`}
+            </p>
           ) : (
             <div className="trade-list">
               {open.map((t) => (
@@ -390,7 +742,11 @@ export default function TradesPanel({
             History <span className="pill-count">{closed.length}</span>
           </h3>
           {closed.length === 0 ? (
-            <p className="trade-empty">No closed trades yet.</p>
+            <p className="trade-empty">
+              {month === ALL
+                ? "No closed trades yet."
+                : `No closed trades from ${label}.`}
+            </p>
           ) : (
             <div className="trade-list">
               {closed.map((t) => (
