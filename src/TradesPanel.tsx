@@ -111,16 +111,24 @@ function monthTotals(trades: Trade[], ticks: Record<number, Tick>): MonthTotals 
     if (t.status === "open") totals.open++;
     else totals.closed++;
 
-    if (t.margin !== null && Number.isFinite(t.margin)) {
-      totals.margin = (totals.margin ?? 0) + t.margin;
-    } else {
-      totals.marginMissing++;
-    }
-
     const { pnl } = computePnl(t, ticks);
-    if (pnl !== null && Number.isFinite(pnl)) {
+    const pnlCounted = pnl !== null && Number.isFinite(pnl);
+
+    if (pnlCounted) {
       totals.pnl = (totals.pnl ?? 0) + pnl;
       if (t.status === "open") totals.pnlLive++;
+
+      // Margin rides with the P&L: it's the capital that produced that figure,
+      // so it's only summed for a trade whose P&L is in the total. A trade that
+      // never fully filled (both legs bought) has no P&L to count, so its
+      // margin is left out too — otherwise the total would carry capital for a
+      // position that was never actually on, and "% on margin" would read the
+      // return against money that was never at work.
+      if (t.margin !== null && Number.isFinite(t.margin)) {
+        totals.margin = (totals.margin ?? 0) + t.margin;
+      } else {
+        totals.marginMissing++;
+      }
     }
 
     const { total, estimated } = chargeSides(t);
