@@ -766,9 +766,11 @@ export default function TradesPanel({
           </h3>
           {open.length === 0 ? (
             <p className="trade-empty">
-              {month === ALL || month === thisMonth
-                ? "No open trades. Use “Take Trade” on any stock."
-                : `No trades were open from ${label}.`}
+              {closed.length > 0
+                ? `Every ${label} trade is closed — see History below.`
+                : month === ALL || month === thisMonth
+                  ? "No open trades. Use “Take Trade” on any stock."
+                  : `No trades in ${label}.`}
             </p>
           ) : (
             <div className="trade-list">
