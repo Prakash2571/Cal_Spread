@@ -35,10 +35,17 @@ leg into the **bid**, buy the short leg back at the **ask**.
 - These are real, tick-size-valid, executable prices. A volume-weighted average
   across depth levels is **not** — it produces a price that does not exist on the
   exchange — so it is deliberately not used.
-- Fills are **top-of-book only; quantity is never consulted.** The modelled
-  slippage is therefore exactly one spread, which is a *best case* for a large
-  lot that would really walk deeper into the book. Known, accepted limitation —
-  if it is ever changed, the fill must still round to a valid tick.
+- Fills are **top-of-book only; quantity is never consulted — and for this app
+  that is exact, not an approximation.** The app trades exactly **1 lot**, and
+  NSE requires every F&O order to be a multiple of the lot size (partial lots
+  cannot be traded). So every resting order, and therefore the aggregate
+  quantity at any depth level, is at least one lot: a 1-lot order can never
+  exhaust the touch and has no deeper level to walk into. The modelled slippage
+  of exactly one spread is the real fill.
+- That guarantee is **tied to the 1-lot design.** If multi-lot sizing is ever
+  added, this stops holding — a 5-lot order can outsize the touch — and only
+  then does a quantity-aware walk become necessary (rounding to a valid tick).
+  Do not "pre-fix" it before then; the current code is correct as it stands.
 - If a needed side of the book is empty, **refuse the trade** rather than invent
   a fill from LTP. A fabricated entry poisons the P&L for the life of the trade.
 

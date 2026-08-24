@@ -279,9 +279,13 @@ function computePnl(t: Trade, ticks: Record<number, Tick>) {
 
   // The P&L is the PRICE MOVE. Both legs were filled at the touch — the best
   // ask for the long leg, the best bid for the short (backend bestPrice()) — so
-  // the entry side of the bid/ask spread is already inside this number. Note
-  // the fill is top-of-book and does NOT walk the book for quantity, so the
-  // slippage modelled here is exactly one spread.
+  // the entry side of the bid/ask spread is already inside this number.
+  //
+  // The fill is top-of-book and never consults quantity, which is EXACT here
+  // rather than approximate: the app trades exactly 1 lot, and an F&O order must
+  // be a whole multiple of the lot size, so every depth level holds at least one
+  // lot. A 1-lot order cannot exhaust the touch, so there is no deeper level to
+  // walk into and the slippage is exactly the one spread that was crossed.
   //
   // Brokerage and taxes are deliberately NOT subtracted: they're reported beside
   // the figure so the cost is visible at entry and exit, while the P&L stays a
