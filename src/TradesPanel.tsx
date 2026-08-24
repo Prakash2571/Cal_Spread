@@ -242,10 +242,23 @@ function chargesTooltip(t: Trade): string {
  * Current prices + per-leg / total P&L (live for open, close prices for closed),
  * plus the round-trip charges to report alongside it.
  *
- * An open trade is marked to LTP (the tick feed carries no depth), so the live
- * figure still owes the exit half of the spread; the ENTRY spread is already in
- * it, because the entry price is a book-walking fill. Closing re-prices both
- * legs against the book, so the realized number carries the full round trip.
+ * BROKER PARITY is the rule here: this figure should read the way the same
+ * position reads in the broker's own app, so the number can be trusted as
+ * "what I'd actually have".
+ *
+ * An open trade is therefore marked to LTP — which is exactly what a broker
+ * shows for an open position — even though the tick feed does carry depth
+ * (Tick.bid / .ask / .bids / .asks). Marking to the exit-side touch instead
+ * would arguably be a truer estimate of a close, but it would NOT match the
+ * broker screen, so it is deliberately not done.
+ *
+ * What that means for the number, so it isn't misread:
+ *  - The ENTRY spread is already a cost inside it: the fills are the real touch
+ *    (long leg paid the ask, short leg sold the bid), so a position shows a
+ *    small loss the moment it's taken. A broker behaves the same way.
+ *  - It still owes the EXIT spread: closing re-prices both legs against the
+ *    book (sell into the bid, buy back at the ask), so the realized figure
+ *    carries the full round trip. Again, same as the broker.
  */
 function computePnl(t: Trade, ticks: Record<number, Tick>) {
   const buyTick = ticks[t.buy.token];
@@ -264,9 +277,11 @@ function computePnl(t: Trade, ticks: Record<number, Tick>) {
   const buyPnl = buyValid !== null ? t.lot_size * (buyValid - t.buy.entry) : null;
   const sellPnl = sellValid !== null ? t.lot_size * (t.sell.entry - sellValid) : null;
 
-  // The P&L is the PRICE MOVE. Both legs are filled by walking the live order
-  // book (buy into the asks, sell into the bids), so the bid/ask spread —
-  // slippage — is already inside this number.
+  // The P&L is the PRICE MOVE. Both legs were filled at the touch — the best
+  // ask for the long leg, the best bid for the short (backend bestPrice()) — so
+  // the entry side of the bid/ask spread is already inside this number. Note
+  // the fill is top-of-book and does NOT walk the book for quantity, so the
+  // slippage modelled here is exactly one spread.
   //
   // Brokerage and taxes are deliberately NOT subtracted: they're reported beside
   // the figure so the cost is visible at entry and exit, while the P&L stays a
