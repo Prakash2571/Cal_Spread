@@ -22,7 +22,7 @@ interface Props {
   format: (v: number) => string;
   /** Formats an x-axis key (a date or timestamp) for labels + the readout. */
   formatX?: (key: string) => string;
-  /** Vertical markers (e.g. trade entry/exit) — only drawn if within range. */
+  /** Vertical markers (e.g. trade entry/exit) - only drawn if within range. */
   markers?: ChartMarker[];
   /** Allow negative/zero values (e.g. a spread) and draw a zero baseline. */
   signed?: boolean;
@@ -37,7 +37,7 @@ interface Props {
    * mode: the svg is drawn at exactly this size with NO viewBox scaling, and the
    * component owns its own horizontal scroller (with the readout outside it, so
    * the readout can never scroll off-screen). This is what makes text, strokes
-   * and gridlines match the other analytics charts pixel for pixel — stretching
+   * and gridlines match the other analytics charts pixel for pixel - stretching
    * a 760-unit viewBox across a 2600px canvas smeared them by >3x.
    */
   canvasWidth?: number;
@@ -48,7 +48,7 @@ interface Props {
    * `canvasWidth` mode sizes the canvas per point (e.g. 7px each), which means a
    * full session of 1-minute buckets is several times wider than the card. Since
    * the scroller opens pinned to the newest data, the chart then silently showed
-   * only its last ~60 points — reading as "the chart starts at 12:22" when the
+   * only its last ~60 points - reading as "the chart starts at 12:22" when the
    * series actually began at 09:15. Fitting shows the WHOLE range at a glance and
    * still renders 1:1 (no viewBox), so strokes and text stay crisp; expanding the
    * card is what buys back horizontal detail.
@@ -121,7 +121,7 @@ export default function LineChart({
 }: Props) {
   // `Number.isFinite` in BOTH modes. `v > 0` alone rejects NaN but happily accepts
   // Infinity, which then becomes vMax, makes vRange Infinity and turns every other
-  // y coordinate into NaN — so one bad value silently erased the whole plot rather
+  // y coordinate into NaN - so one bad value silently erased the whole plot rather
   // than just its own point.
   const valid = (v: number) => Number.isFinite(v) && (signed || v > 0);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -131,7 +131,7 @@ export default function LineChart({
   const [hover, setHover] = useState<number | null>(null);
   const [fitW, setFitW] = useState(0);
 
-  // Measure the SCROLLER in `fit` mode — not the wrapper. Its clientWidth already
+  // Measure the SCROLLER in `fit` mode - not the wrapper. Its clientWidth already
   // excludes the scrollbar gutter, so a canvas of exactly that width never
   // overflows, while the gutter itself stays reserved. That keeps a fitted line
   // card the same height as a histogram card, which matters because they share
@@ -140,7 +140,7 @@ export default function LineChart({
   //
   // A CALLBACK REF rather than an effect, because the scroller isn't always
   // mounted: this component returns an empty state before any data arrives, and an
-  // effect keyed on props would not re-run when the real node finally appears —
+  // effect keyed on props would not re-run when the real node finally appears -
   // leaving the canvas at its 760px fallback inside a ~570px card, i.e. exactly the
   // pinned-scroller bug `fit` exists to remove. A ref callback fires on mount.
   const attachScroller = useCallback(
@@ -150,7 +150,7 @@ export default function LineChart({
       roRef.current = null;
       if (!el || !fit) return;
       // A zero width means "not measurable yet" (a hidden container), not "zero
-      // wide" — storing it would pin the canvas to its fallback width. The observer
+      // wide" - storing it would pin the canvas to its fallback width. The observer
       // fires with a real width as soon as the element is laid out.
       const measure = () => {
         if (el.clientWidth > 0) setFitW(el.clientWidth);
@@ -208,8 +208,8 @@ export default function LineChart({
 
   const yTicks = Array.from({ length: 5 }, (_, i) => vMin + (vRange * i) / 4);
 
-  // Label on a ~110px pixel budget, always including the first point and — when
-  // it clears the first by a label's width — the last. Same rule as the
+  // Label on a ~110px pixel budget, always including the first point and - when
+  // it clears the first by a label's width - the last. Same rule as the
   // histogram and straddle charts, so a card scrolled into the middle of a wide
   // canvas still shows timestamps instead of going blank.
   const stepPx = n <= 1 ? plotW : plotW / (n - 1);
@@ -262,7 +262,7 @@ export default function LineChart({
   }
 
   // The readout reports the hovered point, or each series' own latest value when
-  // idle — so it always agrees with the end-of-line markers, even for a series
+  // idle - so it always agrees with the end-of-line markers, even for a series
   // that has no sample at the newest shared timestamp.
   // Clamped: the rolling window can shrink while a hover index is still held.
   const hoverIdx = hover === null ? null : Math.min(hover, n - 1);
@@ -279,13 +279,13 @@ export default function LineChart({
       label: s.label,
       color: s.color,
       dashed: s.dashed,
-      value: v === null || v === undefined ? "—" : format(v),
+      value: v === null || v === undefined ? "-" : format(v),
     };
   });
 
   // Calendar-spread readout: next month − current month at the reported point.
   // Hovering targets that x; idle falls back to the newest date both legs share,
-  // so the strip always names a real spread instead of "—" at the very edge.
+  // so the strip always names a real spread instead of "-" at the very edge.
   if (showSpreadReadout && plotted.length >= 2) {
     const cur = plotted[0]!;
     const nxt = plotted[1]!;
@@ -310,7 +310,7 @@ export default function LineChart({
       color: "var(--series-1)",
       value:
         spreadVal === null
-          ? "—"
+          ? "-"
           : `${spreadVal >= 0 ? "+" : ""}${format(spreadVal)}`,
     });
   }
@@ -323,7 +323,7 @@ export default function LineChart({
             label: s.label,
             color: s.color,
             dashed: s.dashed,
-            value: firstVal === null ? "—" : format(firstVal),
+            value: firstVal === null ? "-" : format(firstVal),
           })),
         }
       : null;
@@ -338,7 +338,7 @@ export default function LineChart({
             height: H,
             // Inline, not just attributes: `.oi-chart` sets `width: 100%;
             // height: auto` for the responsive mode, and author CSS beats svg
-            // geometry attributes — which without a viewBox would CLIP the
+            // geometry attributes - which without a viewBox would CLIP the
             // canvas to the column width instead of scaling it.
             style: { width: `${W}px`, height: `${H}px` },
           }
@@ -486,6 +486,8 @@ export default function LineChart({
       {fixedCanvas ? (
         <div
           className="an-scrollx"
+          tabIndex={0}
+          aria-label="Scrollable chart"
           ref={attachScroller}
           onScroll={(e) => {
             const el = e.currentTarget;

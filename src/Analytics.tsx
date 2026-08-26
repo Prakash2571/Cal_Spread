@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeftIcon, ArrowsOutSimpleIcon, XIcon } from "@phosphor-icons/react";
 import {
   fetchFuturesOiFrame,
   fetchOptionChain,
@@ -34,7 +35,7 @@ const isMinuteInterval = (i: ChainInterval): i is MinuteInterval => i !== "day";
 /** Human phrase for a window, used in the toggle tooltips. */
 const intervalPhrase = (i: MinuteInterval) =>
   i === 60 ? "hour" : i === 1 ? "minute" : `${i} minutes`;
-/** One empty baseline per window. Every key must exist — the record is total. */
+/** One empty baseline per window. Every key must exist - the record is total. */
 const emptyBaselines = (): Record<MinuteInterval, OptionBaseline> => ({
   1: {},
   5: {},
@@ -68,7 +69,7 @@ const TOTAL_DOWN = 26; // total-OI window: 26 strikes below ATM
 const FUT_COLOR = "var(--series-1)";
 
 /** Bucket length of a frame. The server stamps each frame point with its
- *  bucket-END boundary, so consecutive buckets are exactly this far apart —
+ *  bucket-END boundary, so consecutive buckets are exactly this far apart -
  *  which is what lets the change histograms detect a gap. */
 const frameMs = (frame: OiFrame): number =>
   frame === "1m"
@@ -85,7 +86,7 @@ const frameMs = (frame: OiFrame): number =>
  *
  * Not an equality test on the spacing, because buckets at a session EDGE are
  * short: the server clamps the last bucket to the 15:40 close, so the final 1h
- * bucket spans 15:00–15:40. Requiring an exact hour silently dropped the closing
+ * bucket spans 15:00-15:40. Requiring an exact hour silently dropped the closing
  * bar of every session on the change histograms. A genuine hole always leaves a
  * gap of at least two buckets, so "positive and no wider than one bucket" accepts
  * the short edge buckets while still rejecting overnight and downtime gaps.
@@ -109,7 +110,7 @@ type FrameBucket = {
  * A total is a sum over a strike window, so its difference with another total is a
  * real OI change only when both cover the same window. The server used to recompute
  * the window around each sample's live ATM, which slid it by a strike every time
- * NIFTY crossed one — and the resulting delta was `OI(strike that entered) −
+ * NIFTY crossed one - and the resulting delta was `OI(strike that entered) −
  * OI(strike that left)`, lakhs of movement that never happened, biased in the
  * direction of the trend. It now pins the window per session and ships the bounds,
  * so this check normally passes for every consecutive pair and only rejects a
@@ -125,7 +126,7 @@ const sameWindow = (a: FrameBucket, b: FrameBucket) =>
 /**
  * Is a total a real reading?
  *
- * Three things it can be instead. Non-finite, from a truncated or older payload —
+ * Three things it can be instead. Non-finite, from a truncated or older payload -
  * and `undefined <= 0` is `false`, so a plain `> 0` test lets it through, after
  * which one NaN propagates into every bar coordinate and blanks the whole chart.
  * Zero, which for these aggregates means "nothing captured" (a pre-open bucket),
@@ -133,7 +134,7 @@ const sameWindow = (a: FrameBucket, b: FrameBucket) =>
  * that it could not cover every strike in the window.
  *
  * All three have to be skipped rather than plotted: on a level chart they draw a
- * dip that never happened, and on a change histogram they cost two bars — a false
+ * dip that never happened, and on a change histogram they cost two bars - a false
  * collapse followed by a false recovery of the same size.
  */
 const isRealTotal = (v: number | undefined): v is number =>
@@ -156,7 +157,7 @@ function oiDeltaPoints(raw: FrameBucket[], step: number): HistPoint[] {
   let prev: FrameBucket | null = null;
   for (const p of raw) {
     if (!isUsableBucket(p)) continue;
-    // Adjacent in TIME and identical in strike coverage — both are required for the
+    // Adjacent in TIME and identical in strike coverage - both are required for the
     // subtraction to mean anything. See isAdjacentBucket and sameWindow.
     if (prev && isAdjacentBucket(prev.t, p.t, step) && sameWindow(prev, p)) {
       out.push({
@@ -192,13 +193,13 @@ function futDeltaPoints(
  * Is a server baseline really the reading from `minutes` ago?
  *
  * Graded against the cutoff AS OF WHEN THE RESPONSE ARRIVED, not a moving
- * `Date.now()`. The server answers a fixed question — "the newest snapshot at or
- * before T minus the window" — so `baseT` is a fixed answer, and it can sit up to
+ * `Date.now()`. The server answers a fixed question - "the newest snapshot at or
+ * before T minus the window" - so `baseT` is a fixed answer, and it can sit up to
  * one snapshot cadence (a minute) older than that cutoff. Re-grading it against
  * "now" meant the same correct baseline aged out of tolerance partway through
  * every 30s poll cycle and the entire OI Δ% column blanked until the next poll.
  * Anchoring to the fetch time leaves the tolerance covering only the cadence,
- * which is what it was sized for — and it still rejects a genuinely wrong
+ * which is what it was sized for - and it still rejects a genuinely wrong
  * baseline, such as the hourly snapshot the server falls back to when a session's
  * minute snapshots were lost.
  */
@@ -216,17 +217,17 @@ const isServerBaselineFresh = (
 
 /** What each chart timeframe covers, mirroring the server's Redis retention. */
 const FRAME_TITLE: Record<OiFrame, string> = {
-  "1m": "1-minute buckets · last 1 day",
-  "5m": "5-minute buckets · last 3 days",
-  "15m": "15-minute buckets · last 1 week",
-  "1h": "1-hour buckets · last 1 week",
+  "1m": "1-minute buckets, last 1 day",
+  "5m": "5-minute buckets, last 3 days",
+  "15m": "15-minute buckets, last 1 week",
+  "1h": "1-hour buckets, last 1 week",
 };
 /** Same frames on the change histograms, where a bucket is a delta not a level. */
 const FRAME_TITLE_DELTA: Record<OiFrame, string> = {
-  "1m": "change per minute · last 1 day",
-  "5m": "change per 5 minutes · last 3 days",
-  "15m": "change per 15 minutes · last 1 week",
-  "1h": "change per hour · last 1 week",
+  "1m": "change per minute, last 1 day",
+  "5m": "change per 5 minutes, last 3 days",
+  "15m": "change per 15 minutes, last 1 week",
+  "1h": "change per hour, last 1 week",
 };
 
 /** IST calendar day, matching the backend's day key. */
@@ -276,10 +277,10 @@ const BUILDUP_LABEL: Record<Exclude<Buildup, null>, string> = {
   long_unwinding: "LU",
 };
 const BUILDUP_TITLE: Record<Exclude<Buildup, null>, string> = {
-  long_buildup: "Long Buildup — OI ↑, Price ↑ (fresh longs)",
-  short_buildup: "Short Buildup — OI ↑, Price ↓ (fresh shorts)",
-  short_covering: "Short Covering — OI ↓, Price ↑",
-  long_unwinding: "Long Unwinding — OI ↓, Price ↓",
+  long_buildup: "Long Buildup - OI ↑, Price ↑ (fresh longs)",
+  short_buildup: "Short Buildup - OI ↑, Price ↓ (fresh shorts)",
+  short_covering: "Short Covering - OI ↓, Price ↑",
+  long_unwinding: "Long Unwinding - OI ↓, Price ↓",
 };
 
 /** Index of the strike whose value is closest to `spot`. */
@@ -303,7 +304,7 @@ const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n
  * Vertically center a table row inside its own scroll container.
  *
  * Deliberately not `scrollIntoView`: that walks EVERY scrollable ancestor, so on
- * this page it also drags the document to the card — which is very visible now
+ * this page it also drags the document to the card - which is very visible now
  * that the tables live in a six-card grid taller than the viewport.
  */
 function centerRowInScroller(row: HTMLTableRowElement | null): void {
@@ -373,7 +374,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     useState<Record<MinuteInterval, OptionBaseline>>(emptyBaselines);
   // When each window's baseline was fetched. The server resolves a baseline
   // against its OWN clock at request time, so this is the instant its answer is
-  // relative to — see isServerBaselineFresh. 0 means "nothing fetched yet".
+  // relative to - see isServerBaselineFresh. 0 means "nothing fetched yet".
   const [baselineAt, setBaselineAt] = useState<Record<MinuteInterval, number>>({
     1: 0,
     5: 0,
@@ -384,7 +385,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   // the cache reaches that far back, so "1h" is disabled with a reason in the
   // morning rather than being selectable and rendering a column of dashes.
   const [baselineOldest, setBaselineOldest] = useState<number | null>(null);
-  // Previous session's close per token — the "Day" comparison baseline. Unlike the
+  // Previous session's close per token - the "Day" comparison baseline. Unlike the
   // minute baselines this needs no freshness window: it is a fixed reference point
   // the server only publishes while it is valid for today. Polled regardless of the
   // toggles so the Day option can be disabled up front rather than selected and
@@ -464,7 +465,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
     // Guarded like every other effect: switching expiry tears this down and clears
     // `ticks`, and without the check an in-flight seed for the OLD instrument set
-    // resolved afterwards and wrote itself over the fresh state — including a spot
+    // resolved afterwards and wrote itself over the fresh state - including a spot
     // price, which is shared across expiries and so looked plausible.
     let cancelled = false;
     fetchQuotes(tokens)
@@ -545,7 +546,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       for (const frame of framesToLoad) {
         // Captured BEFORE the request: the server's cutoff is its own receive
         // time, so anchoring to the moment we asked can only ever make the
-        // baseline look slightly older than it is — never fresher, which is the
+        // baseline look slightly older than it is - never fresher, which is the
         // direction that would let a stale reading through.
         const askedAt = Date.now();
         fetchOptionOiBaseline(UNDERLYING, frame)
@@ -592,7 +593,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   useEffect(() => {
     if (!authenticated || !chain) return;
     let cancelled = false;
-    // Clear on a frame change — the x-axis formatter switches with the frame, so
+    // Clear on a frame change - the x-axis formatter switches with the frame, so
     // carrying a week of 15m/1h points into the 1m formatter would label them all
     // with time-of-day only. See the futures level chart for the full reasoning.
     setStraddleRaw([]);
@@ -611,7 +612,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         })
         .catch(() => {
           // Keep whatever we have on screen, but record that it is no longer
-          // confirmed fresh — see feedStale.
+          // confirmed fresh - see feedStale.
           if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
@@ -627,7 +628,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     if (!authenticated || !chain) return;
     let cancelled = false;
     const iso = (t: number) => new Date(t).toISOString();
-    // Clear on a frame change — same formatter reasoning as the other level charts.
+    // Clear on a frame change - same formatter reasoning as the other level charts.
     setCeOiSeries([]);
     setPeOiSeries([]);
     const load = () =>
@@ -653,7 +654,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         })
         .catch(() => {
           // Keep whatever we have on screen, but record that it is no longer
-          // confirmed fresh — see feedStale.
+          // confirmed fresh - see feedStale.
           if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
@@ -684,7 +685,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         })
         .catch(() => {
           // Keep whatever we have on screen, but record that it is no longer
-          // confirmed fresh — see feedStale.
+          // confirmed fresh - see feedStale.
           if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
@@ -707,7 +708,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     let cancelled = false;
     // Drop the previous frame's points. `fmtTs` is frame-dependent, so holding
     // 15m/1h points (a week of them) while the axis has already switched to the 1m
-    // formatter labels seven days with time-of-day only — five sessions drawn as
+    // formatter labels seven days with time-of-day only - five sessions drawn as
     // one impossibly volatile day. `key={futFrame}` remounts the chart, so it is a
     // full visible render of the wrong thing, not a flicker.
     setFutRaw([]);
@@ -725,7 +726,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         })
         .catch(() => {
           // Keep whatever we have on screen, but record that it is no longer
-          // confirmed fresh — see feedStale.
+          // confirmed fresh - see feedStale.
           if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
@@ -742,7 +743,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     let cancelled = false;
     // This reset is load-bearing, not cosmetic. futHistPoints re-differences
     // whatever is held using the NEW frame's step as soon as futHistFrame changes,
-    // and isAdjacentBucket accepts any spacing up to that step — so 1m points
+    // and isAdjacentBucket accepts any spacing up to that step - so 1m points
     // surviving a switch to 1h drew ~375 per-MINUTE deltas as if each were an
     // hour's change, under a "change per hour" label. The Call/Put histogram has
     // always cleared for exactly this reason; this card was missed.
@@ -759,7 +760,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         })
         .catch(() => {
           // Keep whatever we have on screen, but record that it is no longer
-          // confirmed fresh — see feedStale.
+          // confirmed fresh - see feedStale.
           if (!cancelled) setFeedFailAt(Date.now());
         });
     load();
@@ -770,7 +771,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     };
   }, [authenticated, chain, futHistFrame]);
 
-  // Per-bucket OI change (Call & Put) — see oiDeltaPoints for the gap handling.
+  // Per-bucket OI change (Call & Put) - see oiDeltaPoints for the gap handling.
   const histPoints = useMemo<HistPoint[]>(
     () => oiDeltaPoints(histRaw, frameMs(histFrame)),
     [histRaw, histFrame],
@@ -818,7 +819,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
         : 0;
     const atmIdx = nearestStrikeIdx(strikes, spot > 0 ? spot : chain.atm_strike);
     const atmStrike = strikes[atmIdx]?.strike ?? chain.atm_strike;
-    // Only the client's own rolling samples are graded against "now" — they are
+    // Only the client's own rolling samples are graded against "now" - they are
     // taken continuously, so now IS their cutoff. Server baselines are graded
     // against when they were fetched; see isServerBaselineFresh.
     const cutoffFor = (frame: MinuteInterval) => Date.now() - frame * 60 * 1000;
@@ -830,7 +831,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     /**
      * Baseline for one token under one comparison window.
      *
-     * "Day" is the previous session's close — a fixed reference the server only
+     * "Day" is the previous session's close - a fixed reference the server only
      * serves while it is valid for today, so it needs no freshness check and has
      * no client-side fallback. The minute windows prefer the server baseline and
      * fall back to the client's rolling history, but only when a sample actually
@@ -862,7 +863,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       // `oi` is optional on a tick, and a missing one is NOT zero open interest.
       // Coercing it with `?? 0` printed a confident red -100% for any contract
       // whose tick hadn't carried OI yet, and fed classifyBuildup a full-size
-      // negative ΔOI — labelling it short covering or long unwinding.
+      // negative ΔOI - labelling it short covering or long unwinding.
       const curOi = cur.oi;
       if (curOi == null || !Number.isFinite(curOi)) return none;
 
@@ -891,7 +892,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       return dir;
     };
 
-    // Every strike the chain API returned — the straddle column makes the whole
+    // Every strike the chain API returned - the straddle column makes the whole
     // ladder useful, not just the band around ATM.
     const rows = strikes.map((s, i) => {
       const ce = ticks[s.ce_token];
@@ -903,7 +904,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
       return {
         strike: s.strike,
         isAtm: i === atmIdx,
-        // A call is in the money below spot, a put above it — only once we have a
+        // A call is in the money below spot, a put above it - only once we have a
         // real spot to compare against (0 means no quote/tick yet).
         ceItm: spot > 0 && s.strike < spot,
         peItm: spot > 0 && s.strike > spot,
@@ -962,7 +963,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
   // Expanding/collapsing the chain swaps the visible band (the whole ladder vs
   // ATM ± CHAIN_COMPACT_HALF). The scroll container is reused, so re-center ATM in
-  // BOTH directions — otherwise the retained scrollTop is clamped and hides the
+  // BOTH directions - otherwise the retained scrollTop is clamped and hides the
   // ATM row.
   const chainExpanded = expandedCard === "chain";
   useEffect(() => {
@@ -986,7 +987,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   // Always IST, never the browser's zone. Every bucket boundary these charts show
   // is an NSE session time the server aligned to the IST calendar, so rendering it
   // in local time put the open at "03:45" for a UTC viewer and shifted the
-  // multi-day frames onto the wrong calendar day — while istDayKey right above was
+  // multi-day frames onto the wrong calendar day - while istDayKey right above was
   // already IST, so the page disagreed with itself.
   const fmtTs = (frame: OiFrame, ms: number) =>
     frame === "1m"
@@ -1079,7 +1080,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     );
   };
 
-  // Current-month futures OI only — the next/far months moved in lockstep and
+  // Current-month futures OI only - the next/far months moved in lockstep and
   // added no information to the level chart.
   const currentFut = useMemo(() => currentMonthOf(futContracts), [futContracts]);
   const futOiChart = useMemo<ChartSeries[]>(() => {
@@ -1127,7 +1128,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   // How much of the LOADED chain the previous-session baseline actually covers.
   // Measured by token overlap rather than by comparing expiry strings, so it also
   // catches the case the cache only ever holds the nearest expiry while the user
-  // is looking at a later one — there the baseline is real but useless here, and
+  // is looking at a later one - there the baseline is real but useless here, and
   // "Day" would silently render a full column of dashes.
   const dayBaselineTokens = useMemo(() => {
     if (!chain) return 0;
@@ -1147,7 +1148,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
    * Early in a session the snapshot cache doesn't reach back an hour, and the
    * server deliberately returns nothing rather than a newer reading. Checking here
    * lets the button say why instead of rendering a column of dashes. Recomputed on
-   * every render, which is often — live ticks drive this component.
+   * every render, which is often - live ticks drive this component.
    */
   const minuteAvailable = (m: MinuteInterval) =>
     baselineOldest !== null &&
@@ -1155,7 +1156,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
   const intervalAvailable = (i: ChainInterval) =>
     i === "day" ? dayAvailable : minuteAvailable(i);
 
-  /** Tooltip for one window button — what it compares, or why it can't yet. */
+  /** Tooltip for one window button - what it compares, or why it can't yet. */
   const intervalTitle = (i: ChainInterval, what: "Change" | "Buildup") => {
     if (i === "day") return dayTitle(what);
     if (!minuteAvailable(i)) {
@@ -1176,7 +1177,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return rows.slice(lo, hi + 1);
   }, [metrics, expandedCard]);
 
-  // Strike of the cheapest straddle among the visible rows — its strike block is
+  // Strike of the cheapest straddle among the visible rows - its strike block is
   // filled yellow in the chain (the ATM-ish minimum, i.e. the least time value /
   // lowest breakeven width). Computed over the RENDERED rows, so the highlight is
   // always on screen.
@@ -1193,7 +1194,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return strike;
   }, [chainRows]);
 
-  // ATM straddle premium over time — the NIFTY spot overlay was dropped, so this
+  // ATM straddle premium over time - the NIFTY spot overlay was dropped, so this
   // is a single-series chart and uses the shared LineChart like the others.
   const straddleChart = useMemo<ChartSeries[]>(
     () => [
@@ -1209,10 +1210,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
   );
   const hasStraddle = straddleChart.some((s) => s.points.length > 1);
 
-  /** Tooltip for the Day buttons — names the session, or why it's unavailable. */
+  /** Tooltip for the Day buttons - names the session, or why it's unavailable. */
   const dayTitle = (what: "Change" | "Buildup") => {
     if (!dayAvailable) {
-      return "No previous-session close cached for this expiry yet — the server is still rebuilding it";
+      return "No previous-session close cached for this expiry yet - the server is still rebuilding it";
     }
     const gap =
       dayBaselineTokens < chainTokenCount
@@ -1225,11 +1226,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
 
   const pctCell = (v: number | null) =>
     v === null ? (
-      <span className="an-muted">—</span>
+      <span className="an-muted">-</span>
     ) : (
       <span className={v > 0 ? "pos" : v < 0 ? "neg" : ""}>
         {v > 0 ? "+" : ""}
-        {/* A decimal place is signal at 12.3% and noise at 1234.5% — and the
+        {/* A decimal place is signal at 12.3% and noise at 1234.5% - and the
             extra two characters were enough to ellipsise the column. */}
         {Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1)}%
       </span>
@@ -1250,9 +1251,19 @@ export default function Analytics({ authenticated, onBack }: Props) {
     <div className="app an-page">
       <header className="topbar">
         <div className="brand">
-          <button className="btn an-back" onClick={onBack} title="Back to board">
-            ← Board
-          </button>
+          <a
+            className="btn an-back"
+            href="/"
+            onClick={(event) => {
+              event.preventDefault();
+              onBack();
+            }}
+            title="Back to board"
+            aria-label="← Board"
+          >
+            <ArrowLeftIcon size={16} weight="regular" aria-hidden="true" />
+            Board
+          </a>
           <div className="card-title">
             <h1>Options Analytics</h1>
             <span className="an-underline">{chain?.name ?? "NIFTY 50"}</span>
@@ -1278,7 +1289,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
           )}
           {metrics && (
             <span className="an-spot">
-              Spot <strong>{fmt(metrics.spot)}</strong> · ATM{" "}
+              Spot <strong>{fmt(metrics.spot)}</strong>, ATM{" "}
               <strong>{metrics.atmStrike}</strong>
             </span>
           )}
@@ -1297,11 +1308,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
       {error && <div className="banner banner--error">{error}</div>}
       {loading && !chain && <div className="banner">Loading option chain…</div>}
       {/* The charts keep their last good data when a poll fails, so without this the
-          page looked current while being arbitrarily stale — the `Live` pill above
+          page looked current while being arbitrarily stale - the `Live` pill above
           only tracks the tick stream, not these polls. */}
       {feedStale && (
         <div className="banner banner--warn">
-          Chart data last refreshed at {fmtClock(feedOkAt)} IST — the requests since
+          Chart data last refreshed at {fmtClock(feedOkAt)} IST - the requests since
           then have failed, so the timeframes below may be out of date.
         </div>
       )}
@@ -1337,16 +1348,16 @@ export default function Analytics({ authenticated, onBack }: Props) {
                     className="an-chain-stat-v"
                     title={
                       metrics.pcr !== null
-                        ? "Put OI / Call OI over the 26↓ · ATM · 24↑ window"
+                        ? "Put OI / Call OI over the 26↓, ATM, 24↑ window"
                         : metrics.missingLegs > 0
-                          ? `Waiting on open interest for ${metrics.missingLegs} contract(s) in the window — a ratio of incomplete sums would be wrong`
+                          ? `Waiting on open interest for ${metrics.missingLegs} contract(s) in the window - a ratio of incomplete sums would be wrong`
                           : "No open interest in the window yet"
                     }
                   >
-                    {metrics.pcr === null ? "—" : metrics.pcr.toFixed(2)}
+                    {metrics.pcr === null ? "-" : metrics.pcr.toFixed(2)}
                   </span>
                 </span>
-                <span className="an-chain-stat-sub">24↑ · ATM · 26↓</span>
+                <span className="an-chain-stat-sub">24↑, ATM, 26↓</span>
               </div>
               <div className="an-chain-bar">
                 <div className="an-chain-control">
@@ -1385,7 +1396,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   </div>
                 </div>
               </div>
-              <div className="an-chain-wrap">
+              <div className="an-chain-wrap" tabIndex={0} aria-label="Scrollable option chain">
                 <table className="an-chain">
                   {/* Explicit widths + `table-layout: fixed` (see styles.css).
                       Without them the auto algorithm distributes the card's spare
@@ -1407,7 +1418,7 @@ export default function Analytics({ authenticated, onBack }: Props) {
                   <thead>
                     {/* One middle column holds the strike with the straddle
                         premium stacked beneath it, so the header is a single
-                        "STRIKE / straddle" label spanning both rows — nothing
+                        "STRIKE / straddle" label spanning both rows - nothing
                         floats between columns. */}
                     <tr className="an-chain-side">
                       <th colSpan={4} className="an-calls">CALLS</th>
@@ -1643,7 +1654,11 @@ function ChartCard({
             title={expanded ? "Collapse" : "Expand"}
             aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
           >
-            {expanded ? "✕" : "⤢"}
+            {expanded ? (
+              <XIcon size={16} weight="regular" aria-hidden="true" />
+            ) : (
+              <ArrowsOutSimpleIcon size={16} weight="regular" aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>

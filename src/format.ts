@@ -21,13 +21,13 @@ export function changePct(last: number, close: number): number | null {
 }
 
 /** Format a number to 2 decimals, or a dash placeholder when not yet known. */
-export function fmt(value: number | null | undefined, dash = "—"): string {
+export function fmt(value: number | null | undefined, dash = "-"): string {
   if (value === null || value === undefined || Number.isNaN(value)) return dash;
   return value.toFixed(2);
 }
 
 /** Signed 2-decimal string, e.g. "+9.40" / "-0.10". */
-export function fmtSigned(value: number | null | undefined, dash = "—"): string {
+export function fmtSigned(value: number | null | undefined, dash = "-"): string {
   if (value === null || value === undefined || Number.isNaN(value)) return dash;
   const s = value.toFixed(2);
   return value > 0 ? `+${s}` : s;
@@ -38,7 +38,7 @@ export function fmtSigned(value: number | null | undefined, dash = "—"): strin
 export function pctText(
   last: number | null | undefined,
   close: number | null | undefined,
-  dash = "—",
+  dash = "-",
 ): string {
   if (last == null || !close) return dash;
   const p = ((last - close) / close) * 100;
@@ -58,7 +58,7 @@ export function pctClass(
 /** Compact Indian-style number for open interest, e.g. 1.2Cr / 3.4L / 12,345. */
 export function fmtCompact(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value) || value <= 0) {
-    return "—";
+    return "-";
   }
   if (value >= 1e7) return `${(value / 1e7).toFixed(2)}Cr`;
   if (value >= 1e5) return `${(value / 1e5).toFixed(2)}L`;
@@ -67,7 +67,7 @@ export function fmtCompact(value: number | null | undefined): string {
 
 /** ₹ money with sign, e.g. +₹1,234.50 / −₹980. */
 export function fmtMoney(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   return `${sign}₹${Math.abs(value).toLocaleString("en-IN", {
     maximumFractionDigits: 2,
@@ -108,24 +108,24 @@ export function fairPrice(
  * U+2212 minus, which is what every other signed number in the app uses (the
  * histogram's own copy used an ASCII hyphen).
  *
- * Zero is "0", not fmtCompact's "—": on a change series zero is a real reading —
- * open interest genuinely did not move — rather than missing data.
+ * Zero is "0", not fmtCompact's "-": on a change series zero is a real reading -
+ * open interest genuinely did not move - rather than missing data.
  */
 export function fmtSignedCompact(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) return "-";
   const mag = fmtCompact(Math.abs(value));
-  // fmtCompact answers "—" for 0, which is the wrong reading of a delta.
-  if (value === 0 || mag === "—") return "0";
+  // fmtCompact answers "-" for 0, which is the wrong reading of a delta.
+  if (value === 0 || mag === "-") return "0";
   return `${value > 0 ? "+" : "−"}${mag}`;
 }
 
 /**
  * The one "this chart has nothing to show yet" sentence.
  *
- * There were five near-identical variants — one inside each chart component and
- * three hand-written into the Analytics card guards — which meant two cards sitting
+ * There were five near-identical variants - one inside each chart component and
+ * three hand-written into the Analytics card guards - which meant two cards sitting
  * side by side in the same grid explained the same state in different words. Kept
  * here rather than in a component so neither chart has to import the other.
  */
 export const CHART_EMPTY_NOTE =
-  "No history yet for this timeframe — it fills as the day progresses (or backfills from history).";
+  "No history yet for this timeframe - it fills as the day progresses (or backfills from history).";

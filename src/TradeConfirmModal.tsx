@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { XIcon } from "@phosphor-icons/react";
 import { fetchSpreadStats, type BoardItem, type Tick, type SpreadStats } from "./api.ts";
 
 interface Props {
@@ -40,28 +41,24 @@ export default function TradeConfirmModal({
       : null;
   const lotSize = item.futures[0]?.lot_size ?? 1;
 
-  const green = "var(--pos)";
-  const red = "var(--neg)";
-  const muted = "var(--text-2)";
-
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <div>
             <h2>Confirm Trade</h2>
-            <p className="modal-sub">{symbol} · Calendar Spread</p>
+            <p className="modal-sub">{symbol}: Calendar Spread</p>
           </div>
-          <button className="modal-x" onClick={onCancel} aria-label="Close">
-            ✕
+          <button type="button" className="modal-x" onClick={onCancel} aria-label="Close">
+            <XIcon size={18} weight="regular" aria-hidden="true" />
           </button>
         </header>
 
-        <div className="modal-body" style={{ padding: "1rem 1.25rem" }}>
+        <div className="modal-body confirm-modal-body">
           {currentSpread !== null && (
             <div className="confirm-hero">
               <div className="confirm-hero-label">Current Spread</div>
-              <div className="confirm-hero-value" style={{ color: currentSpread < 0 ? red : green }}>
+              <div className={`confirm-hero-value ${currentSpread < 0 ? "neg" : "pos"}`}>
                 {fmtPrice(currentSpread)}
               </div>
               <div className="metric-label">
@@ -71,7 +68,7 @@ export default function TradeConfirmModal({
           )}
 
           {loading ? (
-            <div className="empty" style={{ padding: "1rem" }}>
+            <div className="empty empty--compact">
               <span className="spinner" /> Loading spread stats…
             </div>
           ) : stats ? (
@@ -86,43 +83,41 @@ export default function TradeConfirmModal({
                   ? (cs - stats.mean_spread) / stats.std_dev_spread
                   : 0;
 
-                const rows: { label: string; value: string; color: string }[] = [
-                  { label: "Max Profit (spread → mean)", value: `₹${fmtPrice(expectedProfit)}`, color: green },
-                  { label: "Max Loss (spread → 95th %ile)", value: `₹${fmtPrice(expectedMaxLoss)}`, color: red },
-                  { label: "VaR Upside (Max − Current)", value: `${varUpside >= 0 ? "+" : ""}${fmtPrice(varUpside)}`, color: varUpside >= 0 ? green : red },
-                  { label: "VaR Downside (Current − Min)", value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`, color: cs < stats.min_spread ? green : red },
-                  { label: "Mean Reversion %", value: `${stats.mean_reversion_probability.toFixed(1)}%`, color: stats.mean_reversion_probability >= 50 ? green : red },
-                  { label: "Z-Score", value: zScore.toFixed(2), color: zScore < 0 ? green : red },
-                  { label: "Mean Spread", value: fmtPrice(stats.mean_spread), color: muted },
-                  { label: "Observations", value: String(stats.observations), color: muted },
+                const rows: { label: string; value: string; tone: "pos" | "neg" | "muted" }[] = [
+                  { label: "Max Profit (spread → mean)", value: `₹${fmtPrice(expectedProfit)}`, tone: "pos" },
+                  { label: "Max Loss (spread → 95th %ile)", value: `₹${fmtPrice(expectedMaxLoss)}`, tone: "neg" },
+                  { label: "VaR Upside (Max − Current)", value: `${varUpside >= 0 ? "+" : ""}${fmtPrice(varUpside)}`, tone: varUpside >= 0 ? "pos" : "neg" },
+                  { label: "VaR Downside (Current − Min)", value: `${varDownside >= 0 ? "+" : ""}${fmtPrice(varDownside)}`, tone: cs < stats.min_spread ? "pos" : "neg" },
+                  { label: "Mean Reversion %", value: `${stats.mean_reversion_probability.toFixed(1)}%`, tone: stats.mean_reversion_probability >= 50 ? "pos" : "neg" },
+                  { label: "Z-Score", value: zScore.toFixed(2), tone: zScore < 0 ? "pos" : "neg" },
+                  { label: "Mean Spread", value: fmtPrice(stats.mean_spread), tone: "muted" },
+                  { label: "Observations", value: String(stats.observations), tone: "muted" },
                 ];
 
                 return rows.map((r) => (
                   <div key={r.label} className="metric-row">
                     <span className="metric-label">{r.label}</span>
-                    <span className="metric-value" style={{ color: r.color }}>{r.value}</span>
+                    <span className={`metric-value ${r.tone}`}>{r.value}</span>
                   </div>
                 ));
               })()}
             </div>
           ) : (
-            <div style={{ padding: "0.75rem", color: muted, fontSize: "0.85rem" }}>
+            <div className="confirm-unavailable">
               Spread stats unavailable for this symbol.
             </div>
           )}
 
-          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.25rem" }}>
+          <div className="modal-actions">
             <button
-              className="btn btn--primary"
-              style={{ flex: 1 }}
+              className="btn btn--primary modal-action"
               disabled={busy}
               onClick={onConfirm}
             >
               {busy ? "Executing…" : "Confirm Trade"}
             </button>
             <button
-              className="btn"
-              style={{ flex: 1 }}
+              className="btn modal-action"
               onClick={onCancel}
               disabled={busy}
             >

@@ -4,10 +4,10 @@ export interface PathPoint {
 }
 
 /**
- * Monotone cubic (Fritsch–Carlson) SVG path through the given points.
+ * Monotone cubic (Fritsch-Carlson) SVG path through the given points.
  *
  * Plain polylines make dense intraday series look jagged and "broken", but a
- * naive spline overshoots — which on a price/OI chart would draw highs and lows
+ * naive spline overshoots - which on a price/OI chart would draw highs and lows
  * that never happened. Monotone interpolation is smooth AND stays within the
  * data, so no invented extremes.
  *
@@ -41,7 +41,7 @@ export function smoothPath(pts: PathPoint[]): string {
   }
   tan.push(slope[n - 2]!);
 
-  // Fritsch–Carlson limiter keeps each segment monotone.
+  // Fritsch-Carlson limiter keeps each segment monotone.
   for (let i = 0; i < n - 1; i++) {
     const m = slope[i]!;
     if (m === 0) {

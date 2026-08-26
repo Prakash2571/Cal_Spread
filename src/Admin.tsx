@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { setAdminToken } from "./api.ts";
 import ThemeToggle from "./ThemeToggle.tsx";
+import BrandMark from "./BrandMark.tsx";
 
 interface AdminProps {
   onAuthenticated: () => void;
@@ -46,49 +47,23 @@ export default function Admin({
     <div className="admin-page">
       <ThemeToggle />
       <div className="admin-card">
-        <div className="brand-mark" aria-hidden="true">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M7 3v18M17 3v18" />
-            <rect
-              x="4"
-              y="7"
-              width="6"
-              height="9"
-              rx="1.2"
-              fill="#ffffff"
-              stroke="none"
-            />
-            <rect
-              x="14"
-              y="5"
-              width="6"
-              height="8"
-              rx="1.2"
-              fill="#ffffff"
-              stroke="none"
-            />
-          </svg>
-        </div>
+        <BrandMark />
         <h1>{title}</h1>
         <p className="admin-subtitle">{subtitle}</p>
 
         <form onSubmit={handleVerify}>
-          <input
-            type="password"
-            className="admin-input"
-            placeholder={placeholder}
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            disabled={loading}
-            autoFocus
-          />
+          <label className="admin-field">
+            <span className="admin-label">{placeholder}</span>
+            <input
+              type="password"
+              className="admin-input"
+              placeholder={placeholder}
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              disabled={loading}
+              autoFocus
+            />
+          </label>
 
           {error && <div className="admin-error">{error}</div>}
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArrowLeftIcon } from "@phosphor-icons/react";
 import {
   fetchOiHistory,
   fetchIntradayHistory,
@@ -45,7 +46,7 @@ interface Props {
   isAdmin?: boolean;
 }
 
-// Colours per contract slot (near / next / far) — deliberately distinct hues
+// Colours per contract slot (near / next / far) - deliberately distinct hues
 // (blue / green / amber) so all three lines are easy to tell apart.
 const LINE_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)"];
 // Muted colour for a contract that has already expired.
@@ -206,7 +207,7 @@ export default function StockDetail({
       };
     });
 
-  // Minute (last 2 hours) + 5-minute (today) — both feed the single price chart.
+  // Minute (last 2 hours) + 5-minute (today) - both feed the single price chart.
   const minuteSeries = toIntradaySeries(minute);
   const fiveMinSeries = toIntradaySeries(fiveMin);
 
@@ -251,10 +252,10 @@ export default function StockDetail({
   }));
 
   const spreadConfig = {
-    daily: { futs: dailyFuts, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily · last 3 months" },
-    hourly: { futs: hourlyFuts, formatX: fmtHour, sub: "Hourly · last 1 week" },
-    "5m": { futs: fiveFuts, formatX: fmtMinute, sub: "5-min · today" },
-    "1m": { futs: minFuts, formatX: fmtMinute, sub: "1-min · last 2 hours" },
+    daily: { futs: dailyFuts, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily, last 3 months" },
+    hourly: { futs: hourlyFuts, formatX: fmtHour, sub: "Hourly, last 1 week" },
+    "5m": { futs: fiveFuts, formatX: fmtMinute, sub: "5-min, today" },
+    "1m": { futs: minFuts, formatX: fmtMinute, sub: "1-min, last 2 hours" },
   }[spreadMode];
   const spreadSeries = spreadFrom(spreadConfig.futs);
 
@@ -263,22 +264,31 @@ export default function StockDetail({
   // 5m/1m only exist when intraday data was loaded (live symbols), so they are
   // offered only then.
   const priceConfig = {
-    daily: { series: priceSeries, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily close · last 3 months" },
-    hourly: { series: hourlySeries, formatX: fmtHour, sub: "Hourly close · last 1 week" },
-    "5m": { series: fiveMinSeries, formatX: fmtMinute, sub: "5-min close · today" },
-    "1m": { series: minuteSeries, formatX: fmtMinute, sub: "1-min close · last 2 hours" },
+    daily: { series: priceSeries, formatX: undefined as ((k: string) => string) | undefined, sub: "Daily close, last 3 months" },
+    hourly: { series: hourlySeries, formatX: fmtHour, sub: "Hourly close, last 1 week" },
+    "5m": { series: fiveMinSeries, formatX: fmtMinute, sub: "5-min close, today" },
+    "1m": { series: minuteSeries, formatX: fmtMinute, sub: "1-min close, last 2 hours" },
   }[priceMode];
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <button className="btn btn--sm back-btn" onClick={onBack} aria-label="Back">
-            ← Back
-          </button>
+          <a
+            className="btn btn--sm back-btn"
+            href="/"
+            onClick={(event) => {
+              event.preventDefault();
+              onBack();
+            }}
+            aria-label="Back"
+          >
+            <ArrowLeftIcon size={15} weight="regular" aria-hidden="true" />
+            Back
+          </a>
           <div className="card-title">
             <h1>{item?.name ?? symbol}</h1>
-            <p className="subtitle">{symbol} · price &amp; open interest history</p>
+            <p className="subtitle">{symbol}: price &amp; open interest history</p>
           </div>
         </div>
         <ThemeToggle />
@@ -313,7 +323,7 @@ export default function StockDetail({
             </div>
           )}
 
-          {/* Spread Analytics — admin only, in left column below the card */}
+          {/* Spread Analytics - admin only, in left column below the card */}
           {(() => {
             if (!isAdmin || !spreadStats || !item || item.futures.length < 2) return null;
             const curTick = ticks[item.futures[0]!.token];
@@ -442,7 +452,7 @@ export default function StockDetail({
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Spread</h2>
-                  <span className="chart-sub">{spreadConfig.sub} · next − current</span>
+                  <span className="chart-sub">{spreadConfig.sub}, next − current</span>
                   <div className="chart-toggle">
                     <button
                       className={spreadMode === "daily" ? "active" : ""}
@@ -482,7 +492,7 @@ export default function StockDetail({
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Price</h2>
-                  <span className="chart-sub">{priceConfig.sub} · 3 futures · hover for spread</span>
+                  <span className="chart-sub">{priceConfig.sub}, 3 futures, hover for spread</span>
                   <div className="chart-toggle">
                     <button
                       className={priceMode === "daily" ? "active" : ""}
@@ -526,7 +536,7 @@ export default function StockDetail({
               <div className="detail-chart">
                 <div className="chart-head">
                   <h2>Open Interest</h2>
-                  <span className="chart-sub">Daily closing OI · last 3 months</span>
+                  <span className="chart-sub">Daily closing OI, last 3 months</span>
                 </div>
                 <LineChart series={oiSeries} format={fmtCompact} markers={markers} />
               </div>

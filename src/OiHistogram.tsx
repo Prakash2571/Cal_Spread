@@ -39,7 +39,7 @@ const LABEL_PX = 110;
  * always shown in the readout above.
  *
  * Bar width and the gap between buckets are fixed, so a one-series histogram
- * reads at exactly the same density as a two-series one — only the bucket width
+ * reads at exactly the same density as a two-series one - only the bucket width
  * changes to absorb the missing bar.
  */
 export default function OiHistogram({
@@ -79,7 +79,7 @@ export default function OiHistogram({
 
   // Skip non-finite values rather than folding them in: Math.max(1, NaN) is NaN,
   // so a single bad bar used to poison maxAbs and with it every bar height, every
-  // gridline and every tick label — blanking the entire chart.
+  // gridline and every tick label - blanking the entire chart.
   let maxAbs = 1;
   for (const p of points) {
     for (const v of p.values) {
@@ -92,7 +92,7 @@ export default function OiHistogram({
   // Sub-linear (power) height scale: lifts the many small changes into
   // visibility while the largest bar still reaches the axis extreme. Both the
   // bars and the gridlines below run through this same transform, so every
-  // labelled tick still sits on its own line — only the spacing is non-linear
+  // labelled tick still sits on its own line - only the spacing is non-linear
   // (compressed toward the extremes), like a gentle log axis. Exact values are
   // always available in the readout, so the emphasis doesn't mislead.
   const BAR_SCALE_EXP = 0.6;
@@ -107,8 +107,8 @@ export default function OiHistogram({
   // Value axis ticks (symmetric around zero).
   const ticks = [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs];
 
-  // Label roughly every 110px, always including the first bucket and — when it
-  // clears the first by a label's width — the last, so the covered span is
+  // Label roughly every 110px, always including the first bucket and - when it
+  // clears the first by a label's width - the last, so the covered span is
   // readable without hovering and short series never overlap their two labels.
   const labelEvery = Math.max(1, Math.ceil(LABEL_PX / GROUP_W));
   const labelIdx = new Set<number>([0]);
@@ -124,7 +124,7 @@ export default function OiHistogram({
     return <rect key={key} x={x} y={y} width={BAR_W} height={h} fill={color} rx={2} />;
   }
 
-  /** Band covering one bucket's bars — used for the hover highlight only. */
+  /** Band covering one bucket's bars - used for the hover highlight only. */
   const band = (i: number, className: string) => (
     <rect
       x={groupX(i) + GROUP_PAD - 5}
@@ -161,6 +161,8 @@ export default function OiHistogram({
       />
       <div
         className="an-scrollx"
+        tabIndex={0}
+        aria-label="Scrollable open interest chart"
         ref={scrollRef}
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -206,7 +208,7 @@ export default function OiHistogram({
 
             {/* Only the HOVERED bucket gets a band. The newest bucket used to
                 carry a permanent translucent tint to mark it as "current", but a
-                see-through slab sitting over the bars just muddied them — and the
+                see-through slab sitting over the bars just muddied them - and the
                 readout above already names the current bucket and its values
                 whenever the cursor is away. */}
             {hover !== null && band(activeIdx, "an-hist-hover-band")}

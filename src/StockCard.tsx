@@ -53,13 +53,7 @@ export default function StockCard({
         onClick={onOpen ? () => onOpen(item.symbol) : undefined}
       >
         <header className="card-head">
-          <div className="card-title">
-            <span className="card-symbol">
-              {item.symbol}
-              {item.is_index && <span className="badge-index">INDEX</span>}
-            </span>
-            <span className="card-name">{item.name}</span>
-          </div>
+          <StockIdentity item={item} onOpen={onOpen} />
         </header>
 
         <table className="card-table">
@@ -78,9 +72,9 @@ export default function StockCard({
                   <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
                   <span className="contract-meta">{daysToExpiry(f.expiry)}d</span>
                 </td>
-                <td className="num muted">—</td>
-                <td className="num muted">—</td>
-                <td className="num muted">—</td>
+                <td className="num muted">-</td>
+                <td className="num muted">-</td>
+                <td className="num muted">-</td>
               </tr>
             ))}
           </tbody>
@@ -95,13 +89,7 @@ export default function StockCard({
       onClick={onOpen ? () => onOpen(item.symbol) : undefined}
     >
       <header className="card-head">
-        <div className="card-title">
-          <span className="card-symbol">
-            {item.symbol}
-            {item.is_index && <span className="badge-index">INDEX</span>}
-          </span>
-          <span className="card-name">{item.name}</span>
-        </div>
+        <StockIdentity item={item} onOpen={onOpen} />
         <div className="card-quote">
           <span className="card-price mono">{fmt(spotLast)}</span>
           <span
@@ -141,7 +129,7 @@ export default function StockCard({
                   <span className="contract-name">{formatExpiry(f.expiry)}</span>{" "}
                   <span className="contract-meta">{days}d</span>
                   {/* Always render the OI line (placeholder when absent) so every
-                      row — and therefore every card — has a consistent height. */}
+                      row - and therefore every card - has a consistent height. */}
                   <span className="contract-oi">
                     {oi > 0 ? `OI ${fmtCompact(oi)}` : "\u00A0"}
                   </span>
@@ -149,13 +137,13 @@ export default function StockCard({
                 <td className="num mono">{fmt(last)}</td>
                 <td
                   className="num mono fair"
-                  title={`Fair value · rf ${rf}% · dividend ${div.toFixed(2)}%`}
+                  title={`Fair value: rf ${rf}%, dividend ${div.toFixed(2)}%`}
                 >
                   {fmt(fair)}
                 </td>
                 <td className="num">
                   {premium === null ? (
-                    <span className="chip muted">—</span>
+                    <span className="chip muted">-</span>
                   ) : (
                     <span className={`chip ${pdClass(premium)}`}>
                       {fmtSigned(premium)}
@@ -188,6 +176,44 @@ export default function StockCard({
         </div>
       )}
     </article>
+  );
+}
+
+function StockIdentity({
+  item,
+  onOpen,
+}: {
+  item: BoardItem;
+  onOpen?: (symbol: string) => void;
+}) {
+  const contents = (
+    <>
+      <span className="card-symbol">
+        {item.symbol}
+        {item.is_index && <span className="badge-index">INDEX</span>}
+      </span>
+      <span className="card-name">{item.name}</span>
+    </>
+  );
+
+  return (
+    <div className="card-title">
+      {onOpen ? (
+        <a
+          className="card-symbol-link"
+          href={`/stock/${encodeURIComponent(item.symbol)}`}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpen(item.symbol);
+          }}
+        >
+          {contents}
+        </a>
+      ) : (
+        contents
+      )}
+    </div>
   );
 }
 

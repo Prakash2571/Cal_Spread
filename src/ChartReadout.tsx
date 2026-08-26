@@ -3,7 +3,7 @@ export interface ReadoutItem {
   label: string;
   color: string;
   value: string;
-  /** Mirrors ChartSeries.dashed — dims the dot the way the old legend did. */
+  /** Mirrors ChartSeries.dashed - dims the dot the way the old legend did. */
   dashed?: boolean;
 }
 
@@ -37,7 +37,7 @@ export default function ChartReadout({
         <span
           className={`chart-readout-time${hovering ? " chart-readout-time--hover" : ""}`}
         >
-          {time ?? "—"}
+          {time ?? "-"}
         </span>
         {items.map((it) => (
           <span key={it.label} className="chart-readout-item">

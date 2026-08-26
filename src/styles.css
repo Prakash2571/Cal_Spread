@@ -1,5 +1,5 @@
 /* ================================================================
-   Token_Block — flat, opaque, terminal-grade surface system.
+   Token_Block - flat, opaque, terminal-grade surface system.
    The single source of colour, type, spacing, radius, elevation
    and motion values in this stylesheet.
    ================================================================ */
@@ -25,21 +25,25 @@
   /* ---- Text ---- */
   --text-1: #e6e9ee;
   --text-2: #9ba3af;
-  --text-3: #7d8590;
+  --text-3: #858e99;
 
   /* ---- Accent (interaction only) ---- */
   --accent: #2f6fed;
   --accent-hover: #1f5ad6;
+  --accent-fill: #285fcf;
+  --accent-fill-hover: #1f52bc;
   --accent-text: #7fb0ff;
   --accent-surface: #16233d;
   --accent-border: #2b4a8a;
-  --on-accent: #ffffff; /* text/glyph colour on an --accent or --neg fill */
+  --on-accent: #f7f9fc; /* text/glyph colour on an --accent or --neg fill */
 
   /* ---- Semantic: P&L ---- */
   --pos: #3fb950;
   --pos-surface: #12251a;
   --neg: #f85149;
   --neg-hover: #d93a31;
+  --danger-fill: #c9362f;
+  --danger-fill-hover: #ae2d28;
   --neg-surface: #2a1618;
   --warn: #d29922;
   --warn-surface: #2a2113;
@@ -59,6 +63,8 @@
   --chart-grid: #23272e;
   --chart-guide: #333a44;
   --chart-zero: rgba(255, 255, 255, 0.28);
+  --min-straddle: #f2c94c;
+  --on-min-straddle: #3f2f00;
 
   /* ---- Typography ---- */
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -107,7 +113,7 @@
   /* ---- Option-chain tints ----
      Own tokens per theme, because the two themes need OPPOSITE treatments: on a
      dark card a saturated dark wash reads clearly, while on a white card the
-     same idea has to be a real pastel — diluting a near-white surface toward
+     same idea has to be a real pastel - diluting a near-white surface toward
      transparent (which is what these used to do) leaves nothing visible. */
   --chain-ce-tint: color-mix(in srgb, var(--neg-surface) 55%, transparent);
   --chain-pe-tint: color-mix(in srgb, var(--pos-surface) 55%, transparent);
@@ -125,16 +131,16 @@
   color-scheme: light;
 
   /* WHITE page with BRIGHT WHITE cards. A card is separated from the page by a
-     hairline border + a soft shadow, not by a grey fill — so cards read clean
+     hairline border + a soft shadow, not by a grey fill - so cards read clean
      and bright (the grey-panel look felt dull/heavy). Inner accents (table
      header, strike column) use a faint cool grey so structure still shows
      inside the white card. */
-  --surface-0: #ffffff;
-  --surface-1: #ffffff;
+  --surface-0: #f7f9fc;
+  --surface-1: #fcfdff;
   --surface-2: #eef1f5;
   --surface-3: #e4e8ed;
 
-  /* Hairline borders — the primary way a bright card separates from the bright
+  /* Hairline borders - the primary way a bright card separates from the bright
      page, so they carry a touch more weight than a grey-fill scheme needs. */
   --border-subtle: #e6eaef;
   --border: #d5dbe2;
@@ -142,7 +148,7 @@
 
   /* Data surfaces (chart cards, trade cards, the option chain) are white too;
      their inner accent/hover steps to the faint grey. */
-  --data-surface: #ffffff;
+  --data-surface: #fcfdff;
   --data-surface-strong: #eef1f5;
   --data-border: #dde2e8;
 
@@ -152,6 +158,8 @@
 
   --accent: #2458c6;
   --accent-hover: #1949ad;
+  --accent-fill: #2458c6;
+  --accent-fill-hover: #1949ad;
   --accent-text: #174ea6;
   --accent-surface: #eaf1ff;
   --accent-border: #6f95df;
@@ -160,6 +168,8 @@
   --pos-surface: #eaf7ee;
   --neg: #c52a25;
   --neg-hover: #a91f1b;
+  --danger-fill: #c52a25;
+  --danger-fill-hover: #a91f1b;
   --neg-surface: #fff0ef;
   --warn: #895c00;
   --warn-surface: #fff6d9;
@@ -221,7 +231,7 @@ body {
 }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--surface-0);
   color: var(--text-1);
   font-family: var(--font-ui);
@@ -229,6 +239,22 @@ body {
   text-rendering: optimizeLegibility;
   font-size: var(--fs-4);
   line-height: var(--lh-base);
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .mono {
@@ -253,14 +279,14 @@ body {
   padding: 0 var(--sp-6) var(--sp-10);
 }
 
-/* Global focus indicator — replaces every one-off focus glow */
-:where(button, a, input, [tabindex]):focus-visible {
+/* Global focus indicator - replaces every one-off focus glow */
+:where(button, a, input, select, summary, [tabindex]):focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--ring);
 }
 
-/* Motion respect — neutralizes pulse, spin, shimmer and every transition */
+/* Motion respect - neutralizes pulse, spin, shimmer and every transition */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -276,6 +302,10 @@ body {
   .sk {
     background: var(--surface-2) !important;
   }
+
+  .btn:active {
+    transform: none;
+  }
 }
 
 /* ================ Top bar ================ */
@@ -287,7 +317,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-height: 56px;
   padding: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-4);
   background: var(--surface-0);
@@ -307,6 +338,7 @@ body {
   display: grid;
   place-items: center;
   background: var(--accent);
+  color: var(--on-accent);
   flex: none;
 }
 
@@ -332,8 +364,10 @@ body {
 .toolbar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--sp-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .theme-toggle {
@@ -341,13 +375,75 @@ body {
 }
 
 .theme-toggle svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  flex: none;
+}
+
+.toolbar-menu {
+  position: relative;
+}
+
+.toolbar-menu summary {
+  list-style: none;
+}
+
+.toolbar-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbar-menu-trigger {
+  gap: var(--sp-2);
+}
+
+.toolbar-menu[open] > .toolbar-menu-trigger {
+  color: var(--accent-text);
+  background: var(--accent-surface);
+  border-color: var(--accent-border);
+}
+
+.toolbar-popover {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  z-index: 40;
+  width: min(390px, calc(100vw - var(--sp-6) * 2));
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-popover);
+}
+
+.toolbar-popover .rf {
+  width: 100%;
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.toolbar-popover-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 1180px) {
+  .toolbar .count {
+    display: none;
+  }
+
+  .theme-toggle span {
+    display: none;
+  }
+
+  .theme-toggle {
+    width: 32px;
+    padding: 0;
+  }
+
+  .search {
+    width: 220px;
+  }
 }
 
 .admin-page > .theme-toggle {
@@ -443,7 +539,7 @@ body {
 }
 
 /* Pulse glow. Carried on a pseudo-element ring so the fade is an opacity
-   animation rather than an alpha ramp — that keeps the glow locked to the
+   animation rather than an alpha ramp - that keeps the glow locked to the
    current --pos hue with no colour literal outside the Token_Block. */
 .status--live .status-dot::after {
   content: "";
@@ -465,7 +561,7 @@ body {
 }
 
 /* The "Login for live" state. App.tsx builds this class from status.kind, which has
-   always been able to be "idle", but only --live and --wait were ever defined — so
+   always been able to be "idle", but only --live and --wait were ever defined - so
    that pill rendered with no colour treatment at all while its two siblings were
    styled. Muted rather than coloured: nothing is wrong, there is just no session. */
 .status--idle {
@@ -514,7 +610,8 @@ body {
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .btn:hover:not(:disabled) {
@@ -524,6 +621,7 @@ body {
 
 .btn:active {
   background: var(--surface-3);
+  transform: scale(0.98);
 }
 
 .btn:disabled {
@@ -532,14 +630,14 @@ body {
 }
 
 .btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
   color: var(--on-accent);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-fill-hover);
+  border-color: var(--accent-fill-hover);
 }
 
 /* ================ Banners ================ */
@@ -566,7 +664,7 @@ body {
   color: var(--accent-text);
 }
 
-/* "Something on screen may be out of date" — not an error (nothing is broken and
+/* "Something on screen may be out of date" - not an error (nothing is broken and
    there is nothing to retry) but not neutral either. Uses --warn so it reads the
    same as the .status--wait pill, which signals the equivalent state for ticks. */
 .banner--warn {
@@ -654,6 +752,7 @@ body {
   .topbar {
     gap: var(--sp-2);
     padding: var(--sp-3) var(--sp-2);
+    flex-wrap: wrap;
   }
   .search-wrap {
     order: 3;
@@ -666,6 +765,14 @@ body {
   .toolbar {
     gap: var(--sp-2);
     width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-popover {
+    position: fixed;
+    top: 64px;
+    right: var(--sp-3);
+    width: calc(100vw - var(--sp-6));
   }
 }
 
@@ -791,6 +898,20 @@ body {
   font-size: var(--fs-4);
   font-weight: var(--fw-semibold);
   color: var(--text-1);
+}
+
+.card-symbol-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-sm);
+}
+
+.card-symbol-link:hover .card-symbol {
+  color: var(--accent-text);
+}
+
+.card-symbol-link:focus-visible {
+  box-shadow: var(--ring);
 }
 
 .badge-index {
@@ -1103,7 +1224,7 @@ body {
 
 /* ================ Admin Page ================ */
 .admin-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: var(--sp-5);
@@ -1150,6 +1271,19 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  text-align: left;
+}
+
+.admin-label {
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-medium);
 }
 
 .admin-input {
@@ -1203,14 +1337,14 @@ body {
 
 /* Danger buttons */
 .btn--danger {
-  background: var(--neg);
-  border-color: var(--neg);
+  background: var(--danger-fill);
+  border-color: var(--danger-fill);
   color: var(--on-accent);
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: var(--neg-hover);
-  border-color: var(--neg-hover);
+  background: var(--danger-fill-hover);
+  border-color: var(--danger-fill-hover);
 }
 
 .trade-del-confirm {
@@ -1247,11 +1381,6 @@ body {
 .trade-del svg {
   width: 15px;
   height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .trade-del:hover {
@@ -1294,7 +1423,7 @@ body {
   margin-left: var(--sp-1);
   padding: 0 var(--sp-1);
   border-radius: var(--r-pill);
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--on-accent);
   font-size: var(--fs-1);
   font-weight: var(--fw-semibold);
@@ -1316,7 +1445,7 @@ body {
 .modal {
   width: 100%;
   max-width: 660px;
-  max-height: calc(100vh - var(--sp-6) * 2);
+  max-height: calc(100dvh - var(--sp-6) * 2);
   display: flex;
   flex-direction: column;
   background: var(--surface-1);
@@ -1460,14 +1589,12 @@ body {
   width: 14px;
   height: 14px;
   flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
   color: var(--text-3);
 }
 
 .month-caret {
+  display: grid;
+  place-items: center;
   font-size: var(--fs-1);
   color: var(--text-3);
 }
@@ -1637,7 +1764,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* "+3 open in other months" — open positions hidden by the filter are still
+/* "+3 open in other months" - open positions hidden by the filter are still
    money at risk, so the count stays reachable from the Open heading. */
 .month-jump {
   margin-left: auto;
@@ -1780,7 +1907,7 @@ body {
 }
 
 /* Zerodha's charges for the round trip, under the trade's meta line. Reported
-   only — NOT deducted from the P&L — so it reads as a cost note rather than part
+   only - NOT deducted from the P&L - so it reads as a cost note rather than part
    of the result. Its own row so the money reads as a figure, not as part of the
    qty/margin sentence. */
 .trade-charges {
@@ -2034,6 +2161,7 @@ body {
 
 .back-btn {
   margin-right: var(--sp-1);
+  gap: var(--sp-1);
 }
 
 /* ================ Stock detail page ================ */
@@ -2143,7 +2271,7 @@ body {
   color: var(--text-2);
 }
 
-/* Segmented control — the wrapper owns the outline and the corner radius */
+/* Segmented control - the wrapper owns the outline and the corner radius */
 .chart-toggle {
   margin-left: auto;
   display: inline-flex;
@@ -2155,8 +2283,8 @@ body {
 /* Metrics deliberately match .btn (32px, --fs-4), because .an-toggle on the
    analytics cards builds the same segmented control out of .btn instead. The two
    were 28px/12px vs 32px/13px, so the same control was visibly a different size
-   depending on which page you were on. The joined-outline look is kept — that is a
-   style choice — but the sizing is now shared. */
+   depending on which page you were on. The joined-outline look is kept - that is a
+   style choice - but the sizing is now shared. */
 .chart-toggle button {
   border: none;
   border-radius: 0;
@@ -2176,7 +2304,7 @@ body {
 }
 
 .chart-toggle button.active {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--on-accent);
 }
 
@@ -2266,7 +2394,7 @@ body {
 }
 
 /* ================================================================
-   Chart readout — the always-visible values strip that replaced the
+   Chart readout - the always-visible values strip that replaced the
    floating tooltip. Shows the latest point by default and retargets
    to the hovered one, so values never sit under the cursor.
    ================================================================ */
@@ -2346,7 +2474,7 @@ body {
 
 
 /* ================================================================
-   Metric panel — extracted from the StockDetail spread-analytics
+   Metric panel - extracted from the StockDetail spread-analytics
    inline styles; the row/label/value trio is reused by the trade
    confirm modal.
    ================================================================ */
@@ -2396,7 +2524,7 @@ body {
 }
 
 /* ================================================================
-   Trade confirm modal hero — extracted from TradeConfirmModal.
+   Trade confirm modal hero - extracted from TradeConfirmModal.
    ================================================================ */
 .confirm-hero {
   margin-bottom: var(--sp-4);
@@ -2423,8 +2551,37 @@ body {
   color: var(--text-1);
 }
 
+.confirm-modal-body,
+.token-modal-body {
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.confirm-unavailable {
+  padding: var(--sp-3);
+  color: var(--text-2);
+  font-size: var(--fs-4);
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+}
+
+.modal-action {
+  flex: 1;
+}
+
+.empty--compact {
+  padding: var(--sp-4);
+}
+
+.banner--flush {
+  margin: 0;
+}
+
 /* ================================================================
-   Access-token field — extracted from AccessTokenModal.
+   Access-token field - extracted from AccessTokenModal.
    ================================================================ */
 .token-field {
   padding: var(--sp-3);
@@ -2443,10 +2600,23 @@ body {
 }
 
 .token-value {
+  flex: 1;
   font-family: var(--font-mono);
   font-size: var(--fs-3);
   word-break: break-all;
   user-select: all;
+}
+
+.token-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.token-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
 }
 
 .token-note {
@@ -2466,6 +2636,7 @@ body {
 }
 .an-back {
   white-space: nowrap;
+  gap: var(--sp-1);
 }
 .an-underline {
   font-size: var(--fs-2);
@@ -2508,7 +2679,7 @@ body {
   font-family: var(--font-mono);
 }
 
-/* The full-width summary strip is gone — those totals now sit inline in the
+/* The full-width summary strip is gone - those totals now sit inline in the
    Option Chain card, see .an-chain-stats. */
 
 /* ---- Option chain table ---- */
@@ -2517,13 +2688,16 @@ body {
   border: 1px solid var(--data-border);
   border-radius: var(--r-lg);
   background: var(--surface-0);
-  /* Hide the scrollbar "roller" but keep the table scrollable (wheel / trackpad
-     / touch), matching the charts' .an-scrollx. */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* legacy Edge */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 .an-chain-wrap::-webkit-scrollbar {
-  display: none; /* Chromium / WebKit */
+  width: 6px;
+  height: 6px;
+}
+.an-chain-wrap::-webkit-scrollbar-thumb {
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
 }
 /* `fixed` so the <colgroup> widths below are honoured exactly and the columns are
    IDENTICAL collapsed and expanded. Under the default `auto` layout the spare
@@ -2571,7 +2745,7 @@ body {
 /* The whole <thead> is pinned as ONE unit. Pinning each row separately (row 2
    offset by row 1's height) needs that height as a constant, and any drift
    between the constant and the real row height opens a gap that the scrolling
-   body shows through — so the two-row header stays a single sticky block.
+   body shows through - so the two-row header stays a single sticky block.
    `border-collapse: collapse` drops a sticky header's own border-bottom, so the
    rule under the labels is an inset shadow, which does survive. */
 .an-chain thead {
@@ -2633,7 +2807,7 @@ body {
    right-aligned value sits at its column's RIGHT edge, so the calls LTP (the
    last calls column) lands hard against the strike while the puts LTP (the first
    puts column) sits a whole column-width away from it. The wider the columns,
-   the worse it reads — which is why the expanded card made it obvious.
+   the worse it reads - which is why the expanded card made it obvious.
    Aligning the puts half LEFT makes it a true reflection of the calls half:
    both sides' values sit toward the strike, and every header sits over its own
    values. Applies to both the collapsed and expanded card (same rules).
@@ -2685,11 +2859,11 @@ body {
 .an-chain td.an-ltp-down {
   color: var(--neg);
 }
-/* ATM: mark only the STRIKE block (no full-row outline) — the filled strike
+/* ATM: mark only the STRIKE block (no full-row outline) - the filled strike
    cell is enough to anchor the eye at the money. */
 .an-atm .an-strike {
   color: var(--on-accent);
-  background: var(--accent);
+  background: var(--accent-fill);
 }
 /* Scoped to `.an-chain td` so it actually WINS: a bare `.an-bld-cell` (0,1,0)
    loses to `.an-chain td { text-align: right }` (0,1,1) no matter the order, so
@@ -2751,15 +2925,15 @@ body {
 .an-card--chain {
   grid-row: span 2;
 }
-/* The fifth chart (futures ΔOI) is the one card that gains from extra width —
-   more histogram buckets visible at once — so it takes the third row whole and
+/* The fifth chart (futures ΔOI) is the one card that gains from extra width -
+   more histogram buckets visible at once - so it takes the third row whole and
    the grid has no empty cell. */
 .an-charts--dash > .an-chart-card:last-child {
   grid-column: 1 / -1;
 }
 
-/* Below ~1360px the chain plus two chart columns can't both fit — the chart cards
-   fall under ~287px, where the card titles start ellipsising — so the chain stops
+/* Below ~1360px the chain plus two chart columns can't both fit - the chart cards
+   fall under ~287px, where the card titles start ellipsising - so the chain stops
    spanning rows and takes a full-width row of its own (where the table is never
    clipped) with the charts 2-up beneath it. */
 @media (max-width: 1360px) {
@@ -2868,16 +3042,15 @@ body {
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
   -webkit-overflow-scrolling: touch;
-  /* No visible scrollbar "roller": these charts open pinned to the newest data
-     and are panned by wheel / trackpad / touch-drag, not read off a bar. The
-     content still scrolls on action — only the bar chrome is hidden. Dropping
-     `scrollbar-gutter: stable` also reclaims the gutter the bar used to reserve,
-     so a fitted canvas now measures the full card width. */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* legacy Edge */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 .an-scrollx::-webkit-scrollbar {
-  display: none; /* Chromium / WebKit */
+  height: 6px;
+}
+.an-scrollx::-webkit-scrollbar-thumb {
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
 }
 .an-chart-card--expanded .an-scrollx {
   height: 100%;
@@ -2967,7 +3140,7 @@ body {
 /* ---- Analytics chart strokes ----
    The analytics line charts run in LineChart's fixed-canvas mode (explicit px
    width/height, no viewBox), so nothing is scaled and these weights land exactly
-   as written — matching the histogram and straddle cards. */
+   as written - matching the histogram and straddle cards. */
 .an-page .chart-grid,
 .an-page .chart-guide {
   stroke-width: 0.75px;
@@ -2976,7 +3149,7 @@ body {
 /* ---- Analytics: the option chain embedded in a chart card ----
    The chain sits in the same card grid as the charts. Its card BODY is the column
    flex container (via ChartCard's bodyClass), so the scrollable table takes the
-   leftover height — and the full screen once expanded, where
+   leftover height - and the full screen once expanded, where
    `.an-chart-card--expanded .an-chart-body` already supplies
    `flex: 1; min-height: 0`. */
 .an-table-card {
@@ -2987,7 +3160,7 @@ body {
   min-height: 0;
 }
 /* The chain spans the two chart rows, and the cap is what keeps it in step with
-   them. The rows are `auto`, so they size to this card's MAX-content — drop the cap
+   them. The rows are `auto`, so they size to this card's MAX-content - drop the cap
    and 29 strikes push both rows ~95px taller than their plots need. Set it just
    UNDER the two rows' natural height instead (318 + 12 + 333 for a fitted line card
    and a histogram card, less this card's own 157px of chrome): the grid then
@@ -3065,7 +3238,7 @@ body {
 }
 
 /* ---- Analytics: straddle premium, stacked UNDER the strike ---- */
-/* Second line inside the (widened) strike cell — the straddle premium. Sized up
+/* Second line inside the (widened) strike cell - the straddle premium. Sized up
    and set in the medium body-text colour (not the faint --text-3, which washed
    out in light mode) with a clear gap under the strike, so it reads as its own
    value rather than a caption. */
@@ -3084,13 +3257,13 @@ body {
 .an-atm .an-strad-v {
   color: var(--on-accent);
 }
-/* Lowest straddle in view — the STRIKE block is filled YELLOW, mirroring the way
+/* Lowest straddle in view - the STRIKE block is filled YELLOW, mirroring the way
    the ATM block is filled with the accent, so the cheapest straddle stands out
    as its own marker. (Applied only when it isn't the ATM row, so the two block
    colours never collide.) The yellow highlight reads the same in both themes,
    so it uses fixed values rather than a theme token. */
 .an-chain td.an-strike.an-strike--min {
-  background: #f2c94c;
+  background: var(--min-straddle);
 }
 /* The cheapest straddle is usually AT the money, so the two markers land on the
    same cell. Rather than suppressing one (which left the chain with no minimum
@@ -3101,7 +3274,7 @@ body {
 }
 .an-chain td.an-strike.an-strike--min,
 .an-chain td.an-strike.an-strike--min .an-strad-v {
-  color: #3f2f00;
+  color: var(--on-min-straddle);
   font-weight: var(--fw-semibold);
 }
 /* Small "straddle" sub-label under the STRIKE header. */

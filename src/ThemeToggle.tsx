@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MoonIcon, SunIcon } from "@phosphor-icons/react";
 
 export type Theme = "dark" | "light";
 
@@ -6,7 +7,9 @@ const THEME_STORAGE_KEY = "cal_spread_theme";
 
 export function readStoredTheme(): Theme {
   try {
-    return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   } catch {
     return "dark";
   }
@@ -17,17 +20,15 @@ export function applyTheme(theme: Theme) {
   document.documentElement.style.colorScheme = theme;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "light" ? "#ffffff" : "#0f1216");
+    ?.setAttribute("content", theme === "light" ? "#f7f9fc" : "#0f1216");
 }
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const isLight = theme === "light";
   const nextTheme = isLight ? "dark" : "light";
-  // One string for both the tooltip and the accessible name. `aria-label` used to
-  // be a static "Light mode", so a screen reader announced the same thing in both
-  // states while the visible label and the title tracked the theme — the control
-  // was the only one on the page that couldn't be operated without sight.
+  // One string for both the tooltip and the accessible name. The control always
+  // announces the action it will perform next.
   const label = `Switch to ${nextTheme} mode`;
 
   useEffect(() => {
@@ -49,14 +50,9 @@ export default function ThemeToggle() {
       onClick={() => setTheme(nextTheme)}
     >
       {isLight ? (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="3.5" />
-          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-        </svg>
+        <SunIcon size={16} weight="regular" aria-hidden="true" />
       ) : (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20.5 14.6A8.2 8.2 0 0 1 9.4 3.5 8.5 8.5 0 1 0 20.5 14.6Z" />
-        </svg>
+        <MoonIcon size={16} weight="regular" aria-hidden="true" />
       )}
       <span>{isLight ? "Light" : "Dark"}</span>
     </button>

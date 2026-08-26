@@ -1,4 +1,12 @@
 import { useMemo, useState } from "react";
+import {
+  CalendarBlankIcon,
+  CaretDownIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  TrashIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import type { Tick, Trade, TradeCharges } from "./api.ts";
 import { fmt, fmtMoney, formatExpiry } from "./format.ts";
 
@@ -37,7 +45,7 @@ function fmtDateTime(iso: string): string {
  * The month is the F&O SERIES month, not the calendar date the trade was taken:
  * an F&O month runs on the expiry cycle, so the August series opens in late
  * July (once July has expired) rather than on the 1st. A calendar spread holds
- * two consecutive expiries — a near ("current") leg and a far ("next") leg — so
+ * two consecutive expiries - a near ("current") leg and a far ("next") leg - so
  * the trade belongs to the month of its NEAR leg. A position taken on 31 Jul
  * with a 25 Aug front leg is an August trade, and it stays in that one bucket
  * for its whole life instead of moving when it closes.
@@ -51,14 +59,14 @@ const MONTHS = [
 /** Sentinel month selection: no filter at all. */
 const ALL = "all";
 
-/** "YYYY-MM" for a date — sortable and comparable as a plain string. */
+/** "YYYY-MM" for a date - sortable and comparable as a plain string. */
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 /**
  * The "YYYY-MM" F&O series a trade belongs to: the expiry month of its FRONT
- * (near) leg — the earlier of the two expiries. Expiries are "YYYY-MM-DD", so
+ * (near) leg - the earlier of the two expiries. Expiries are "YYYY-MM-DD", so
  * the earlier date sorts first as a plain string and its first 7 chars are the
  * month key. Returns "" only when neither leg carries a usable expiry.
  */
@@ -89,14 +97,14 @@ interface MonthTotals {
   open: number;
   closed: number;
   margin: number | null;
-  /** Trades whose margin the backend never recorded — the total is a floor. */
+  /** Trades whose margin the backend never recorded - the total is a floor. */
   marginMissing: number;
   pnl: number | null;
   /** Trades still open, so their P&L is a live mark rather than realized. */
   pnlLive: number;
   charges: number | null;
   chargesEstimated: boolean;
-  /** Trades with no charge figures at all — the total is a floor. */
+  /** Trades with no charge figures at all - the total is a floor. */
   chargesMissing: number;
 }
 
@@ -136,7 +144,7 @@ function monthTotals(trades: Trade[], ticks: Record<number, Tick>): MonthTotals 
       // Margin rides with the P&L: it's the capital that produced that figure,
       // so it's only summed for a trade whose P&L is in the total. A trade that
       // never fully filled (both legs bought) has no P&L to count, so its
-      // margin is left out too — otherwise the total would carry capital for a
+      // margin is left out too - otherwise the total would carry capital for a
       // position that was never actually on, and "% on margin" would read the
       // return against money that was never at work.
       if (t.margin !== null && Number.isFinite(t.margin)) {
@@ -168,10 +176,10 @@ function roiPct(pnl: number | null, margin: number | null): number | null {
   return (pnl / margin) * 100;
 }
 
-/** A cost, formatted unsigned (₹648.36) — charges are reported, not netted. */
+/** A cost, formatted unsigned (₹648.36) - charges are reported, not netted. */
 function fmtCost(v: number | null | undefined): string {
   // isFinite, not !isNaN: a malformed payload could otherwise render "₹∞".
-  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  if (v === null || v === undefined || !Number.isFinite(v)) return "-";
   return `₹${Math.abs(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
@@ -233,7 +241,7 @@ function chargesTooltip(t: Trade): string {
     : "";
   return (
     `Zerodha charges for the round trip (entry + exit).\n` +
-    `Reported for reference — NOT deducted from the P&L, which already\n` +
+    `Reported for reference - NOT deducted from the P&L, which already\n` +
     `carries the bid/ask spread from the actual fills.\n\n${parts}${note}`
   );
 }
@@ -246,8 +254,8 @@ function chargesTooltip(t: Trade): string {
  * position reads in the broker's own app, so the number can be trusted as
  * "what I'd actually have".
  *
- * An open trade is therefore marked to LTP — which is exactly what a broker
- * shows for an open position — even though the tick feed does carry depth
+ * An open trade is therefore marked to LTP - which is exactly what a broker
+ * shows for an open position - even though the tick feed does carry depth
  * (Tick.bid / .ask / .bids / .asks). Marking to the exit-side touch instead
  * would arguably be a truer estimate of a close, but it would NOT match the
  * broker screen, so it is deliberately not done.
@@ -277,8 +285,8 @@ function computePnl(t: Trade, ticks: Record<number, Tick>) {
   const buyPnl = buyValid !== null ? t.lot_size * (buyValid - t.buy.entry) : null;
   const sellPnl = sellValid !== null ? t.lot_size * (t.sell.entry - sellValid) : null;
 
-  // The P&L is the PRICE MOVE. Both legs were filled at the touch — the best
-  // ask for the long leg, the best bid for the short (backend bestPrice()) — so
+  // The P&L is the PRICE MOVE. Both legs were filled at the touch - the best
+  // ask for the long leg, the best bid for the short (backend bestPrice()) - so
   // the entry side of the bid/ask spread is already inside this number.
   //
   // The fill is top-of-book and never consults quantity, which is EXACT here
@@ -383,16 +391,16 @@ function TradeCard({
 
       <div className="trade-foot">
         <div className="trade-meta">
-          {t.lot_size} qty · margin {fmtMoney(t.margin)} · {fmtDateTime(t.opened_at)}
+          {t.lot_size} qty, margin {fmtMoney(t.margin)}, {fmtDateTime(t.opened_at)}
           {closed && t.closed_at ? ` → ${fmtDateTime(t.closed_at)}` : ""}
           {charges !== null ? (
             <span className="trade-charges" title={chargesTooltip(t)}>
               charges {fmtCost(charges)}
               {chargesEstimated ? " (est)" : ""}
               <span className="trade-charge-heads">
-                brokerage {fmtCost(heads.brokerage)} · STT {fmtCost(heads.stt)} ·
-                stamp {fmtCost(heads.stamp_duty)} · exch{" "}
-                {fmtCost(heads.exchange_txn)} · SEBI {fmtCost(heads.sebi)} · GST{" "}
+                brokerage {fmtCost(heads.brokerage)}, STT {fmtCost(heads.stt)},
+                stamp {fmtCost(heads.stamp_duty)}, exch{" "}
+                {fmtCost(heads.exchange_txn)}, SEBI {fmtCost(heads.sebi)}, GST{" "}
                 {fmtCost(heads.gst)}
               </span>
             </span>
@@ -408,7 +416,7 @@ function TradeCard({
         <div className="trade-net">
           {/* "P&L", not "NET": this figure is the price move (slippage included,
               since the fills are real bid/ask), and charges are reported beside
-              it rather than deducted — calling it NET contradicted the charges
+              it rather than deducted - calling it NET contradicted the charges
               note directly above. */}
           <span className="trade-pnl-label">P&amp;L</span>
           <span className={`trade-pnl ${pnlClass(pnl)}`}>{fmtMoney(pnl)}</span>
@@ -455,12 +463,7 @@ function TradeCard({
               setConfirmingDelete(true);
             }}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 7h16" />
-              <path d="M10 4h4a1 1 0 0 1 1 1v2H9V5a1 1 0 0 1 1-1Z" />
-              <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-              <path d="M10 11v6M14 11v6" />
-            </svg>
+            <TrashIcon size={15} weight="regular" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -470,7 +473,7 @@ function TradeCard({
 
 /**
  * Month selector: arrows for the neighbouring months, and a click on the label
- * opens a year of months at once, each showing how many trades it holds — so
+ * opens a year of months at once, each showing how many trades it holds - so
  * finding the months that actually have activity doesn't mean clicking back
  * through the empty ones.
  */
@@ -486,9 +489,9 @@ function MonthBar({
   value: string;
   onChange: (key: string) => void;
   counts: Record<string, number>;
-  /** The earliest month a trade reaches — the picker won't step before it. */
+  /** The earliest month a trade reaches - the picker won't step before it. */
   minMonth: string;
-  /** The furthest month a trade reaches — the picker won't step past it. */
+  /** The furthest month a trade reaches - the picker won't step past it. */
   maxMonth: string;
   /** The current month, and where "All" returns to when toggled back off. */
   home: string;
@@ -517,7 +520,7 @@ function MonthBar({
           disabled={!canPrev}
           onClick={() => canPrev && pick(shiftMonth(anchor, -1))}
         >
-          ‹
+          <CaretLeftIcon size={16} weight="regular" aria-hidden="true" />
         </button>
 
         <button
@@ -529,13 +532,10 @@ function MonthBar({
           }}
           title="Pick a month"
         >
-          <svg className="month-ico" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="5" width="18" height="16" rx="2" />
-            <path d="M3 10h18M8 3v4M16 3v4" />
-          </svg>
+          <CalendarBlankIcon className="month-ico" size={15} weight="regular" aria-hidden="true" />
           {value === ALL ? "All months" : monthLabel(value)}
           <span className="month-caret" aria-hidden="true">
-            ▾
+            <CaretDownIcon size={12} weight="fill" />
           </span>
         </button>
 
@@ -545,7 +545,7 @@ function MonthBar({
           disabled={!canNext}
           onClick={() => canNext && pick(shiftMonth(anchor, 1))}
         >
-          ›
+          <CaretRightIcon size={16} weight="regular" aria-hidden="true" />
         </button>
 
         <button
@@ -566,7 +566,7 @@ function MonthBar({
               disabled={year <= minYear}
               onClick={() => setYear((y) => Math.max(minYear, y - 1))}
             >
-              ‹
+              <CaretLeftIcon size={16} weight="regular" aria-hidden="true" />
             </button>
             <span className="month-year-v">{year}</span>
             <button
@@ -575,7 +575,7 @@ function MonthBar({
               disabled={year >= maxYear}
               onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
             >
-              ›
+              <CaretRightIcon size={16} weight="regular" aria-hidden="true" />
             </button>
           </div>
 
@@ -600,7 +600,7 @@ function MonthBar({
                   title={outside ? "" : `${n} trade${n === 1 ? "" : "s"} in ${monthLabel(key)}`}
                 >
                   <span className="month-cell-m">{label}</span>
-                  <span className="month-cell-n">{outside ? "—" : n || "·"}</span>
+                  <span className="month-cell-n">{outside ? "-" : n || ""}</span>
                 </button>
               );
             })}
@@ -623,7 +623,7 @@ function MonthStats({ label, totals }: { label: string; totals: MonthTotals }) {
         <span className="month-stat-k">Trades taken</span>
         <span className="month-stat-v">{totals.count}</span>
         <span className="month-stat-sub">
-          {totals.open} open · {totals.closed} closed
+          {totals.open} open, {totals.closed} closed
         </span>
       </div>
 
@@ -643,8 +643,8 @@ function MonthStats({ label, totals }: { label: string; totals: MonthTotals }) {
           {fmtMoney(totals.pnl)}
         </span>
         <span className="month-stat-sub">
-          {roi !== null ? `${roi.toFixed(2)}% on margin` : "—"}
-          {totals.pnlLive > 0 ? ` · ${totals.pnlLive} live` : ""}
+          {roi !== null ? `${roi.toFixed(2)}% on margin` : "-"}
+          {totals.pnlLive > 0 ? `, ${totals.pnlLive} live` : ""}
         </span>
       </div>
 
@@ -652,7 +652,7 @@ function MonthStats({ label, totals }: { label: string; totals: MonthTotals }) {
         className="month-stat"
         title={
           "Zerodha charges for the round trip (entry + exit) on this month's trades.\n" +
-          "Reported for reference — the P&L beside it is the price move and does\n" +
+          "Reported for reference - the P&L beside it is the price move and does\n" +
           "not have them deducted."
         }
       >
@@ -745,8 +745,8 @@ export default function TradesPanel({
           <div>
             <h2>Trades</h2>
           </div>
-          <button className="modal-x" onClick={onClose} aria-label="Close">
-            ✕
+          <button type="button" className="modal-x" onClick={onClose} aria-label="Close">
+            <XIcon size={18} weight="regular" aria-hidden="true" />
           </button>
         </header>
 
@@ -786,7 +786,7 @@ export default function TradesPanel({
           {open.length === 0 ? (
             <p className="trade-empty">
               {closed.length > 0
-                ? `Every ${label} trade is closed — see History below.`
+                ? `Every ${label} trade is closed - see History below.`
                 : month === ALL || month === thisMonth
                   ? "No open trades. Use “Take Trade” on any stock."
                   : `No trades in ${label}.`}

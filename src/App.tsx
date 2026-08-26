@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MagnifyingGlassIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import {
   createSession,
   fetchDividends,
@@ -32,6 +33,7 @@ import StockDetail from "./StockDetail.tsx";
 import AccessTokenModal from "./AccessTokenModal.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import Analytics from "./Analytics.tsx";
+import BrandMark from "./BrandMark.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -51,7 +53,7 @@ export default function App() {
   const isFullAdmin = adminRole === "full";
 
   // Admin-only: show only stocks with a calendar arbitrage (current & next
-  // month on opposite sides — one at premium, one at discount).
+  // month on opposite sides - one at premium, one at discount).
   const [arbOnly, setArbOnly] = useState(false);
   const [sortMinArb, setSortMinArb] = useState(false);
   const [sortMaxArb, setSortMaxArb] = useState(false);
@@ -226,6 +228,17 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  useEffect(() => {
+    let title = "Calspread";
+    if (route === "/analytics") title = "Options Analytics | Calspread";
+    if (route === "/admin/verify") title = "Admin Verification | Calspread";
+    if (route === "/admin/access") title = "Trade Access | Calspread";
+    if (route.startsWith("/stock/")) {
+      title = `${decodeURIComponent(route.slice("/stock/".length))} | Calspread`;
+    }
+    document.title = title;
+  }, [route]);
+
   // Once authenticated, leave the admin login routes.
   useEffect(() => {
     if (adminAuthenticated && (route === "/admin/verify" || route === "/admin/access")) {
@@ -315,7 +328,7 @@ export default function App() {
           if (s.authenticated) setAuthenticated(true);
         })
         .catch(() => {
-          /* backend unreachable — keep trying */
+          /* backend unreachable - keep trying */
         });
     }, 15000);
     return () => clearInterval(id);
@@ -370,7 +383,7 @@ export default function App() {
       setLive(false);
       setStreamOpen(false);
       setAuthenticated(false);
-      setError("Live feed disconnected — the data provider session ended.");
+      setError("Live feed disconnected - the data provider session ended.");
       es.close();
     });
     es.onerror = () => setLive(false);
@@ -596,27 +609,16 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2"
-              strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7 3v18M17 3v18" />
-              <rect x="4" y="7" width="6" height="9" rx="1.2" fill="#ffffff" stroke="none" />
-              <rect x="14" y="5" width="6" height="8" rx="1.2" fill="#ffffff" stroke="none" />
-            </svg>
-          </div>
+          <BrandMark />
           <div className="card-title">
             <h1>Calspread</h1>
           </div>
         </div>
 
         <div className="toolbar">
-          <ThemeToggle />
-          <div className="search-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
+          <label className="search-wrap">
+            <span className="sr-only">Search symbol or company</span>
+            <MagnifyingGlassIcon size={16} weight="regular" aria-hidden="true" />
             <input
               className="search"
               type="search"
@@ -624,132 +626,142 @@ export default function App() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-          </div>
+          </label>
+          <ThemeToggle />
           {(authenticated || adminAuthenticated) && (
             <span className={`status status--${status.kind}`}>
               <span className="status-dot" />
               {status.label}
             </span>
           )}
-          {isFullAdmin && (
-            <label className="rf" title="Annual risk-free rate used for fair value">
-              <span>rf</span>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                value={rfRate}
-                onChange={(e) => updateRf(e.target.value)}
-              />
-              <span>%</span>
-            </label>
-          )}
           <span className="count">
             <strong>{filtered.length.toLocaleString()}</strong> stocks
           </span>
-          <button
+          <a
             className="btn"
-            onClick={() => navigate("/analytics")}
+            href="/analytics"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate("/analytics");
+            }}
             title="NIFTY options analytics: live option chain, OI change & charts"
           >
             Analytics
-          </button>
+          </a>
           {adminAuthenticated && (
-            <button
-              className={`btn${arbOnly ? " btn--primary" : ""}`}
-              onClick={() => {
-                setArbOnly((v) => {
-                  if (v) {
-                    setSortMinArb(false);
-                    setSortMaxArb(false);
-                  }
-                  return !v;
-                });
-              }}
-              title="Show only stocks where current & next month are on opposite sides (one premium, one discount)"
-            >
-              Arbitrage
-            </button>
-          )}
-          {arbOnly && (
-            <button
-              className={`btn${sortMinArb ? " btn--primary" : ""}`}
-              onClick={() => {
-                setSortMinArb((v) => !v);
-                setSortMaxArb(false);
-              }}
-              title="Sort by minimum percentage difference between current and next month futures (smallest first)"
-            >
-              Min Arb
-            </button>
-          )}
-          {arbOnly && (
-            <button
-              className={`btn${sortMaxArb ? " btn--primary" : ""}`}
-              onClick={() => {
-                setSortMaxArb((v) => !v);
-                setSortMinArb(false);
-              }}
-              title="Sort by maximum percentage difference between current and next month futures (largest first)"
-            >
-              Max Arb
-            </button>
-          )}
-          {adminAuthenticated && (
-            <button
-              className={`btn${sortOi ? " btn--primary" : ""}`}
-              onClick={() => {
-                setSortOi((v) => !v);
-              }}
-              title="Sort by mid-month futures OI (high to low)"
-            >
-              OI
-            </button>
-          )}
-          {adminAuthenticated && (
-            <button
-              className={`btn${sortSpread ? " btn--primary" : ""}`}
-              onClick={() => {
-                setSortSpread((v) => !v);
-              }}
-              title="Sort by bid-ask spread for 2nd month future (tightest first)"
-            >
-              Spread
-            </button>
-          )}
-          {adminAuthenticated && (
-            <button
-              className={`btn${sortDepth ? " btn--primary" : ""}`}
-              onClick={() => {
-                setSortDepth((v) => !v);
-              }}
-              title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
-            >
-              Depth
-            </button>
-          )}
-          {adminAuthenticated && (
-            <button
-              className="btn"
-              onClick={() => {
-                setTradesOpen(true);
-                void refreshTrades();
-              }}
-            >
-              Trades
-              {openTradeSymbols.size > 0 && (
-                <span className="btn-badge">{openTradeSymbols.size}</span>
-              )}
-            </button>
-          )}
-          {isFullAdmin && authenticated && (
-            <button
-              className="btn"
-              onClick={() => setTokenModalOpen(true)}
-              title="View & copy today's Zerodha access token"
-            >
-              Access Token
-            </button>
+            <details className="toolbar-menu">
+              <summary className="btn toolbar-menu-trigger">
+                <SlidersHorizontalIcon size={16} weight="regular" aria-hidden="true" />
+                Controls
+                {openTradeSymbols.size > 0 && (
+                  <span className="btn-badge">{openTradeSymbols.size}</span>
+                )}
+              </summary>
+              <div className="toolbar-popover">
+                {isFullAdmin && (
+                  <label className="rf" title="Annual risk-free rate used for fair value">
+                    <span>rf</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={rfRate}
+                      onChange={(e) => updateRf(e.target.value)}
+                    />
+                    <span>%</span>
+                  </label>
+                )}
+                <div className="toolbar-popover-actions">
+                  <button
+                    className={`btn${arbOnly ? " btn--primary" : ""}`}
+                    aria-pressed={arbOnly}
+                    onClick={() => {
+                      setArbOnly((v) => {
+                        if (v) {
+                          setSortMinArb(false);
+                          setSortMaxArb(false);
+                        }
+                        return !v;
+                      });
+                    }}
+                    title="Show only stocks where current & next month are on opposite sides (one premium, one discount)"
+                  >
+                    Arbitrage
+                  </button>
+                  {arbOnly && (
+                    <>
+                      <button
+                        className={`btn${sortMinArb ? " btn--primary" : ""}`}
+                        aria-pressed={sortMinArb}
+                        onClick={() => {
+                          setSortMinArb((v) => !v);
+                          setSortMaxArb(false);
+                        }}
+                        title="Sort by minimum percentage difference between current and next month futures (smallest first)"
+                      >
+                        Min Arb
+                      </button>
+                      <button
+                        className={`btn${sortMaxArb ? " btn--primary" : ""}`}
+                        aria-pressed={sortMaxArb}
+                        onClick={() => {
+                          setSortMaxArb((v) => !v);
+                          setSortMinArb(false);
+                        }}
+                        title="Sort by maximum percentage difference between current and next month futures (largest first)"
+                      >
+                        Max Arb
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className={`btn${sortOi ? " btn--primary" : ""}`}
+                    aria-pressed={sortOi}
+                    onClick={() => setSortOi((v) => !v)}
+                    title="Sort by mid-month futures OI (high to low)"
+                  >
+                    OI
+                  </button>
+                  <button
+                    className={`btn${sortSpread ? " btn--primary" : ""}`}
+                    aria-pressed={sortSpread}
+                    onClick={() => setSortSpread((v) => !v)}
+                    title="Sort by bid-ask spread for 2nd month future (tightest first)"
+                  >
+                    Spread
+                  </button>
+                  <button
+                    className={`btn${sortDepth ? " btn--primary" : ""}`}
+                    aria-pressed={sortDepth}
+                    onClick={() => setSortDepth((v) => !v)}
+                    title="Sort by total orders in top 5 bids + top 5 asks for 2nd month future (deepest first)"
+                  >
+                    Depth
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      setTradesOpen(true);
+                      void refreshTrades();
+                    }}
+                  >
+                    Trades
+                    {openTradeSymbols.size > 0 && (
+                      <span className="btn-badge">{openTradeSymbols.size}</span>
+                    )}
+                  </button>
+                  {isFullAdmin && authenticated && (
+                    <button
+                      className="btn"
+                      onClick={() => setTokenModalOpen(true)}
+                      title="View & copy today's Zerodha access token"
+                    >
+                      Access Token
+                    </button>
+                  )}
+                </div>
+              </div>
+            </details>
           )}
           {isFullAdmin ? (
             authenticated ? (

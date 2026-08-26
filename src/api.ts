@@ -48,7 +48,7 @@ function getHeaders(): HeadersInit {
  * Parse a JSON response, or throw an error that names what actually happened.
  *
  * `await res.json()` before checking `res.ok` looks harmless because the backend
- * always answers JSON — but a proxy does not. An nginx 502 or a gateway timeout
+ * always answers JSON - but a proxy does not. An nginx 502 or a gateway timeout
  * page is HTML, so `res.json()` threw FIRST and the carefully-worded
  * "… (HTTP 502)." message on the next line was unreachable; what surfaced instead
  * was `Unexpected token '<', "<html>"…`. Reading the body as text and parsing it
@@ -63,7 +63,7 @@ async function readJson<T>(res: Response, what: string): Promise<T> {
   try {
     body = text ? (JSON.parse(text) as T & { error?: string }) : null;
   } catch {
-    // Not JSON — fall through to the status-based message below.
+    // Not JSON - fall through to the status-based message below.
   }
   if (!res.ok) throw new Error(body?.error ?? `${what} (HTTP ${res.status}).`);
   // A 200 that isn't JSON is still a failure, and saying so beats handing the
@@ -220,7 +220,7 @@ export interface Trade {
   /** Real charges on the entry fills. Null for trades taken before charges
    *  were tracked, or when Zerodha couldn't price them. */
   entry_charges: TradeCharges | null;
-  /** Real charges on the exit fills — set when the trade is closed. */
+  /** Real charges on the exit fills - set when the trade is closed. */
   exit_charges: TradeCharges | null;
   /** Exit charges projected at the entry fills, so an open trade can be shown
    *  net of the whole round trip. */
@@ -749,7 +749,7 @@ export async function fetchOptionChain(
  * snapshots. Used as the baseline for the 1m/5m/15m/1h OI-change % and buildup
  * columns, so those values are correct immediately on load at any time of day.
  *
- * `tokens` is EMPTY when the cache doesn't reach back `minutes` — the server
+ * `tokens` is EMPTY when the cache doesn't reach back `minutes` - the server
  * returns nothing rather than a newer reading, so a 20-minute-old value can never
  * be presented as a 1-hour change.
  */
@@ -777,7 +777,7 @@ export async function fetchOptionOiBaseline(
 }
 
 /**
- * Previous session's closing OI + LTP per option token — the baseline for the
+ * Previous session's closing OI + LTP per option token - the baseline for the
  * chain's "Day" change column. `tokens` is empty until the server has a baseline
  * valid for today.
  */
@@ -847,7 +847,7 @@ export interface OptionOiFramePoint {
    * Inclusive strike bounds the totals were summed over.
    *
    * Two totals are only comparable when they cover the SAME strikes, so a change
-   * histogram must check these before differencing — see sameWindow in Analytics.
+   * histogram must check these before differencing - see sameWindow in Analytics.
    * The server pins the window per session, so within a session they are constant
    * and every delta survives; they differ across a re-pin (a new session, or a
    * backfill that started mid-session), and there the delta is correctly dropped.
@@ -857,7 +857,7 @@ export interface OptionOiFramePoint {
   wLo?: number;
   wHi?: number;
   /**
-   * Present when the server knows this bucket UNDERSTATES its window — a quote
+   * Present when the server knows this bucket UNDERSTATES its window - a quote
    * response that missed strikes, or a reconstruction whose history for one of
    * them was unavailable. The server publishes it and keeps trying to rebuild it,
    * so a client must treat it as "no reading" rather than as a real dip.

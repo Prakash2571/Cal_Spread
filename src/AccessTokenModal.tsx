@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { XIcon } from "@phosphor-icons/react";
 import { fetchKiteAccessToken, type KiteAccessToken } from "./api.ts";
 
 interface Props {
@@ -61,25 +62,25 @@ export default function AccessTokenModal({ onClose }: Props) {
           <div>
             <h2>Zerodha Access Token</h2>
             <p className="modal-sub">
-              Today&apos;s token{data?.login_date ? ` · ${data.login_date}` : ""}
+              Today&apos;s token{data?.login_date ? `: ${data.login_date}` : ""}
             </p>
           </div>
-          <button className="modal-x" onClick={onClose} aria-label="Close">
-            ✕
+          <button type="button" className="modal-x" onClick={onClose} aria-label="Close">
+            <XIcon size={18} weight="regular" aria-hidden="true" />
           </button>
         </header>
 
-        <div className="modal-body" style={{ padding: "1.25rem" }}>
+        <div className="modal-body token-modal-body">
           {loading ? (
-            <div className="empty" style={{ padding: "1rem" }}>
+            <div className="empty empty--compact">
               <span className="spinner" /> Loading access token…
             </div>
           ) : error ? (
-            <div className="banner banner--error" style={{ margin: 0 }}>
+            <div className="banner banner--error banner--flush">
               {error}
             </div>
           ) : data ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div className="token-stack">
               <TokenField
                 label="Access Token"
                 value={data.access_token}
@@ -122,13 +123,12 @@ function TokenField({
       <div className="token-label">
         {label}
       </div>
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "stretch" }}>
-        <code className="token-field token-value" style={{ flex: 1 }}>
+      <div className="token-row">
+        <code className="token-field token-value">
           {value}
         </code>
         <button
           className={`btn${copied ? " btn--primary" : ""}`}
-          style={{ whiteSpace: "nowrap" }}
           onClick={onCopy}
         >
           {copied ? "Copied!" : "Copy"}
