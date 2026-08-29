@@ -76,6 +76,7 @@ const REJECT_LABEL: Record<string, string> = {
   duplicate_open: "already open",
   stale_underlying: "stale underlying",
   market_closed: "market closed",
+  implausible_close: "no comparable close",
 };
 
 function fmtDateTime(iso: string): string {
@@ -384,11 +385,18 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       {status && !marketOpen && (
         <div className="banner banner--warn">
           <strong>Market closed.</strong> The prices below are the{" "}
-          <strong>last traded / closing</strong> prices, shown so you can see which boxes were
+          <strong>last traded</strong> prices from the{" "}
+          {status.indicative_session_day ?? "latest"} session, shown so you can see which boxes were
           mispriced at the close. They are not executable, so nothing will be entered and no open
-          position will be auto-exited until the market reopens.
+          position will be auto-exited until the market reopens. Only strikes that actually traded in
+          that session are used, and a box whose four closes do not form a coherent spread is left
+          out rather than shown with an impossible edge
+          {status.indicative_stale_legs > 0
+            ? ` (${status.indicative_stale_legs} leg(s) skipped as stale)`
+            : ""}
+          .
           {status.indicative_at
-            ? ` Last refreshed ${fmtDateTime(new Date(status.indicative_at).toISOString())}.`
+            ? ` Refreshed ${fmtDateTime(new Date(status.indicative_at).toISOString())}.`
             : ""}
         </div>
       )}

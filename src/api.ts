@@ -1060,6 +1060,10 @@ export interface BoxStatus {
   market_open: boolean;
   indicative_at: number | null;
   indicative_priced: number;
+  /** The trading day the last-close prices come from. */
+  indicative_session_day: string | null;
+  /** Legs discarded because they last traded in an earlier session. */
+  indicative_stale_legs: number;
   execution_mode: "paper_touch";
   authenticated: boolean;
   db_enabled: boolean;
