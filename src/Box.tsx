@@ -56,6 +56,7 @@ function Freshness({ ageMs, limit }: { ageMs: number | null; limit: number }) {
 
 const STATUS_LABEL: Record<BoxOpportunity["status"], string> = {
   WATCHING: "WATCHING",
+  INDICATIVE: "AT LAST CLOSE",
   UNPRICED: "UNPRICED",
   ELIGIBLE: "AUTO PAPER TRADE",
   PAPER_OPENED: "PAPER OPENED",
@@ -69,11 +70,12 @@ const REJECT_LABEL: Record<string, string> = {
   missing_bid: "no bid",
   missing_ask: "no ask",
   insufficient_qty: "under one lot at the touch",
-  below_gross_prefilter: "edge too small",
+  below_gross_prefilter: "spread too small",
   below_net_edge: "net edge below the requirement",
   unpriced_charges: "charges unavailable",
   duplicate_open: "already open",
   stale_underlying: "stale underlying",
+  market_closed: "market closed",
 };
 
 function fmtDateTime(iso: string): string {
@@ -260,6 +262,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
   const cfg = status?.config;
   const freshLimit = cfg?.quote_max_age_ms ?? 1500;
+  // The backend is the authority on market hours; default to "open" only once we
+  // actually have a status, so the page never claims tradability it can't back.
+  const marketOpen = status ? status.market_open : true;
 
   const eligibleCount = useMemo(
     () => opportunities.filter((o) => o.status === "ELIGIBLE").length,
@@ -329,9 +334,19 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           <span className="box-mode" title="Fills are simulated at the executable market touch">
             PAPER TOUCH
           </span>
-          <span className={`status status--${running ? (live ? "live" : "wait") : "idle"}`}>
+          <span
+            className={`status status--${
+              running ? (!marketOpen ? "wait" : live ? "live" : "wait") : "idle"
+            }`}
+          >
             <span className="status-dot" />
-            {running ? (live ? "Scanning" : "Starting…") : "Stopped"}
+            {running
+              ? !marketOpen
+                ? "Market closed"
+                : live
+                  ? "Scanning"
+                  : "Starting…"
+              : "Stopped"}
           </span>
           <button
             className={`btn ${running ? "btn--danger" : "btn--primary"}`}
@@ -364,6 +379,19 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       {status && status.last_error && (
         <div className="banner banner--warn">{status.last_error}</div>
       )}
+      {/* The single most important thing to say when the exchange is shut: these
+          are yesterday's numbers and nothing can be entered from them. */}
+      {status && !marketOpen && (
+        <div className="banner banner--warn">
+          <strong>Market closed.</strong> The prices below are the{" "}
+          <strong>last traded / closing</strong> prices, shown so you can see which boxes were
+          mispriced at the close. They are not executable, so nothing will be entered and no open
+          position will be auto-exited until the market reopens.
+          {status.indicative_at
+            ? ` Last refreshed ${fmtDateTime(new Date(status.indicative_at).toISOString())}.`
+            : ""}
+        </div>
+      )}
 
       {/* ------------------------------ status strip ----------------------- */}
       <section className="box-strip">
@@ -373,15 +401,32 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Entry requirement</span>
-          <span className="box-stat-v">{rupees(cfg?.min_net_edge ?? null)} net</span>
+          <span
+            className="box-stat-v"
+            title="Measured on the spread alone — charges are estimated and shown, but not deducted before entering"
+          >
+            {rupees(cfg?.min_gross_edge ?? null)} spread
+          </span>
         </div>
+        {cfg && cfg.min_net_edge > 0 && (
+          <div className="box-stat">
+            <span className="box-stat-k">Net floor</span>
+            <span className="box-stat-v">{rupees(cfg.min_net_edge)} net</span>
+          </div>
+        )}
         <div className="box-stat">
           <span className="box-stat-k">Safety buffer</span>
-          <span className="box-stat-v">{rupees(cfg?.safety_buffer ?? null)}</span>
+          <span className="box-stat-v" title="Reported in the net figure, not part of the entry gate">
+            {rupees(cfg?.safety_buffer ?? null)}
+          </span>
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Universe</span>
-          <span className="box-stat-v">NSE F&amp;O</span>
+          <span className="box-stat-v">F&amp;O stocks + indices</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Prices</span>
+          <span className="box-stat-v">{marketOpen ? "Executable touch" : "Last close"}</span>
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Strikes</span>
@@ -433,14 +478,16 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
         {!running && opportunities.length === 0 ? (
           <p className="box-empty">
-            The scanner is stopped. Press <strong>RUN</strong> to start discovering boxes across NSE
-            F&amp;O — only the ATM ±3 window of each underlying is monitored, so at most 21 strike
-            pairs per symbol.
+            The scanner is stopped. Press <strong>RUN</strong> to start scanning F&amp;O stock and
+            index options — only the ATM ±3 window of each underlying is monitored, so at most 21
+            strike pairs per symbol.
           </p>
         ) : opportunities.length === 0 ? (
           <p className="box-empty">
             <span className="spinner" />
-            Scanning for a box worth at least {rupees(cfg?.min_net_edge ?? 1200)} net…
+            {marketOpen
+              ? `Scanning for a box with at least ${rupees(cfg?.min_gross_edge ?? 1200)} of spread…`
+              : "Loading last-close prices…"}
           </p>
         ) : (
           <div className="box-table-wrap">
@@ -452,8 +499,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                   <th className="num">K1</th>
                   <th className="num">K2</th>
                   <th className="num">Width</th>
-                  <th className="num">Exec. cost</th>
-                  <th className="num">Gross edge</th>
+                  <th className="num">{marketOpen ? "Exec. cost" : "Close cost"}</th>
+                  <th className="num">Spread edge</th>
                   <th className="num">Entry fees</th>
                   <th className="num">Est. exit fees</th>
                   <th className="num">Safety</th>
@@ -495,7 +542,14 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                         {o.projected_net_edge === null ? "unpriced" : rupees(o.projected_net_edge)}
                       </td>
                       <td>
-                        {o.liquidity_ok ? (
+                        {o.price_source === "last_close" ? (
+                          <span
+                            className="box-liq box-liq--closed"
+                            title="Closing prices carry no bid/ask, so executable size is unknown"
+                          >
+                            n/a at close
+                          </span>
+                        ) : o.liquidity_ok ? (
                           <span className="box-liq box-liq--ok">
                             {o.lot_size} @ touch
                           </span>
@@ -509,7 +563,11 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                         )}
                       </td>
                       <td>
-                        <Freshness ageMs={o.worst_age_ms} limit={freshLimit} />
+                        {o.price_source === "last_close" ? (
+                          <span className="box-fresh box-fresh--closed">close</span>
+                        ) : (
+                          <Freshness ageMs={o.worst_age_ms} limit={freshLimit} />
+                        )}
                       </td>
                       <td>
                         <span
@@ -517,7 +575,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                           title={
                             o.status === "UNPRICED"
                               ? "Zerodha could not price the eight box orders, so this box is shown but never auto-traded"
-                              : undefined
+                              : o.status === "INDICATIVE"
+                                ? "Derived from last traded / closing prices while the market is shut — not executable, so it cannot be entered"
+                                : undefined
                           }
                         >
                           {STATUS_LABEL[o.status]}

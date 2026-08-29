@@ -3862,3 +3862,17 @@ body {
     min-width: 72px;
   }
 }
+
+
+/* Market-closed (last-close) pills. Neutral rather than green/red: a closing
+   price is neither good nor bad liquidity, it is simply not executable. */
+.box-liq--closed,
+.box-fresh--closed {
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+
+.box-status--indicative {
+  color: var(--text-2);
+  background: var(--surface-3);
+}

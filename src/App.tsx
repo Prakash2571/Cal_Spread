@@ -693,17 +693,21 @@ export default function App() {
           >
             Analytics
           </a>
-          <a
-            className="btn"
-            href="/box"
-            onClick={(event) => {
-              event.preventDefault();
-              navigate("/box");
-            }}
-            title="Box arbitrage scanner (paper trading): ATM ±3, one lot, executable touch prices"
-          >
-            Box
-          </a>
+          {/* Admin-only: the box scanner is an internal paper-trading tool and is
+              deliberately not advertised to ordinary visitors. */}
+          {adminAuthenticated && (
+            <a
+              className="btn"
+              href="/box"
+              onClick={(event) => {
+                event.preventDefault();
+                navigate("/box");
+              }}
+              title="Box arbitrage scanner (paper trading): ATM ±3, one lot, executable touch prices"
+            >
+              Box
+            </a>
+          )}
           {adminAuthenticated && (
             <details className="toolbar-menu">
               <summary className="btn toolbar-menu-trigger">

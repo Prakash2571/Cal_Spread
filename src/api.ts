@@ -965,7 +965,8 @@ export type BoxRejectReason =
   | "below_net_edge"
   | "unpriced_charges"
   | "duplicate_open"
-  | "stale_underlying";
+  | "stale_underlying"
+  | "market_closed";
 
 /** Per-leg liquidity/freshness detail behind an opportunity. */
 export interface BoxLegEvaluation {
@@ -991,6 +992,8 @@ export interface BoxLegEvaluation {
 
 export type BoxOpportunityStatus =
   | "WATCHING"
+  /** Market shut: a last-close view only, never enterable. */
+  | "INDICATIVE"
   | "UNPRICED"
   | "ELIGIBLE"
   | "PAPER_OPENED"
@@ -1016,6 +1019,8 @@ export interface BoxOpportunity {
   projected_net_edge: number | null;
   liquidity_ok: boolean;
   worst_age_ms: number | null;
+  /** "touch" = executable bid/ask (tradable). "last_close" = market shut. */
+  price_source: "touch" | "last_close";
   status: BoxOpportunityStatus;
   reject: BoxRejectReason | null;
   legs: BoxLegEvaluation[];
@@ -1023,7 +1028,11 @@ export interface BoxOpportunity {
 }
 
 export interface BoxConfigView {
+  /** THE ENTRY GATE: minimum GROSS edge (₹) from the spread alone. */
+  min_gross_edge: number;
+  /** Optional additional net floor; 0 means fees do not gate entry. */
   min_net_edge: number;
+  require_priced_charges: boolean;
   safety_buffer: number;
   quote_max_age_ms: number;
   underlying_max_age_ms: number;
@@ -1044,9 +1053,13 @@ export interface BoxConfigView {
 
 export interface BoxStatus {
   running: boolean;
-  state: "SCANNING" | "STOPPED";
+  state: "SCANNING" | "MARKET_CLOSED" | "STOPPED";
   /** Always true: open positions are managed by the backend regardless of RUN. */
   monitoring: boolean;
+  /** False → prices shown are last-close and nothing can be entered. */
+  market_open: boolean;
+  indicative_at: number | null;
+  indicative_priced: number;
   execution_mode: "paper_touch";
   authenticated: boolean;
   db_enabled: boolean;
