@@ -7,7 +7,13 @@ import {
   TrashIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import type { Tick, Trade, TradeCharges } from "./api.ts";
+import type {
+  BoxOpenPosition,
+  BoxTrade,
+  Tick,
+  Trade,
+  TradeCharges,
+} from "./api.ts";
 import { fmt, fmtMoney, formatExpiry } from "./format.ts";
 
 interface Props {
@@ -23,6 +29,28 @@ interface Props {
   onCloseTrade: (id: string) => void;
   onOpenTrade: (trade: Trade) => void;
   onDeleteTrade: (id: string) => void;
+
+  // ---- Box arbitrage (a separate strategy in a separate collection) ----
+  // Optional so the calendar-only call site stays valid: the Box tab simply
+  // shows nothing until these are supplied.
+  /** Live open box positions (from the backend's in-memory book). */
+  boxOpen?: BoxOpenPosition[];
+  /** Persisted box trades, newest first. */
+  boxTrades?: BoxTrade[];
+  boxLoading?: boolean;
+  boxError?: string | null;
+  /** Navigate to the full /box scanner page. */
+  onOpenBoxPage?: () => void;
+}
+
+/** Which strategy's trades the panel is showing. */
+type TradeKind = "calendar" | "box";
+
+/** Rupees with no decimals, for box figures. */
+function rupees(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  const sign = v < 0 ? "-" : "";
+  return `${sign}₹${Math.abs(Math.round(v)).toLocaleString("en-IN")}`;
 }
 
 function fmtDateTime(iso: string): string {
@@ -690,11 +718,18 @@ export default function TradesPanel({
   onCloseTrade,
   onOpenTrade,
   onDeleteTrade,
+  boxOpen = [],
+  boxTrades = [],
+  boxLoading = false,
+  boxError = null,
+  onOpenBoxPage,
 }: Props) {
   // Opens on the current month: the log is a working view of "this month", not
   // an archive to scroll through.
   const thisMonth = monthKey(new Date());
   const [month, setMonth] = useState(thisMonth);
+  // Calendar is the default view, so nothing about the existing workflow moves.
+  const [kind, setKind] = useState<TradeKind>("calendar");
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -750,6 +785,38 @@ export default function TradesPanel({
           </button>
         </header>
 
+        {/* Two independent strategies, two separate collections — never merged. */}
+        <div className="trade-tabs" role="tablist" aria-label="Strategy">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === "calendar"}
+            className={`btn${kind === "calendar" ? " btn--primary" : ""}`}
+            onClick={() => setKind("calendar")}
+          >
+            Calendar <span className="pill-count">{trades.length}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === "box"}
+            className={`btn${kind === "box" ? " btn--primary" : ""}`}
+            onClick={() => setKind("box")}
+          >
+            Box <span className="pill-count">{boxOpen.length + boxTrades.filter((t) => t.status !== "open").length}</span>
+          </button>
+        </div>
+
+        {kind === "box" ? (
+          <BoxTradesTab
+            open={boxOpen}
+            trades={boxTrades}
+            loading={boxLoading}
+            error={boxError}
+            onOpenBoxPage={onOpenBoxPage}
+          />
+        ) : (
+          <>
         <MonthBar
           value={month}
           onChange={setMonth}
@@ -839,7 +906,147 @@ export default function TradesPanel({
           )}
         </section>
         </div>
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The Box tab: open positions with their live net P&L, plus closed history.
+ *
+ * Deliberately a summary — the full scanner, option chain and exit thresholds
+ * live on the /box page. Box documents are a separate collection and are never
+ * mixed with the calendar trades above.
+ */
+function BoxTradesTab({
+  open,
+  trades,
+  loading,
+  error,
+  onOpenBoxPage,
+}: {
+  open: BoxOpenPosition[];
+  trades: BoxTrade[];
+  loading: boolean;
+  error: string | null;
+  onOpenBoxPage?: (() => void) | undefined;
+}) {
+  const closed = trades.filter((t) => t.status !== "open");
+  const realised = closed.reduce((acc, t) => acc + (t.net_pnl ?? 0), 0);
+  const running = open.reduce((acc, p) => acc + (p.net_pnl ?? 0), 0);
+
+  return (
+    <>
+      <div className="month-head">
+        <div className="month-stats">
+          <span className="month-stat">
+            <span className="month-stat-k">Open</span>
+            <span className="month-stat-v">{open.length}</span>
+          </span>
+          <span className="month-stat">
+            <span className="month-stat-k">Running net P&amp;L</span>
+            <span className={`month-stat-v ${pnlClass(running)}`}>{rupees(running)}</span>
+          </span>
+          <span className="month-stat">
+            <span className="month-stat-k">Closed</span>
+            <span className="month-stat-v">{closed.length}</span>
+          </span>
+          <span className="month-stat">
+            <span className="month-stat-k">Realised net P&amp;L</span>
+            <span className={`month-stat-v ${pnlClass(realised)}`}>{rupees(realised)}</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="modal-body">
+        {error && <div className="banner banner--error">{error}</div>}
+        {loading && open.length === 0 && closed.length === 0 && (
+          <div className="empty">
+            <span className="spinner" />
+            Loading box trades…
+          </div>
+        )}
+
+        <section className="trade-section">
+          <h3 className="trade-section-title">
+            Open <span className="pill-count">{open.length}</span>
+            {onOpenBoxPage && (
+              <button className="month-jump" onClick={onOpenBoxPage} title="Open the box scanner">
+                Open the Box scanner
+              </button>
+            )}
+          </h3>
+          {open.length === 0 ? (
+            <p className="trade-empty">
+              No open paper boxes. Start the scanner on the Box page to look for one.
+            </p>
+          ) : (
+            <div className="trade-list">
+              {open.map((p) => (
+                <div className="trade-card" key={p.id}>
+                  <div className="trade-head">
+                    <span className="trade-symbol">
+                      {p.underlying}
+                      {p.is_index && <span className="badge-index">INDEX</span>}
+                      <span className="box-card-strikes">
+                        {p.lower_strike} → {p.upper_strike}
+                      </span>
+                    </span>
+                    <span className="trade-spot">
+                      Net <strong className={pnlClass(p.net_pnl)}>{rupees(p.net_pnl)}</strong>
+                    </span>
+                  </div>
+                  <div className="box-tab-meta">
+                    {formatExpiry(p.expiry)} · {p.quantity} qty (1 lot) · entry edge{" "}
+                    {rupees(p.entry_net_edge)} · remaining {rupees(p.remaining_edge)} · exit at{" "}
+                    {rupees(p.convergence_threshold)} / min {rupees(p.min_exit_net_pnl)}
+                    {p.exit_eligible && (
+                      <span className="box-badge box-badge--exit">AUTO EXIT ELIGIBLE</span>
+                    )}
+                    {p.exit_blocked_reason && (
+                      <span className="box-badge box-badge--warn">EXIT HELD</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="trade-section">
+          <h3 className="trade-section-title">
+            History <span className="pill-count">{closed.length}</span>
+          </h3>
+          {closed.length === 0 ? (
+            <p className="trade-empty">No closed paper boxes yet.</p>
+          ) : (
+            <div className="trade-list">
+              {closed.map((t) => (
+                <div className="trade-card trade-card--closed" key={t.id}>
+                  <div className="trade-head">
+                    <span className="trade-symbol">
+                      {t.underlying}
+                      {t.is_index && <span className="badge-index">INDEX</span>}
+                      <span className="box-card-strikes">
+                        {t.lower_strike} → {t.upper_strike}
+                      </span>
+                    </span>
+                    <span className="trade-spot">
+                      Net <strong className={pnlClass(t.net_pnl)}>{rupees(t.net_pnl)}</strong>
+                    </span>
+                  </div>
+                  <div className="box-tab-meta">
+                    {formatExpiry(t.expiry)} · gross {rupees(t.gross_pnl)} · fees{" "}
+                    {rupees(t.total_charges)} · {t.exit_reason ?? "-"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </>
   );
 }

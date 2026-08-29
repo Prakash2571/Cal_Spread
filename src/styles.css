@@ -3287,3 +3287,578 @@ body {
   letter-spacing: 0;
   color: var(--text-3);
 }
+
+
+/* ================ Box arbitrage page ================
+   A control surface for a backend strategy: a status strip, an opportunities
+   table, the ATM ±3 chain, and the open/closed position lists. Uses only the
+   shared theme tokens, so it follows light/dark with everything else. */
+
+.box-mode {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  color: var(--warn);
+  background: var(--warn-surface);
+  border: 1px solid var(--border);
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+
+/* ---- Status strip ---- */
+.box-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-lg);
+  background: var(--data-surface);
+  box-shadow: var(--shadow-data);
+}
+
+.box-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.box-stat-k {
+  font-size: var(--fs-1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.box-stat-v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+/* ---- Sections ---- */
+.box-section {
+  margin-bottom: var(--sp-6);
+}
+
+.box-section-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+}
+
+.box-chain-meta {
+  font-family: var(--font-ui);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-regular);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+
+.box-empty {
+  margin: 0;
+  padding: var(--sp-5) var(--sp-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-lg);
+  color: var(--text-2);
+  font-size: var(--fs-4);
+  text-align: center;
+}
+
+/* ---- Tables (opportunities + closed history) ---- */
+.box-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-lg);
+  background: var(--data-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.box-table-wrap::-webkit-scrollbar {
+  height: 6px;
+}
+
+.box-table-wrap::-webkit-scrollbar-thumb {
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+}
+
+.box-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-3);
+  white-space: nowrap;
+}
+
+.box-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+  text-align: left;
+  background: var(--surface-2);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.box-table thead th.num {
+  text-align: right;
+}
+
+.box-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--data-border);
+  color: var(--text-1);
+}
+
+.box-table td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.box-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.box-table tbody tr:hover {
+  background: var(--data-surface-strong);
+}
+
+/* A qualifying box is the one row that matters — mark it, don't just colour text. */
+.box-table tbody tr.box-row--eligible {
+  background: var(--pos-surface);
+  box-shadow: inset 3px 0 0 var(--pos);
+}
+
+.box-table tbody tr.box-row--open {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.box-sym {
+  font-weight: var(--fw-semibold);
+  margin-right: var(--sp-1);
+}
+
+.box-dim {
+  color: var(--text-3);
+}
+
+.box-net {
+  font-weight: var(--fw-bold);
+}
+
+.box-reason {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-2);
+}
+
+/* ---- Pills: freshness, liquidity, status ---- */
+.box-fresh,
+.box-liq,
+.box-status,
+.box-badge {
+  display: inline-block;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  white-space: nowrap;
+}
+
+.box-fresh--ok {
+  color: var(--pos);
+  background: var(--pos-surface);
+}
+
+.box-fresh--warn {
+  color: var(--warn);
+  background: var(--warn-surface);
+}
+
+.box-fresh--bad {
+  color: var(--neg);
+  background: var(--neg-surface);
+}
+
+.box-liq--ok {
+  color: var(--pos);
+  background: var(--pos-surface);
+}
+
+.box-liq--bad {
+  color: var(--neg);
+  background: var(--neg-surface);
+}
+
+.box-status--eligible {
+  color: var(--on-accent);
+  background: var(--pos);
+}
+
+.box-status--paper_opened,
+.box-status--open {
+  color: var(--accent-text);
+  background: var(--accent-surface);
+}
+
+.box-status--unpriced {
+  color: var(--warn);
+  background: var(--warn-surface);
+}
+
+.box-status--watching {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.box-status--rejected {
+  color: var(--neg);
+  background: var(--neg-surface);
+}
+
+.box-badge--eligible,
+.box-badge--exit {
+  color: var(--on-accent);
+  background: var(--pos);
+}
+
+.box-badge--warn {
+  color: var(--warn);
+  background: var(--warn-surface);
+}
+
+/* ---- The ATM ±3 chain ---- */
+.box-chain {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: var(--fs-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.box-chain thead th {
+  padding: var(--sp-2) var(--sp-2);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+  text-align: right;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.box-chain-ce {
+  text-align: center !important;
+  color: var(--neg) !important;
+}
+
+.box-chain-pe {
+  text-align: center !important;
+  color: var(--pos) !important;
+}
+
+.box-chain-strike-h {
+  text-align: center !important;
+  color: var(--text-2) !important;
+  border-left: 1px solid var(--data-border);
+  border-right: 1px solid var(--data-border);
+}
+
+.box-chain td {
+  padding: var(--sp-2) var(--sp-2);
+  border-bottom: 1px solid var(--data-border);
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--text-1);
+}
+
+.box-chain tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.box-chain-strike {
+  text-align: center !important;
+  font-weight: var(--fw-semibold);
+  background: var(--surface-2);
+  border-left: 1px solid var(--data-border);
+  border-right: 1px solid var(--data-border);
+}
+
+.box-chain-atm {
+  background: var(--chain-itm-tint);
+}
+
+.box-chain-atm .box-chain-strike {
+  background: var(--accent-surface);
+  color: var(--accent-text);
+}
+
+.box-atm-tag {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-sm);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+}
+
+/* A cell that is one of the four legs of a detected or open box. */
+.box-chain td.box-marked {
+  font-weight: var(--fw-bold);
+  background: var(--accent-surface);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.box-leg {
+  display: inline-block;
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-sm);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+}
+
+.box-leg--buy {
+  color: var(--prem);
+  background: var(--prem-surface);
+}
+
+.box-leg--sell {
+  color: var(--disc);
+  background: var(--disc-surface);
+}
+
+/* ---- Open position cards ---- */
+.box-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.box-card {
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-lg);
+  background: var(--data-surface);
+  box-shadow: var(--shadow-data);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.box-card--exiting {
+  box-shadow: inset 3px 0 0 var(--pos), var(--shadow-data);
+}
+
+.box-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.box-card-strikes {
+  margin-left: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
+  color: var(--accent-text);
+}
+
+.box-card-head .box-chain-meta {
+  display: block;
+  margin-top: 2px;
+}
+
+.box-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* Entry fill + current exit touch, per leg. */
+.box-legs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.box-leg-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.box-leg-name {
+  min-width: 92px;
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+
+.box-leg-cell {
+  min-width: 96px;
+  color: var(--text-2);
+}
+
+.box-leg-side {
+  margin-left: var(--sp-1);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+}
+
+.box-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-2) var(--sp-3);
+}
+
+.box-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.box-metric-k {
+  font-size: var(--fs-1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.box-metric-v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+
+.box-metric--strong .box-metric-v {
+  font-size: var(--fs-6);
+  font-weight: var(--fw-bold);
+}
+
+.box-metric.pnl-pos .box-metric-v {
+  color: var(--pos);
+}
+
+.box-metric.pnl-neg .box-metric-v {
+  color: var(--neg);
+}
+
+.box-metric.muted .box-metric-v {
+  color: var(--text-3);
+}
+
+/* "Should close, but the market cannot fill it" — never hidden from the user. */
+.box-blocked {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--warn-surface);
+  box-shadow: inset 3px 0 0 var(--warn);
+  color: var(--warn);
+  font-size: var(--fs-3);
+}
+
+.box-disclaimer {
+  margin: var(--sp-6) 0 var(--sp-8);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-lg);
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  line-height: var(--lh-base);
+}
+
+.box-disclaimer strong {
+  color: var(--text-1);
+}
+
+/* ---- Trades modal: Calendar | Box tabs ---- */
+.trade-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.trade-tabs .btn {
+  gap: var(--sp-1);
+}
+
+.trade-tabs .btn--primary .pill-count {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.box-tab-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-2);
+  color: var(--text-3);
+}
+
+@media (max-width: 720px) {
+  .box-strip {
+    gap: var(--sp-2) var(--sp-4);
+  }
+  .box-leg-row {
+    font-size: var(--fs-2);
+  }
+  .box-leg-name,
+  .box-leg-cell {
+    min-width: 72px;
+  }
+}

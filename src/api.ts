@@ -932,3 +932,458 @@ export async function fetchFuturesOiFrame(
   );
   return readJson<FuturesOiFrameResponse>(res, "Failed to load futures OI frame");
 }
+
+
+// ============================================================================
+//  Box arbitrage (PAPER trading)
+//
+//  A long box on strikes K1 < K2 is BUY K1 CE / SELL K2 CE / BUY K2 PE /
+//  SELL K1 PE. It pays a fixed (K2 - K1) per unit at expiry, so the edge is the
+//  difference between that width and what the four legs cost at the executable
+//  touch.
+//
+//  These fills are SIMULATED. Nothing here places a real exchange order — see
+//  execution_mode, which is always "paper_touch".
+// ============================================================================
+
+export type BoxLegRole = "k1_ce" | "k2_ce" | "k2_pe" | "k1_pe";
+export type BoxSide = "BUY" | "SELL";
+export type BoxExitReason =
+  | "EDGE_CONVERGED"
+  | "PROFIT_CAPTURE"
+  | "MANUAL"
+  | "EXPIRY_SAFETY";
+
+/** Why a candidate was not eligible for an automatic paper entry. */
+export type BoxRejectReason =
+  | "no_quote"
+  | "stale_quote"
+  | "missing_bid"
+  | "missing_ask"
+  | "insufficient_qty"
+  | "below_gross_prefilter"
+  | "below_net_edge"
+  | "unpriced_charges"
+  | "duplicate_open"
+  | "stale_underlying";
+
+/** Per-leg liquidity/freshness detail behind an opportunity. */
+export interface BoxLegEvaluation {
+  role: BoxLegRole;
+  side: BoxSide;
+  token: number;
+  tradingsymbol: string;
+  strike: number;
+  instrument_type: "CE" | "PE";
+  /** Executable price for this side: ask for BUY, bid for SELL. */
+  price: number | null;
+  /** Quantity resting at exactly that touch price. */
+  qty_at_touch: number;
+  bid: number;
+  bid_qty: number;
+  ask: number;
+  ask_qty: number;
+  quote_at: number | null;
+  age_ms: number | null;
+  fresh: boolean;
+  executable: boolean;
+}
+
+export type BoxOpportunityStatus =
+  | "WATCHING"
+  | "UNPRICED"
+  | "ELIGIBLE"
+  | "PAPER_OPENED"
+  | "OPEN"
+  | "REJECTED";
+
+export interface BoxOpportunity {
+  key: string;
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  lower_strike: number;
+  upper_strike: number;
+  box_width: number;
+  lot_size: number;
+  quantity: number;
+  entry_box_cost: number | null;
+  gross_edge: number | null;
+  entry_charges: number | null;
+  estimated_exit_charges: number | null;
+  safety_buffer: number;
+  projected_net_edge: number | null;
+  liquidity_ok: boolean;
+  worst_age_ms: number | null;
+  status: BoxOpportunityStatus;
+  reject: BoxRejectReason | null;
+  legs: BoxLegEvaluation[];
+  updated_at: number;
+}
+
+export interface BoxConfigView {
+  min_net_edge: number;
+  safety_buffer: number;
+  quote_max_age_ms: number;
+  underlying_max_age_ms: number;
+  strikes_each_side: number;
+  max_strikes: number;
+  max_candidates_per_underlying: number;
+  prefilter_gross_threshold: number;
+  convergence_floor: number;
+  convergence_pct: number;
+  min_exit_net_pnl: number;
+  profit_capture_pct: number;
+  expiry_safety_minutes: number;
+  max_subscribed_tokens: number;
+  lots: number;
+  execution_mode: "paper_touch";
+  universe: string;
+}
+
+export interface BoxStatus {
+  running: boolean;
+  state: "SCANNING" | "STOPPED";
+  /** Always true: open positions are managed by the backend regardless of RUN. */
+  monitoring: boolean;
+  execution_mode: "paper_touch";
+  authenticated: boolean;
+  db_enabled: boolean;
+  started_at: number | null;
+  stopped_at: number | null;
+  universe_built_at: number | null;
+  underlyings: number;
+  candidates: number;
+  monitored_tokens: number;
+  subscribed_option_tokens: number;
+  subscribed_spot_tokens: number;
+  hub_subscribed: number;
+  hub_connected: boolean;
+  quotes: number;
+  quote_updates: number;
+  open_positions: number;
+  skipped_for_budget: number;
+  skipped_symbols: string[];
+  scanner: {
+    ticksApplied: number;
+    evaluations: number;
+    prefilterPasses: number;
+    chargeAttempts: number;
+    entriesOpened: number;
+    rejectedStale: number;
+    rejectedLiquidity: number;
+    rejectedFees: number;
+    rejectedDuplicate: number;
+    lastEvaluationAt: number | null;
+  };
+  monitor: {
+    cycles: number;
+    exitsTriggered: number;
+    exitsSkippedLiquidity: number;
+    lastCycleAt: number | null;
+    running: boolean;
+  };
+  charges: { calls: number; hits: number; misses: number; failures: number; inFlight: number };
+  last_error: string | null;
+  config: BoxConfigView;
+}
+
+/** One live open box position with its current exit arithmetic. */
+export interface BoxOpenPosition {
+  id: string;
+  key: string;
+  execution_mode: "paper_touch";
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  lower_strike: number;
+  upper_strike: number;
+  box_width: number;
+  lot_size: number;
+  quantity: number;
+  opened_at: string;
+  entry_box_cost: number;
+  entry_gross_edge: number;
+  entry_charges: number | null;
+  estimated_exit_charges_at_entry: number | null;
+  safety_buffer: number;
+  entry_net_edge: number;
+  entry_legs: {
+    role: BoxLegRole;
+    side: BoxSide;
+    tradingsymbol: string;
+    strike: number;
+    instrument_type: "CE" | "PE";
+    entry_price: number;
+  }[];
+  exit_legs: {
+    role: BoxLegRole;
+    side: BoxSide;
+    tradingsymbol: string;
+    price: number | null;
+    bid: number;
+    bid_qty: number;
+    ask: number;
+    ask_qty: number;
+    age_ms: number | null;
+    executable: boolean;
+    fresh: boolean;
+  }[];
+  exit_box_value: number | null;
+  gross_pnl: number | null;
+  current_exit_charges: number | null;
+  total_charges: number | null;
+  net_pnl: number | null;
+  remaining_edge: number | null;
+  convergence_threshold: number;
+  min_exit_net_pnl: number;
+  profit_capture_target: number;
+  liquidity_ok: boolean;
+  worst_age_ms: number | null;
+  exit_eligible: boolean;
+  exit_reason: BoxExitReason | null;
+  exit_rule_reason: BoxExitReason | null;
+  exit_blocked_reason: string | null;
+  expiry_safety: boolean;
+  status: "open";
+}
+
+/** One leg of a persisted box trade. */
+export interface BoxTradeLeg {
+  role: BoxLegRole;
+  token: number;
+  tradingsymbol: string;
+  exchange: string;
+  strike: number;
+  instrument_type: "CE" | "PE";
+  side: BoxSide;
+  entry_price: number;
+  entry_bid: number;
+  entry_bid_qty: number;
+  entry_ask: number;
+  entry_ask_qty: number;
+  entry_quote_at: string | null;
+  exit_price: number | null;
+  exit_bid: number | null;
+  exit_bid_qty: number | null;
+  exit_ask: number | null;
+  exit_ask_qty: number | null;
+  exit_quote_at: string | null;
+}
+
+/** A persisted box paper trade (open or closed). */
+export interface BoxTrade {
+  id: string;
+  execution_mode: "paper_touch";
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  lower_strike: number;
+  upper_strike: number;
+  lot_size: number;
+  quantity: number;
+  status: "open" | "closed" | "error";
+  legs: BoxTradeLeg[];
+  box_width: number;
+  entry_box_cost: number;
+  entry_gross_edge: number;
+  entry_charges: TradeCharges | null;
+  estimated_exit_charges: TradeCharges | null;
+  safety_buffer: number;
+  entry_net_edge: number;
+  opened_at: string;
+  current_remaining_edge: number | null;
+  exit_box_value: number | null;
+  exit_charges: TradeCharges | null;
+  gross_pnl: number | null;
+  total_charges: number | null;
+  net_pnl: number | null;
+  closed_at: string | null;
+  exit_reason: BoxExitReason | null;
+  exit_blocked_reason: string | null;
+  expiry_safety: boolean;
+  error: string | null;
+}
+
+/** One side of a strike row in the ATM±3 box chain. */
+export interface BoxChainSide {
+  token: number;
+  tradingsymbol: string;
+  bid: number;
+  bid_qty: number;
+  ask: number;
+  ask_qty: number;
+  last: number;
+  age_ms: number | null;
+  /** e.g. ["BUY_CE"] — the box legs this contract takes part in. */
+  marks: string[];
+}
+
+export interface BoxChain {
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  lot_size: number;
+  quantity: number;
+  atm_strike: number;
+  strike_step: number;
+  spot: number;
+  spot_age_ms: number;
+  strikes: {
+    strike: number;
+    is_atm: boolean;
+    ce: BoxChainSide | null;
+    pe: BoxChainSide | null;
+  }[];
+}
+
+export interface BoxChainSymbol {
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+}
+
+export async function fetchBoxStatus(): Promise<BoxStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/box/status`, { headers: getHeaders() });
+  return readJson<BoxStatus>(res, "Failed to load box scanner status");
+}
+
+export async function fetchBoxConfig(): Promise<BoxConfigView> {
+  const res = await fetch(`${API_BASE_URL}/api/box/config`, { headers: getHeaders() });
+  return readJson<BoxConfigView>(res, "Failed to load box configuration");
+}
+
+/** RUN: start discovering and auto-opening paper boxes. */
+export async function startBoxScanner(): Promise<BoxStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/box/start`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  const body = await readJson<{ ok?: boolean; status: BoxStatus }>(
+    res,
+    "Failed to start the box scanner",
+  );
+  return body.status;
+}
+
+/**
+ * STOP: stop opening NEW paper boxes.
+ *
+ * Positions already open keep being monitored and can still auto-exit — that is
+ * enforced on the backend, not here.
+ */
+export async function stopBoxScanner(): Promise<BoxStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/box/stop`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  const body = await readJson<{ ok?: boolean; status: BoxStatus }>(
+    res,
+    "Failed to stop the box scanner",
+  );
+  return body.status;
+}
+
+export async function fetchBoxOpportunities(
+  limit?: number,
+): Promise<{ opportunities: BoxOpportunity[]; status: BoxStatus }> {
+  const qs = limit ? `?limit=${limit}` : "";
+  const res = await fetch(`${API_BASE_URL}/api/box/opportunities${qs}`, {
+    headers: getHeaders(),
+  });
+  return readJson<{ opportunities: BoxOpportunity[]; status: BoxStatus }>(
+    res,
+    "Failed to load box opportunities",
+  );
+}
+
+/** The underlyings that currently have a monitored ATM±3 window. */
+export async function fetchBoxChainSymbols(): Promise<BoxChainSymbol[]> {
+  const res = await fetch(`${API_BASE_URL}/api/box/chains`, { headers: getHeaders() });
+  const body = await readJson<{ chains: BoxChainSymbol[] }>(res, "Failed to load box chains");
+  return body.chains ?? [];
+}
+
+/** The ATM±3 option chain of one underlying, with box legs marked. */
+export async function fetchBoxChain(underlying: string): Promise<BoxChain> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/box/chains?underlying=${encodeURIComponent(underlying)}`,
+    { headers: getHeaders() },
+  );
+  return readJson<BoxChain>(res, "Failed to load box option chain");
+}
+
+/** Live open box positions (in-memory on the server, so this is cheap). */
+export async function fetchBoxOpenTrades(): Promise<{
+  dbEnabled: boolean;
+  open: BoxOpenPosition[];
+}> {
+  const res = await fetch(`${API_BASE_URL}/api/box/trades/open`, { headers: getHeaders() });
+  return readJson<{ dbEnabled: boolean; open: BoxOpenPosition[] }>(
+    res,
+    "Failed to load open box trades",
+  );
+}
+
+/** Open + closed box trades from the database, newest first. */
+export async function fetchBoxTrades(): Promise<{
+  dbEnabled: boolean;
+  open: BoxOpenPosition[];
+  trades: BoxTrade[];
+}> {
+  const res = await fetch(`${API_BASE_URL}/api/box/trades`, { headers: getHeaders() });
+  return readJson<{ dbEnabled: boolean; open: BoxOpenPosition[]; trades: BoxTrade[] }>(
+    res,
+    "Failed to load box trades",
+  );
+}
+
+export async function fetchBoxHistory(limit = 300): Promise<{
+  dbEnabled: boolean;
+  trades: BoxTrade[];
+}> {
+  const res = await fetch(`${API_BASE_URL}/api/box/trades/history?limit=${limit}`, {
+    headers: getHeaders(),
+  });
+  return readJson<{ dbEnabled: boolean; trades: BoxTrade[] }>(
+    res,
+    "Failed to load box trade history",
+  );
+}
+
+/**
+ * Close an open box at the current executable touch.
+ *
+ * POST (not DELETE) to match the backend's CORS allow-list. The server REFUSES
+ * with 409 when the four-leg one-lot market is unavailable rather than inventing
+ * a price, and that message is surfaced to the user as-is.
+ */
+export async function closeBoxTrade(id: string): Promise<BoxOpenPosition[]> {
+  const res = await fetch(`${API_BASE_URL}/api/box/trades/${encodeURIComponent(id)}/close`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  const body = await readJson<{ ok?: boolean; open: BoxOpenPosition[] }>(
+    res,
+    "Failed to close the box position",
+  );
+  return body.open ?? [];
+}
+
+/** SSE URL for live box state (token in the query: EventSource cannot set headers). */
+export function boxStreamUrl(): string {
+  const url = `${API_BASE_URL}/api/box/stream`;
+  return adminToken ? `${url}?x-admin-token=${encodeURIComponent(adminToken)}` : url;
+}
+
+/** The payload of a `snapshot` frame on the box stream. */
+export interface BoxSnapshot {
+  status: BoxStatus;
+  opportunities: BoxOpportunity[];
+  open_trades: BoxOpenPosition[];
+}

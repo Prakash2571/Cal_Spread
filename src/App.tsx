@@ -19,7 +19,10 @@ import {
   deleteTrade,
   setRfRate as syncRf,
   getRfRate,
+  fetchBoxTrades,
   type BoardItem,
+  type BoxOpenPosition,
+  type BoxTrade,
   type Tick,
   type Trade,
   type AdminRole,
@@ -33,6 +36,7 @@ import StockDetail from "./StockDetail.tsx";
 import AccessTokenModal from "./AccessTokenModal.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import Analytics from "./Analytics.tsx";
+import Box from "./Box.tsx";
 import BrandMark from "./BrandMark.tsx";
 
 type TickMap = Record<number, Tick>;
@@ -79,6 +83,12 @@ export default function App() {
   // Trade whose entry/exit should be marked on the detail charts.
   const [detailTrade, setDetailTrade] = useState<Trade | null>(null);
 
+  // --- Box arbitrage trades (a separate strategy, shown in its own tab) ---
+  const [boxOpen, setBoxOpen] = useState<BoxOpenPosition[]>([]);
+  const [boxTrades, setBoxTrades] = useState<BoxTrade[]>([]);
+  const [boxLoading, setBoxLoading] = useState(false);
+  const [boxError, setBoxError] = useState<string | null>(null);
+
   // Client-side route (stock detail page + admin routes).
   const [route, setRoute] = useState<string>(() => window.location.pathname);
   function navigate(to: string) {
@@ -121,6 +131,29 @@ export default function App() {
       setTradesError(err instanceof Error ? err.message : "Failed to load trades.");
     } finally {
       setTradesLoading(false);
+    }
+  }
+
+  /**
+   * Load the box positions shown in the Trades panel's Box tab.
+   *
+   * Independent of refreshTrades on purpose: box documents live in their own
+   * collection, so a box failure must never affect the calendar list.
+   */
+  async function refreshBoxTrades() {
+    setBoxLoading(true);
+    setBoxError(null);
+    try {
+      const res = await fetchBoxTrades();
+      setBoxOpen(res.open);
+      setBoxTrades(res.trades);
+      if (!res.dbEnabled) {
+        setBoxError("Box storage isn't configured on the server (MONGODB_URI).");
+      }
+    } catch (err) {
+      setBoxError(err instanceof Error ? err.message : "Failed to load box trades.");
+    } finally {
+      setBoxLoading(false);
     }
   }
 
@@ -231,6 +264,7 @@ export default function App() {
   useEffect(() => {
     let title = "Calspread";
     if (route === "/analytics") title = "Options Analytics | Calspread";
+    if (route === "/box") title = "Box Arbitrage | Calspread";
     if (route === "/admin/verify") title = "Admin Verification | Calspread";
     if (route === "/admin/access") title = "Trade Access | Calspread";
     if (route.startsWith("/stock/")) {
@@ -554,6 +588,17 @@ export default function App() {
     return <Analytics authenticated={authenticated} onBack={() => navigate("/")} />;
   }
 
+  // Box arbitrage scanner (paper trading) — its own page, like Analytics.
+  if (route === "/box") {
+    return (
+      <Box
+        authenticated={authenticated}
+        canTrade={adminAuthenticated}
+        onBack={() => navigate("/")}
+      />
+    );
+  }
+
   // Stock detail page with price/OI history charts.
   if (route.startsWith("/stock/")) {
     const sym = decodeURIComponent(route.slice("/stock/".length));
@@ -647,6 +692,17 @@ export default function App() {
             title="NIFTY options analytics: live option chain, OI change & charts"
           >
             Analytics
+          </a>
+          <a
+            className="btn"
+            href="/box"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate("/box");
+            }}
+            title="Box arbitrage scanner (paper trading): ATM ±3, one lot, executable touch prices"
+          >
+            Box
           </a>
           {adminAuthenticated && (
             <details className="toolbar-menu">
@@ -743,6 +799,7 @@ export default function App() {
                     onClick={() => {
                       setTradesOpen(true);
                       void refreshTrades();
+                      void refreshBoxTrades();
                     }}
                   >
                     Trades
@@ -849,6 +906,14 @@ export default function App() {
           onOpenTrade={openTradeChart}
           deletingId={deletingId}
           onDeleteTrade={(id) => void handleDeleteTrade(id)}
+          boxOpen={boxOpen}
+          boxTrades={boxTrades}
+          boxLoading={boxLoading}
+          boxError={boxError}
+          onOpenBoxPage={() => {
+            setTradesOpen(false);
+            navigate("/box");
+          }}
         />
       )}
 

@@ -1,0 +1,847 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftIcon } from "@phosphor-icons/react";
+import {
+  boxStreamUrl,
+  closeBoxTrade,
+  fetchBoxChain,
+  fetchBoxHistory,
+  fetchBoxOpportunities,
+  fetchBoxStatus,
+  startBoxScanner,
+  stopBoxScanner,
+  type BoxChain,
+  type BoxOpenPosition,
+  type BoxOpportunity,
+  type BoxSnapshot,
+  type BoxStatus,
+  type BoxTrade,
+} from "./api.ts";
+import { fmt, formatExpiry } from "./format.ts";
+import ThemeToggle from "./ThemeToggle.tsx";
+
+interface Props {
+  /** Whether a Zerodha session is live on the backend (data can flow). */
+  authenticated: boolean;
+  /** True for either admin role — the box endpoints require one. */
+  canTrade: boolean;
+  onBack: () => void;
+}
+
+/** Money with no decimals — box figures are rupees, not paise. */
+function rupees(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  const sign = v < 0 ? "-" : "";
+  return `${sign}₹${Math.abs(Math.round(v)).toLocaleString("en-IN")}`;
+}
+
+function pnlClass(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "muted";
+  if (v > 0) return "pnl-pos";
+  if (v < 0) return "pnl-neg";
+  return "";
+}
+
+/** A quote age rendered as a freshness pill. */
+function Freshness({ ageMs, limit }: { ageMs: number | null; limit: number }) {
+  if (ageMs === null) {
+    return <span className="box-fresh box-fresh--bad">no book</span>;
+  }
+  const kind = ageMs <= limit ? "ok" : ageMs <= limit * 4 ? "warn" : "bad";
+  return (
+    <span className={`box-fresh box-fresh--${kind}`} title={`Book received ${ageMs}ms ago`}>
+      {ageMs < 1000 ? `${ageMs}ms` : `${(ageMs / 1000).toFixed(1)}s`}
+    </span>
+  );
+}
+
+const STATUS_LABEL: Record<BoxOpportunity["status"], string> = {
+  WATCHING: "WATCHING",
+  UNPRICED: "UNPRICED",
+  ELIGIBLE: "AUTO PAPER TRADE",
+  PAPER_OPENED: "PAPER OPENED",
+  OPEN: "OPEN",
+  REJECTED: "BLOCKED",
+};
+
+const REJECT_LABEL: Record<string, string> = {
+  no_quote: "no live book",
+  stale_quote: "stale book",
+  missing_bid: "no bid",
+  missing_ask: "no ask",
+  insufficient_qty: "under one lot at the touch",
+  below_gross_prefilter: "edge too small",
+  below_net_edge: "net edge below the requirement",
+  unpriced_charges: "charges unavailable",
+  duplicate_open: "already open",
+  stale_underlying: "stale underlying",
+};
+
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+}
+
+function duration(fromIso: string, toIso: string | null): string {
+  const a = new Date(fromIso).getTime();
+  const b = toIso ? new Date(toIso).getTime() : Date.now();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return "-";
+  const secs = Math.max(0, Math.round((b - a) / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ${secs % 60}s`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+export default function Box({ authenticated, canTrade, onBack }: Props) {
+  const [status, setStatus] = useState<BoxStatus | null>(null);
+  const [opportunities, setOpportunities] = useState<BoxOpportunity[]>([]);
+  const [open, setOpen] = useState<BoxOpenPosition[]>([]);
+  const [history, setHistory] = useState<BoxTrade[]>([]);
+  const [chain, setChain] = useState<BoxChain | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+
+  // The stream pushes a full snapshot a couple of times a second. It is buffered
+  // and flushed on an interval so a busy scanner cannot re-render this page on
+  // every frame — the backend has already made the trading decision by then.
+  const pending = useRef<BoxSnapshot | null>(null);
+
+  const running = status?.running === true;
+
+  /* --------------------------------- load -------------------------------- */
+
+  const loadStatus = useCallback(async () => {
+    try {
+      setStatus(await fetchBoxStatus());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load box status.");
+    }
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetchBoxHistory(100);
+      setHistory(res.trades);
+    } catch {
+      /* history is not critical to the control surface */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canTrade) return;
+    void loadStatus();
+    void loadHistory();
+    // A first opportunity/open snapshot, so the page is populated before the
+    // stream's first frame arrives.
+    fetchBoxOpportunities()
+      .then((r) => {
+        setOpportunities(r.opportunities);
+        setStatus(r.status);
+      })
+      .catch(() => {});
+  }, [canTrade, loadStatus, loadHistory]);
+
+  /* --------------------------------- stream ------------------------------- */
+
+  useEffect(() => {
+    if (!canTrade) return;
+    const es = new EventSource(boxStreamUrl());
+
+    const flush = window.setInterval(() => {
+      const snap = pending.current;
+      if (!snap) return;
+      pending.current = null;
+      setStatus(snap.status);
+      setOpportunities(snap.opportunities);
+      setOpen(snap.open_trades);
+    }, 400);
+
+    es.addEventListener("snapshot", (ev) => {
+      try {
+        pending.current = JSON.parse((ev as MessageEvent).data) as BoxSnapshot;
+        setLive(true);
+      } catch {
+        /* ignore a malformed frame */
+      }
+    });
+    // Entries and exits are discrete events: refresh the history immediately so a
+    // closed box appears without waiting for a poll.
+    es.addEventListener("entry", () => setLive(true));
+    es.addEventListener("exit", () => {
+      void loadHistory();
+    });
+    es.onerror = () => setLive(false);
+
+    return () => {
+      window.clearInterval(flush);
+      es.close();
+    };
+  }, [canTrade, loadHistory]);
+
+  /* --------------------------------- chain -------------------------------- */
+
+  // The expanded underlying's chain is polled on its own slow cadence; it is a
+  // visualization, not part of any decision.
+  useEffect(() => {
+    if (!expanded) {
+      setChain(null);
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      fetchBoxChain(expanded)
+        .then((c) => {
+          if (!cancelled) setChain(c);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setChain(null);
+            setError(err instanceof Error ? err.message : "Failed to load the chain.");
+          }
+        });
+    };
+    load();
+    const t = window.setInterval(load, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [expanded]);
+
+  /* -------------------------------- actions ------------------------------- */
+
+  async function toggleScanner() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = running ? await stopBoxScanner() : await startBoxScanner();
+      setStatus(next);
+      setNotice(
+        running
+          ? "Scanner stopped. No new boxes will be opened — open positions are still monitored and can still auto-exit."
+          : "Scanner running. Qualifying boxes will be paper-opened automatically.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to change the scanner state.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClose(id: string) {
+    setClosingId(id);
+    setError(null);
+    setNotice(null);
+    try {
+      setOpen(await closeBoxTrade(id));
+      setNotice("Box closed at the executable touch.");
+      void loadHistory();
+    } catch (err) {
+      // A refusal (no one-lot market) is the expected, meaningful case here.
+      setError(err instanceof Error ? err.message : "Failed to close the box.");
+    } finally {
+      setClosingId(null);
+    }
+  }
+
+  const cfg = status?.config;
+  const freshLimit = cfg?.quote_max_age_ms ?? 1500;
+
+  const eligibleCount = useMemo(
+    () => opportunities.filter((o) => o.status === "ELIGIBLE").length,
+    [opportunities],
+  );
+
+  /* --------------------------------- render ------------------------------- */
+
+  if (!canTrade) {
+    return (
+      <div className="app an-page">
+        <header className="topbar">
+          <div className="brand">
+            <a
+              className="btn an-back"
+              href="/"
+              onClick={(e) => {
+                e.preventDefault();
+                onBack();
+              }}
+              title="Back to board"
+            >
+              <ArrowLeftIcon size={16} weight="regular" aria-hidden="true" />
+              Board
+            </a>
+            <div className="card-title">
+              <h1>Box Arbitrage</h1>
+            </div>
+          </div>
+          <div className="toolbar">
+            <ThemeToggle />
+          </div>
+        </header>
+        <div className="banner banner--info">
+          The box scanner is an admin tool. Enter the access code at <code>/admin/access</code>{" "}
+          (or the admin secret at <code>/admin/verify</code>) to use it.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app an-page">
+      <header className="topbar">
+        <div className="brand">
+          <a
+            className="btn an-back"
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              onBack();
+            }}
+            title="Back to board"
+            aria-label="← Board"
+          >
+            <ArrowLeftIcon size={16} weight="regular" aria-hidden="true" />
+            Board
+          </a>
+          <div className="card-title">
+            <h1>Box Arbitrage</h1>
+            <span className="an-underline">Paper trading, one lot</span>
+          </div>
+        </div>
+
+        <div className="toolbar">
+          <ThemeToggle />
+          <span className="box-mode" title="Fills are simulated at the executable market touch">
+            PAPER TOUCH
+          </span>
+          <span className={`status status--${running ? (live ? "live" : "wait") : "idle"}`}>
+            <span className="status-dot" />
+            {running ? (live ? "Scanning" : "Starting…") : "Stopped"}
+          </span>
+          <button
+            className={`btn ${running ? "btn--danger" : "btn--primary"}`}
+            onClick={() => void toggleScanner()}
+            disabled={busy}
+            title={
+              running
+                ? "Stop opening new boxes (open positions stay monitored)"
+                : "Start discovering and auto-opening paper boxes"
+            }
+          >
+            {running ? "STOP" : "RUN"}
+          </button>
+        </div>
+      </header>
+
+      {!authenticated && (
+        <div className="banner">
+          Live box data needs a Zerodha session — an admin has to connect Zerodha first.
+        </div>
+      )}
+      {error && <div className="banner banner--error">{error}</div>}
+      {notice && !error && <div className="banner banner--info">{notice}</div>}
+      {status && !status.db_enabled && (
+        <div className="banner banner--warn">
+          Box persistence is not configured on the server (MONGODB_URI), so no paper box can be
+          recorded.
+        </div>
+      )}
+      {status && status.last_error && (
+        <div className="banner banner--warn">{status.last_error}</div>
+      )}
+
+      {/* ------------------------------ status strip ----------------------- */}
+      <section className="box-strip">
+        <div className="box-stat">
+          <span className="box-stat-k">Status</span>
+          <span className="box-stat-v">{status?.state ?? "…"}</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Entry requirement</span>
+          <span className="box-stat-v">{rupees(cfg?.min_net_edge ?? null)} net</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Safety buffer</span>
+          <span className="box-stat-v">{rupees(cfg?.safety_buffer ?? null)}</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Universe</span>
+          <span className="box-stat-v">NSE F&amp;O</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Strikes</span>
+          <span className="box-stat-v">ATM ±{cfg?.strikes_each_side ?? 3}</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Mode</span>
+          <span className="box-stat-v">PAPER TOUCH</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Lot</span>
+          <span className="box-stat-v">1</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Freshness</span>
+          <span className="box-stat-v">{freshLimit}ms</span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Watching</span>
+          <span className="box-stat-v">
+            {status?.underlyings ?? 0} underlyings, {status?.candidates ?? 0} boxes
+          </span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Monitoring</span>
+          <span className="box-stat-v">
+            {status?.open_positions ?? 0} open
+            {status?.monitor.running ? "" : " (monitor idle)"}
+          </span>
+        </div>
+      </section>
+
+      {status && status.skipped_for_budget > 0 && (
+        <div className="banner banner--warn">
+          {status.skipped_for_budget} underlying(s) are outside the live-feed token budget
+          ({cfg?.max_subscribed_tokens} instruments) and are not being scanned
+          {status.skipped_symbols.length > 0 ? `: ${status.skipped_symbols.join(", ")}…` : "."}
+        </div>
+      )}
+
+      {/* ------------------------------ opportunities ---------------------- */}
+      <section className="box-section">
+        <h2 className="box-section-title">
+          Opportunities <span className="pill-count">{opportunities.length}</span>
+          {eligibleCount > 0 && (
+            <span className="box-badge box-badge--eligible">{eligibleCount} eligible</span>
+          )}
+        </h2>
+
+        {!running && opportunities.length === 0 ? (
+          <p className="box-empty">
+            The scanner is stopped. Press <strong>RUN</strong> to start discovering boxes across NSE
+            F&amp;O — only the ATM ±3 window of each underlying is monitored, so at most 21 strike
+            pairs per symbol.
+          </p>
+        ) : opportunities.length === 0 ? (
+          <p className="box-empty">
+            <span className="spinner" />
+            Scanning for a box worth at least {rupees(cfg?.min_net_edge ?? 1200)} net…
+          </p>
+        ) : (
+          <div className="box-table-wrap">
+            <table className="box-table">
+              <thead>
+                <tr>
+                  <th>Underlying</th>
+                  <th>Expiry</th>
+                  <th className="num">K1</th>
+                  <th className="num">K2</th>
+                  <th className="num">Width</th>
+                  <th className="num">Exec. cost</th>
+                  <th className="num">Gross edge</th>
+                  <th className="num">Entry fees</th>
+                  <th className="num">Est. exit fees</th>
+                  <th className="num">Safety</th>
+                  <th className="num">Net edge</th>
+                  <th>Liquidity</th>
+                  <th>Fresh</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {opportunities.map((o) => {
+                  const isOpen = o.status === "OPEN" || o.status === "PAPER_OPENED";
+                  return (
+                    <tr
+                      key={o.key}
+                      className={
+                        o.status === "ELIGIBLE"
+                          ? "box-row--eligible"
+                          : isOpen
+                            ? "box-row--open"
+                            : undefined
+                      }
+                    >
+                      <td>
+                        <span className="box-sym">{o.underlying}</span>
+                        {o.is_index && <span className="badge-index">INDEX</span>}
+                      </td>
+                      <td className="box-dim">{formatExpiry(o.expiry)}</td>
+                      <td className="num">{o.lower_strike}</td>
+                      <td className="num">{o.upper_strike}</td>
+                      <td className="num">{o.box_width}</td>
+                      <td className="num">{rupees(o.entry_box_cost)}</td>
+                      <td className={`num ${pnlClass(o.gross_edge)}`}>{rupees(o.gross_edge)}</td>
+                      <td className="num box-dim">{rupees(o.entry_charges)}</td>
+                      <td className="num box-dim">{rupees(o.estimated_exit_charges)}</td>
+                      <td className="num box-dim">{rupees(o.safety_buffer)}</td>
+                      <td className={`num box-net ${pnlClass(o.projected_net_edge)}`}>
+                        {o.projected_net_edge === null ? "unpriced" : rupees(o.projected_net_edge)}
+                      </td>
+                      <td>
+                        {o.liquidity_ok ? (
+                          <span className="box-liq box-liq--ok">
+                            {o.lot_size} @ touch
+                          </span>
+                        ) : (
+                          <span
+                            className="box-liq box-liq--bad"
+                            title={o.reject ? REJECT_LABEL[o.reject] ?? o.reject : "not executable"}
+                          >
+                            {o.reject ? REJECT_LABEL[o.reject] ?? o.reject : "thin"}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <Freshness ageMs={o.worst_age_ms} limit={freshLimit} />
+                      </td>
+                      <td>
+                        <span
+                          className={`box-status box-status--${o.status.toLowerCase()}`}
+                          title={
+                            o.status === "UNPRICED"
+                              ? "Zerodha could not price the eight box orders, so this box is shown but never auto-traded"
+                              : undefined
+                          }
+                        >
+                          {STATUS_LABEL[o.status]}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn--sm"
+                          onClick={() =>
+                            setExpanded((cur) => (cur === o.underlying ? null : o.underlying))
+                          }
+                          title="Show this underlying's ATM ±3 chain"
+                        >
+                          {expanded === o.underlying ? "Hide chain" : "Chain"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* --------------------------------- chain --------------------------- */}
+      {expanded && (
+        <section className="box-section">
+          <h2 className="box-section-title">
+            {expanded} chain
+            {chain && (
+              <span className="box-chain-meta">
+                {formatExpiry(chain.expiry)} · spot {fmt(chain.spot)} · ATM {chain.atm_strike} · lot{" "}
+                {chain.lot_size}
+              </span>
+            )}
+          </h2>
+          {!chain ? (
+            <p className="box-empty">
+              <span className="spinner" />
+              Loading the ATM ±3 window…
+            </p>
+          ) : (
+            <div className="box-table-wrap">
+              <table className="box-chain">
+                <thead>
+                  <tr>
+                    <th colSpan={4} className="box-chain-ce">
+                      CALLS
+                    </th>
+                    <th className="box-chain-strike-h">STRIKE</th>
+                    <th colSpan={4} className="box-chain-pe">
+                      PUTS
+                    </th>
+                  </tr>
+                  <tr>
+                    <th className="num">BidQty</th>
+                    <th className="num">Bid</th>
+                    <th className="num">Ask</th>
+                    <th className="num">AskQty</th>
+                    <th className="box-chain-strike-h" />
+                    <th className="num">BidQty</th>
+                    <th className="num">Bid</th>
+                    <th className="num">Ask</th>
+                    <th className="num">AskQty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chain.strikes.map((row) => (
+                    <tr key={row.strike} className={row.is_atm ? "box-chain-atm" : undefined}>
+                      <td className="num">{row.ce?.bid_qty || "-"}</td>
+                      <td className={`num ${markClass(row.ce?.marks, "SELL_CE")}`}>
+                        {row.ce?.bid ? fmt(row.ce.bid) : "-"}
+                        {hasMark(row.ce?.marks, "SELL_CE") && (
+                          <span className="box-leg box-leg--sell">SELL</span>
+                        )}
+                      </td>
+                      <td className={`num ${markClass(row.ce?.marks, "BUY_CE")}`}>
+                        {row.ce?.ask ? fmt(row.ce.ask) : "-"}
+                        {hasMark(row.ce?.marks, "BUY_CE") && (
+                          <span className="box-leg box-leg--buy">BUY</span>
+                        )}
+                      </td>
+                      <td className="num">{row.ce?.ask_qty || "-"}</td>
+                      <td className="box-chain-strike">
+                        {row.strike}
+                        {row.is_atm && <span className="box-atm-tag">ATM</span>}
+                      </td>
+                      <td className="num">{row.pe?.bid_qty || "-"}</td>
+                      <td className={`num ${markClass(row.pe?.marks, "SELL_PE")}`}>
+                        {row.pe?.bid ? fmt(row.pe.bid) : "-"}
+                        {hasMark(row.pe?.marks, "SELL_PE") && (
+                          <span className="box-leg box-leg--sell">SELL</span>
+                        )}
+                      </td>
+                      <td className={`num ${markClass(row.pe?.marks, "BUY_PE")}`}>
+                        {row.pe?.ask ? fmt(row.pe.ask) : "-"}
+                        {hasMark(row.pe?.marks, "BUY_PE") && (
+                          <span className="box-leg box-leg--buy">BUY</span>
+                        )}
+                      </td>
+                      <td className="num">{row.pe?.ask_qty || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ------------------------------- open boxes ------------------------ */}
+      <section className="box-section">
+        <h2 className="box-section-title">
+          Open box trades <span className="pill-count">{open.length}</span>
+          <span className="box-chain-meta">
+            Monitored by the backend — this continues with the scanner stopped and the browser
+            closed.
+          </span>
+        </h2>
+        {open.length === 0 ? (
+          <p className="box-empty">No open paper boxes.</p>
+        ) : (
+          <div className="box-cards">
+            {open.map((p) => (
+              <OpenBoxCard
+                key={p.id}
+                p={p}
+                freshLimit={freshLimit}
+                closing={closingId === p.id}
+                onClose={() => void handleClose(p.id)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ------------------------------ closed boxes ----------------------- */}
+      <section className="box-section">
+        <h2 className="box-section-title">
+          Closed box trades <span className="pill-count">{history.length}</span>
+        </h2>
+        {history.length === 0 ? (
+          <p className="box-empty">No closed paper boxes yet.</p>
+        ) : (
+          <div className="box-table-wrap">
+            <table className="box-table">
+              <thead>
+                <tr>
+                  <th>Underlying</th>
+                  <th>Expiry</th>
+                  <th className="num">K1 → K2</th>
+                  <th>Opened</th>
+                  <th>Closed</th>
+                  <th className="num">Held</th>
+                  <th className="num">Entry cost</th>
+                  <th className="num">Exit value</th>
+                  <th className="num">Entry fees</th>
+                  <th className="num">Exit fees</th>
+                  <th className="num">Total fees</th>
+                  <th className="num">Gross P&amp;L</th>
+                  <th className="num">Net P&amp;L</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((t) => (
+                  <tr key={t.id}>
+                    <td>
+                      <span className="box-sym">{t.underlying}</span>
+                      {t.is_index && <span className="badge-index">INDEX</span>}
+                    </td>
+                    <td className="box-dim">{formatExpiry(t.expiry)}</td>
+                    <td className="num">
+                      {t.lower_strike} → {t.upper_strike}
+                    </td>
+                    <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
+                    <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
+                    <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
+                    <td className="num">{rupees(t.entry_box_cost)}</td>
+                    <td className="num">{rupees(t.exit_box_value)}</td>
+                    <td className="num box-dim">{rupees(t.entry_charges?.total ?? null)}</td>
+                    <td className="num box-dim">{rupees(t.exit_charges?.total ?? null)}</td>
+                    <td className="num box-dim">{rupees(t.total_charges)}</td>
+                    <td className={`num ${pnlClass(t.gross_pnl)}`}>{rupees(t.gross_pnl)}</td>
+                    <td className={`num box-net ${pnlClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
+                    <td>
+                      <span className="box-reason">{t.exit_reason ?? "-"}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <p className="box-disclaimer">
+        <strong>Paper execution.</strong> Every box above is simulated. A paper fill assumes all
+        four one-lot legs were simultaneously executable at the touch recorded in that snapshot.
+        Real trading can differ because of inter-leg latency, queue position, depth disappearing,
+        partial fills, order rejection and legging risk. These are not exchange fills.
+      </p>
+    </div>
+  );
+}
+
+function hasMark(marks: string[] | undefined, mark: string): boolean {
+  return !!marks && marks.includes(mark);
+}
+
+function markClass(marks: string[] | undefined, mark: string): string {
+  return hasMark(marks, mark) ? "box-marked" : "";
+}
+
+/** One live open box, with its entry fills and current exit arithmetic. */
+function OpenBoxCard({
+  p,
+  freshLimit,
+  closing,
+  onClose,
+}: {
+  p: BoxOpenPosition;
+  freshLimit: number;
+  closing: boolean;
+  onClose: () => void;
+}) {
+  const exitByRole = new Map(p.exit_legs.map((l) => [l.role, l]));
+  return (
+    <div className={`box-card${p.exit_eligible ? " box-card--exiting" : ""}`}>
+      <div className="box-card-head">
+        <div>
+          <span className="box-sym">{p.underlying}</span>
+          {p.is_index && <span className="badge-index">INDEX</span>}
+          <span className="box-card-strikes">
+            {p.lower_strike} → {p.upper_strike}
+          </span>
+          <span className="box-chain-meta">
+            {formatExpiry(p.expiry)} · {p.quantity} qty (1 lot) · held{" "}
+            {duration(p.opened_at, null)}
+          </span>
+        </div>
+        <div className="box-card-actions">
+          {p.exit_eligible && <span className="box-badge box-badge--exit">AUTO EXIT ELIGIBLE</span>}
+          {p.expiry_safety && <span className="box-badge box-badge--warn">EXPIRY SAFETY</span>}
+          <button
+            className="btn btn--sm"
+            onClick={onClose}
+            disabled={closing}
+            title="Close now at the current executable touch"
+          >
+            {closing ? "Closing…" : "Close now"}
+          </button>
+        </div>
+      </div>
+
+      <div className="box-legs">
+        {p.entry_legs.map((leg) => {
+          const ex = exitByRole.get(leg.role);
+          return (
+            <div className="box-leg-row" key={leg.role}>
+              <span className={`leg-tag ${leg.side === "BUY" ? "tag-buy" : "tag-sell"}`}>
+                {leg.side}
+              </span>
+              <span className="box-leg-name">
+                {leg.strike} {leg.instrument_type}
+              </span>
+              <span className="box-leg-cell">
+                @ {fmt(leg.entry_price)}
+                <span className="box-leg-side">
+                  {leg.side === "BUY" ? "ask" : "bid"}
+                </span>
+              </span>
+              <span className={`leg-tag ${ex?.side === "BUY" ? "tag-buy" : "tag-sell"}`}>
+                {ex?.side ?? "-"}
+              </span>
+              <span className="box-leg-cell">
+                {ex?.price ? fmt(ex.price) : "-"}
+                <span className="box-leg-side">{ex?.side === "BUY" ? "ask" : "bid"}</span>
+              </span>
+              <span className="box-leg-cell box-dim">
+                {ex ? `${ex.side === "BUY" ? ex.ask_qty : ex.bid_qty} @ touch` : "-"}
+              </span>
+              <Freshness ageMs={ex?.age_ms ?? null} limit={freshLimit} />
+              {ex && !ex.executable && <span className="box-liq box-liq--bad">thin</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="box-card-grid">
+        <Metric label="Original net edge" value={rupees(p.entry_net_edge)} />
+        <Metric label="Entry cost" value={rupees(p.entry_box_cost)} />
+        <Metric label="Exit value now" value={rupees(p.exit_box_value)} />
+        <Metric label="Gross P&L" value={rupees(p.gross_pnl)} cls={pnlClass(p.gross_pnl)} />
+        <Metric label="Entry fees" value={rupees(p.entry_charges)} />
+        <Metric label="Est. exit fees" value={rupees(p.current_exit_charges)} />
+        <Metric label="Total charges" value={rupees(p.total_charges)} />
+        <Metric
+          label="CURRENT NET P&L"
+          value={rupees(p.net_pnl)}
+          cls={`box-metric--strong ${pnlClass(p.net_pnl)}`}
+        />
+        <Metric label="Remaining edge" value={rupees(p.remaining_edge)} />
+        <Metric label="Exit threshold" value={rupees(p.convergence_threshold)} />
+        <Metric label="Min exit profit" value={rupees(p.min_exit_net_pnl)} />
+        <Metric label="Profit capture at" value={rupees(p.profit_capture_target)} />
+      </div>
+
+      {p.exit_blocked_reason && (
+        <p className="box-blocked">
+          Exit held back: {p.exit_blocked_reason}. The position stays open and keeps being
+          monitored — no fill is invented.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Metric({ label, value, cls }: { label: string; value: string; cls?: string }) {
+  return (
+    <div className={`box-metric ${cls ?? ""}`}>
+      <span className="box-metric-k">{label}</span>
+      <span className="box-metric-v">{value}</span>
+    </div>
+  );
+}
