@@ -25,6 +25,7 @@ import { DirectionBadge } from "./BoxDirection.tsx";
 import { BoxExecutionHealth } from "./BoxExecutionHealth.tsx";
 import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
 import { BoxDayPnlStrip } from "./BoxDayPnl.tsx";
+import { BoxHelp } from "./BoxHelp.tsx";
 
 interface Props {
   /** Whether a Zerodha session is live on the backend (data can flow). */
@@ -476,6 +477,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
 
         <div className="toolbar">
+          <BoxHelp />
           <ThemeToggle />
           <span
             className="box-mode"
