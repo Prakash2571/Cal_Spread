@@ -128,6 +128,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const [history, setHistory] = useState<BoxTrade[]>([]);
   const [chain, setChain] = useState<BoxChain | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  /** The exact strike pair whose four legs should be highlighted in the chain. */
+  const [selectedPair, setSelectedPair] = useState<{ k1: number; k2: number } | null>(null);
   /** Which of the three jobs the page is showing. */
   const [view, setView] = useState<"opportunities" | "open" | "history">("opportunities");
   const [busy, setBusy] = useState(false);
@@ -721,12 +723,28 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                       <td>
                         <button
                           className="btn btn--sm"
-                          onClick={() =>
-                            setExpanded((cur) => (cur === o.underlying ? null : o.underlying))
-                          }
-                          title="Show this underlying's ATM ±3 chain"
+                          onClick={() => {
+                            const same =
+                              expanded === o.underlying &&
+                              selectedPair?.k1 === o.lower_strike &&
+                              selectedPair?.k2 === o.upper_strike;
+                            if (same) {
+                              setExpanded(null);
+                              setSelectedPair(null);
+                            } else {
+                              setExpanded(o.underlying);
+                              // Pin THIS row's pair so the chain marks exactly its
+                              // four legs, not just aggregate box marks.
+                              setSelectedPair({ k1: o.lower_strike, k2: o.upper_strike });
+                            }
+                          }}
+                          title="Show this box's four legs in the ATM ±3 chain"
                         >
-                          {expanded === o.underlying ? "Hide chain" : "Chain"}
+                          {expanded === o.underlying &&
+                          selectedPair?.k1 === o.lower_strike &&
+                          selectedPair?.k2 === o.upper_strike
+                            ? "Hide legs"
+                            : "Show legs"}
                         </button>
                       </td>
                     </tr>
@@ -757,6 +775,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
               Loading the ATM ±3 window…
             </p>
           ) : (
+            <>
+            {selectedPair && (
+              <BoxLegSummary chain={chain} pair={selectedPair} />
+            )}
             <div className="box-table-wrap">
               <table className="box-chain">
                 <thead>
@@ -782,45 +804,62 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {chain.strikes.map((row) => (
-                    <tr key={row.strike} className={row.is_atm ? "box-chain-atm" : undefined}>
+                  {chain.strikes.map((row) => {
+                    // When a specific box row is selected, mark EXACTLY its four
+                    // legs; otherwise fall back to the aggregate detected-box marks.
+                    const ceSide = selectedPair
+                      ? boxLegSide(selectedPair, row.strike, "CE")
+                      : hasMark(row.ce?.marks, "BUY_CE")
+                        ? "BUY"
+                        : hasMark(row.ce?.marks, "SELL_CE")
+                          ? "SELL"
+                          : null;
+                    const peSide = selectedPair
+                      ? boxLegSide(selectedPair, row.strike, "PE")
+                      : hasMark(row.pe?.marks, "BUY_PE")
+                        ? "BUY"
+                        : hasMark(row.pe?.marks, "SELL_PE")
+                          ? "SELL"
+                          : null;
+                    const inPair =
+                      !!selectedPair &&
+                      (row.strike === selectedPair.k1 || row.strike === selectedPair.k2);
+                    return (
+                    <tr
+                      key={row.strike}
+                      className={`${row.is_atm ? "box-chain-atm" : ""}${inPair ? " box-chain-leg-row" : ""}`}
+                    >
                       <td className="num">{row.ce?.bid_qty || "-"}</td>
-                      <td className={`num ${markClass(row.ce?.marks, "SELL_CE")}`}>
+                      <td className={`num ${ceSide === "SELL" ? "box-marked" : ""}`}>
                         {row.ce?.bid ? fmt(row.ce.bid) : "-"}
-                        {hasMark(row.ce?.marks, "SELL_CE") && (
-                          <span className="box-leg box-leg--sell">SELL</span>
-                        )}
+                        {ceSide === "SELL" && <span className="box-leg box-leg--sell">SELL</span>}
                       </td>
-                      <td className={`num ${markClass(row.ce?.marks, "BUY_CE")}`}>
+                      <td className={`num ${ceSide === "BUY" ? "box-marked" : ""}`}>
                         {row.ce?.ask ? fmt(row.ce.ask) : "-"}
-                        {hasMark(row.ce?.marks, "BUY_CE") && (
-                          <span className="box-leg box-leg--buy">BUY</span>
-                        )}
+                        {ceSide === "BUY" && <span className="box-leg box-leg--buy">BUY</span>}
                       </td>
                       <td className="num">{row.ce?.ask_qty || "-"}</td>
-                      <td className="box-chain-strike">
+                      <td className="box-chain-strike" title={row.ce?.tradingsymbol ?? ""}>
                         {row.strike}
                         {row.is_atm && <span className="box-atm-tag">ATM</span>}
                       </td>
                       <td className="num">{row.pe?.bid_qty || "-"}</td>
-                      <td className={`num ${markClass(row.pe?.marks, "SELL_PE")}`}>
+                      <td className={`num ${peSide === "SELL" ? "box-marked" : ""}`}>
                         {row.pe?.bid ? fmt(row.pe.bid) : "-"}
-                        {hasMark(row.pe?.marks, "SELL_PE") && (
-                          <span className="box-leg box-leg--sell">SELL</span>
-                        )}
+                        {peSide === "SELL" && <span className="box-leg box-leg--sell">SELL</span>}
                       </td>
-                      <td className={`num ${markClass(row.pe?.marks, "BUY_PE")}`}>
+                      <td className={`num ${peSide === "BUY" ? "box-marked" : ""}`}>
                         {row.pe?.ask ? fmt(row.pe.ask) : "-"}
-                        {hasMark(row.pe?.marks, "BUY_PE") && (
-                          <span className="box-leg box-leg--buy">BUY</span>
-                        )}
+                        {peSide === "BUY" && <span className="box-leg box-leg--buy">BUY</span>}
                       </td>
                       <td className="num">{row.pe?.ask_qty || "-"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
       )}
@@ -934,8 +973,22 @@ function hasMark(marks: string[] | undefined, mark: string): boolean {
   return !!marks && marks.includes(mark);
 }
 
-function markClass(marks: string[] | undefined, mark: string): string {
-  return hasMark(marks, mark) ? "box-marked" : "";
+/**
+ * The side a given (strike, CE/PE) cell trades for a specific long box K1<K2:
+ *   BUY  K1 CE   SELL K2 CE   BUY  K2 PE   SELL K1 PE
+ * Returns null for any cell that is not one of that box's four legs.
+ */
+function boxLegSide(
+  pair: { k1: number; k2: number } | null,
+  strike: number,
+  type: "CE" | "PE",
+): "BUY" | "SELL" | null {
+  if (!pair) return null;
+  if (type === "CE" && strike === pair.k1) return "BUY";
+  if (type === "CE" && strike === pair.k2) return "SELL";
+  if (type === "PE" && strike === pair.k2) return "BUY";
+  if (type === "PE" && strike === pair.k1) return "SELL";
+  return null;
 }
 
 /** One live open box, with its entry fills and current exit arithmetic. */
@@ -1045,6 +1098,60 @@ function OpenBoxCard({
           monitored — no fill is invented.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The four exact contracts a selected box is monitoring, so the strikes and
+ * trading symbols can be checked against Zerodha directly.
+ */
+function BoxLegSummary({
+  chain,
+  pair,
+}: {
+  chain: BoxChain;
+  pair: { k1: number; k2: number };
+}) {
+  const k1 = chain.strikes.find((s) => s.strike === pair.k1);
+  const k2 = chain.strikes.find((s) => s.strike === pair.k2);
+  const legs = [
+    { role: "K1 CE", side: "BUY" as const, side_price: "ask", side_of: k1?.ce },
+    { role: "K2 CE", side: "SELL" as const, side_price: "bid", side_of: k2?.ce },
+    { role: "K2 PE", side: "BUY" as const, side_price: "ask", side_of: k2?.pe },
+    { role: "K1 PE", side: "SELL" as const, side_price: "bid", side_of: k1?.pe },
+  ];
+  return (
+    <div className="box-legsum">
+      <div className="box-legsum-head">
+        Monitoring these four legs for {chain.underlying} {pair.k1} → {pair.k2}
+        <span className="box-chain-meta">
+          fills at the touch: BUY = ask, SELL = bid · verify the symbols against Zerodha
+        </span>
+      </div>
+      <div className="box-legsum-grid">
+        {legs.map((l) => {
+          const q = l.side_of;
+          const fill = q ? (l.side === "BUY" ? q.ask : q.bid) : 0;
+          const qty = q ? (l.side === "BUY" ? q.ask_qty : q.bid_qty) : 0;
+          return (
+            <div className="box-legsum-leg" key={l.role}>
+              <span className={`leg-tag ${l.side === "BUY" ? "tag-buy" : "tag-sell"}`}>
+                {l.side}
+              </span>
+              <span className="box-legsum-role">{l.role}</span>
+              <span className="box-legsum-sym" title={q?.tradingsymbol ?? "not in the window"}>
+                {q?.tradingsymbol ?? "—"}
+              </span>
+              <span className="box-legsum-px">
+                {fill ? fmt(fill) : "-"}
+                <span className="box-leg-side"> {l.side_price}</span>
+              </span>
+              <span className="box-legsum-qty">{qty ? `${qty} qty` : "no size"}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

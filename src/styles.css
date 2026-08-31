@@ -3951,3 +3951,76 @@ body {
   color: var(--text-2);
   font-size: var(--fs-3);
 }
+
+
+/* ---- Box: the four monitored legs of a selected box ---- */
+.box-legsum {
+  margin-bottom: var(--sp-3);
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-lg);
+  background: var(--data-surface);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.box-legsum-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+
+.box-legsum-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-2);
+}
+
+.box-legsum-leg {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-md);
+  background: var(--surface-0);
+  font-size: var(--fs-3);
+}
+
+.box-legsum-role {
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.box-legsum-sym {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-1);
+}
+
+.box-legsum-px {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.box-legsum-qty {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* The two strike rows of the selected box, lightly lifted in the chain. */
+.box-chain tbody tr.box-chain-leg-row td {
+  background: var(--accent-surface);
+}
