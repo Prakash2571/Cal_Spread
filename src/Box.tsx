@@ -306,6 +306,14 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     () => history.reduce((acc, t) => acc + (t.net_pnl ?? 0), 0),
     [history],
   );
+  const closedFees = useMemo(
+    () => history.reduce((acc, t) => acc + (t.total_charges ?? 0), 0),
+    [history],
+  );
+  const closedGross = useMemo(
+    () => history.reduce((acc, t) => acc + (t.gross_pnl ?? 0), 0),
+    [history],
+  );
 
   /* --------------------------------- render ------------------------------- */
 
@@ -595,9 +603,13 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         >
           Closed trades <span className="pill-count">{history.length}</span>
         </button>
-        {view === "history" && closedNet !== 0 && (
-          <span className={`box-views-total ${pnlClass(closedNet)}`}>
-            Realised {rupees(closedNet)}
+        {view === "history" && history.length > 0 && (
+          <span className="box-views-total">
+            <span className="box-dim">Gross {rupees(closedGross)}</span>
+            {"  −  "}
+            <span className="box-dim">Fees {rupees(closedFees)}</span>
+            {"  =  "}
+            <span className={pnlClass(closedNet)}>Net {rupees(closedNet)}</span>
           </span>
         )}
       </nav>
