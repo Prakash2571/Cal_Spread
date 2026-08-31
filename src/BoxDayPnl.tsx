@@ -4,9 +4,7 @@
  * Shows the RUNNING day P&L the backend computes: the sum of open positions'
  * current net P&L, the realised net of trades closed today, and their total. The
  * backend is the sole authority for these figures (they come off the same
- * touch-based metrics the monitor uses); this only renders them. When the Redis
- * (Upstash) P&L cache is enabled a small "cached" marker notes that the figure is
- * being mirrored and archived nightly.
+ * touch-based metrics the monitor uses); this only renders them.
  */
 
 import type { BoxDayPnl } from "./api";
