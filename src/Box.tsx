@@ -4,6 +4,7 @@ import {
   boxStreamUrl,
   closeBoxTrade,
   fetchBoxChain,
+  fetchBoxExecutionAttempts,
   fetchBoxHistory,
   fetchBoxOpportunities,
   fetchBoxStatus,
@@ -11,6 +12,7 @@ import {
   startBoxScanner,
   stopBoxScanner,
   type BoxChain,
+  type BoxExecutionAttempt,
   type BoxOpenPosition,
   type BoxOpportunity,
   type BoxSnapshot,
@@ -20,6 +22,8 @@ import {
 import { fmt, formatExpiry } from "./format.ts";
 import ThemeToggle from "./ThemeToggle.tsx";
 import { DirectionBadge } from "./BoxDirection.tsx";
+import { BoxExecutionHealth } from "./BoxExecutionHealth.tsx";
+import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
 
 interface Props {
   /** Whether a Zerodha session is live on the backend (data can flow). */
@@ -159,6 +163,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const [selectedPair, setSelectedPair] = useState<{ k1: number; k2: number } | null>(null);
   /** Which of the three jobs the page is showing. */
   const [view, setView] = useState<"opportunities" | "open" | "history">("opportunities");
+  /** Aborted paper_legging execution attempts (loaded lazily on the History tab). */
+  const [attempts, setAttempts] = useState<BoxExecutionAttempt[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -692,6 +698,11 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       {/* One view at a time. The scanner, open book and history are three
           different jobs, and stacking them made the page a scroll-fest — but the
           counts stay on the tabs so nothing important is hidden behind a click. */}
+      <BoxExecutionHealth
+        metrics={status?.metrics}
+        mode={status?.execution_mode ?? "paper_latency"}
+      />
+
       <nav className="box-views" role="tablist" aria-label="Box view">
         <button
           type="button"
@@ -727,6 +738,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           onClick={() => {
             setView("history");
             void loadHistory();
+            void fetchBoxExecutionAttempts(100).then(setAttempts).catch(() => {});
           }}
         >
           Closed trades <span className="pill-count">{history.length}</span>
@@ -1130,6 +1142,15 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
             ))}
           </div>
         )}
+
+        <h2 className="box-section-title box-section-title--sub">
+          Aborted legging executions <span className="pill-count">{attempts.length}</span>
+          <span className="box-chain-meta">
+            Partial fills that had to be emergency-unwound at a loss — not trades, but they cost
+            money, so they count against strategy P&amp;L.
+          </span>
+        </h2>
+        <BoxExecutionAttempts attempts={attempts} />
       </section>
       )}
 

@@ -975,7 +975,7 @@ export type BoxRejectReason =
 export type BoxDirection = "LONG_BOX" | "SHORT_BOX";
 
 /** How a paper fill is simulated. */
-export type BoxExecutionMode = "paper_touch" | "paper_latency";
+export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging";
 
 /** Where a charge figure came from. */
 export type BoxChargeOrigin = "local" | "kite" | "local_verified";
@@ -1093,6 +1093,11 @@ export interface BoxConfigView {
   max_subscribed_tokens: number;
   lots: number;
   universe: string;
+  /** paper_legging controls (present on newer backends). */
+  leg_execution_mode?: "parallel" | "sequential";
+  leg_timeout_ms?: number;
+  /** Whether the exit floor is judged on realisable net pre-execution. */
+  exit_use_realisable_net?: boolean;
 }
 
 export interface BoxStatus {
@@ -1234,6 +1239,55 @@ export interface BoxMetricsSnapshot {
     discrepancy_rupees: RingSummary | null;
     discrepancy_pct: RingSummary | null;
   };
+  /** paper_legging execution-health rollup (present once the mode has run). */
+  legging?: {
+    outcomes: {
+      "4_of_4": number;
+      "3_of_4": number;
+      "2_of_4": number;
+      "1_of_4": number;
+      "0_of_4": number;
+      total: number;
+      aborts: number;
+    };
+    fill_rate_4_of_4: number;
+    failure_rate_3_of_4: number;
+    failure_rate_2_of_4: number;
+    failure_rate_1_of_4: number;
+    legging_net_loss: RingSummary | null;
+    first_to_last_fill_ms: RingSummary | null;
+    most_failing_role: { role: string; count: number } | null;
+    failing_roles: Record<string, number>;
+    expected_vs_realised_net: RingSummary | null;
+  };
+}
+
+/** A paper_legging execution attempt that did not open a box. */
+export interface BoxExecutionAttempt {
+  candidate_key: string;
+  direction: BoxDirection;
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  lower_strike: number;
+  upper_strike: number;
+  lot_size: number;
+  quantity: number;
+  execution_mode: BoxExecutionMode;
+  leg_execution_mode: "parallel" | "sequential" | null;
+  detected_at: string;
+  resolved_at: string;
+  detected_gross_edge: number | null;
+  expected_net_profit: number | null;
+  filled_leg_count: number;
+  failed_legs: string[];
+  failure_reason: string | null;
+  failure_detail: string | null;
+  partial_entry_charges: number | null;
+  unwind_charges: number | null;
+  gross_abort_pnl: number | null;
+  net_abort_pnl: number | null;
 }
 
 /** One live open box position with its current exit arithmetic. */
@@ -1389,6 +1443,8 @@ export interface BoxTrade {
   gross_pnl: number | null;
   total_charges: number | null;
   net_pnl: number | null;
+  /** Realised net of a closed trade (actual fills, no forward allowance). */
+  realised_net_pnl?: number | null;
   closed_at: string | null;
   exit_reason: BoxExitReason | null;
   exit_blocked_reason: string | null;
@@ -1439,6 +1495,18 @@ export interface BoxChainSymbol {
 export async function fetchBoxStatus(): Promise<BoxStatus> {
   const res = await fetch(`${API_BASE_URL}/api/box/status`, { headers: getHeaders() });
   return readJson<BoxStatus>(res, "Failed to load box scanner status");
+}
+
+/** paper_legging execution attempts that aborted (partial fill + emergency unwind). */
+export async function fetchBoxExecutionAttempts(limit = 100): Promise<BoxExecutionAttempt[]> {
+  const res = await fetch(`${API_BASE_URL}/api/box/execution-attempts?limit=${limit}`, {
+    headers: getHeaders(),
+  });
+  const body = await readJson<{ attempts: BoxExecutionAttempt[] }>(
+    res,
+    "Failed to load box execution attempts",
+  );
+  return body.attempts ?? [];
 }
 
 export async function fetchBoxConfig(): Promise<BoxConfigView> {

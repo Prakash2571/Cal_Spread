@@ -4210,3 +4210,66 @@ body {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
 }
+
+
+/* ------------------------------------------------------------------ box: execution health panel ------ */
+
+.box-exec-health {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card, #fff) 60%, transparent);
+}
+.box-exec-health-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.box-exec-mode {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #2563eb) 16%, transparent);
+  color: var(--accent, #2563eb);
+}
+.box-exec-sub {
+  margin: 0.6rem 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted, #6b7280);
+}
+.box-exec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.4rem 0.9rem;
+}
+.box-exec-stat {
+  display: flex;
+  flex-direction: column;
+}
+.box-exec-stat-k {
+  font-size: 0.68rem;
+  color: var(--muted, #6b7280);
+}
+.box-exec-stat-v {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.box-exec-stat.is-good .box-exec-stat-v {
+  color: var(--pos, #16a34a);
+}
+.box-exec-stat.is-bad .box-exec-stat-v {
+  color: var(--neg, #dc2626);
+}
+.box-neg {
+  color: var(--neg, #dc2626);
+}
+.box-section-title--sub {
+  margin-top: 1.25rem;
+  font-size: 0.95rem;
+}
