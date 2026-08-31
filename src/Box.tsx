@@ -355,6 +355,17 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     [history],
   );
   const todayKey = istTodayKey();
+  // `<details>` has no React "defaultOpen", and an uncontrolled `open` would be
+  // reset by the frequent snapshot re-renders on this page. So the open state is
+  // tracked here: today is expanded until the user explicitly toggles a day.
+  const [dayOverrides, setDayOverrides] = useState<Record<string, boolean>>({});
+  const isDayOpen = useCallback(
+    (key: string) => dayOverrides[key] ?? key === todayKey,
+    [dayOverrides, todayKey],
+  );
+  const setDayOpen = useCallback((key: string, next: boolean) => {
+    setDayOverrides((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
+  }, []);
   const historyDays = useMemo(() => {
     const groups = new Map<string, BoxTrade[]>();
     for (const trade of history) {
@@ -985,7 +996,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
               <details
                 className="box-history-day"
                 key={day.key}
-                defaultOpen={day.key === todayKey}
+                open={isDayOpen(day.key)}
+                onToggle={(e) => setDayOpen(day.key, e.currentTarget.open)}
               >
                 <summary className="box-history-day-summary">
                   <span>
