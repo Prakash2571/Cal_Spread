@@ -7,6 +7,7 @@ import {
   fetchBoxHistory,
   fetchBoxOpportunities,
   fetchBoxStatus,
+  setBoxStrikeLevel,
   startBoxScanner,
   stopBoxScanner,
   type BoxChain,
@@ -310,6 +311,24 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     }
   }
 
+  async function handleStrikeLevel(level: 1 | 2 | 3) {
+    if (status?.strike_level === level) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await setBoxStrikeLevel(level);
+      setStatus(next);
+      setNotice(
+        `Now monitoring ATM ±${level}. New boxes are limited to this window — positions already open are unaffected and keep being monitored.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set the strike level.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleClose(id: string) {
     setClosingId(id);
     setError(null);
@@ -468,6 +487,26 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                   : "Starting…"
               : "Stopped"}
           </span>
+          <div
+            className="box-strike-level"
+            role="group"
+            aria-label="Strikes each side of ATM"
+            title="How many strikes up/down from ATM are monitored and traded. Narrowing this only limits NEW boxes — positions already open are unaffected."
+          >
+            <span className="box-strike-level-label">ATM ±</span>
+            {([1, 2, 3] as const).map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                className={`btn btn--sm${status?.strike_level === lvl ? " btn--primary" : ""}`}
+                aria-pressed={status?.strike_level === lvl}
+                disabled={busy || !canTrade}
+                onClick={() => void handleStrikeLevel(lvl)}
+              >
+                {lvl}
+              </button>
+            ))}
+          </div>
           <button
             className={`btn ${running ? "btn--danger" : "btn--primary"}`}
             onClick={() => void toggleScanner()}

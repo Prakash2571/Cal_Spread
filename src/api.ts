@@ -1078,7 +1078,10 @@ export interface BoxConfigView {
   /** Feed-liveness limit: newest tick across the whole universe. */
   feed_max_age_ms: number;
   underlying_max_age_ms: number;
+  /** The MAXIMUM strikes each side (the ATM ±3 cap). */
   strikes_each_side: number;
+  /** The ACTIVE admin-selected level (1, 2 or 3), never above the cap. */
+  strike_level: number;
   max_strikes: number;
   max_candidates_per_underlying: number;
   prefilter_gross_threshold: number;
@@ -1135,6 +1138,8 @@ export interface BoxStatus {
     last_ms: number;
     samples: number;
   } | null;
+  /** The active strikes-each-side level (1, 2 or 3). */
+  strike_level: number;
   open_positions: number;
   skipped_for_budget: number;
   skipped_symbols: string[];
@@ -1468,6 +1473,26 @@ export async function stopBoxScanner(): Promise<BoxStatus> {
   const body = await readJson<{ ok?: boolean; status: BoxStatus }>(
     res,
     "Failed to stop the box scanner",
+  );
+  return body.status;
+}
+
+/**
+ * ADMIN: set how many strikes each side of ATM are monitored/traded (1, 2 or 3).
+ *
+ * From when it is set, only boxes within ATM ±level are discovered and entered.
+ * Positions already open are NOT affected — the backend keeps monitoring and
+ * exiting them on their own rules regardless of the new width.
+ */
+export async function setBoxStrikeLevel(level: 1 | 2 | 3): Promise<BoxStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/box/strike-level`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ level }),
+  });
+  const body = await readJson<{ ok?: boolean; strike_level: number; status: BoxStatus }>(
+    res,
+    "Failed to set the box strike level",
   );
   return body.status;
 }

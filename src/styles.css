@@ -4189,3 +4189,24 @@ body {
   color: var(--muted, #6b7280);
   font-size: 0.72rem;
 }
+
+
+/* ------------------------------------------------------------------ box: admin strike-level selector ------ */
+
+.box-strike-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 0.5rem;
+}
+.box-strike-level-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+  margin-right: 0.1rem;
+}
+.box-strike-level .btn--sm {
+  min-width: 1.9rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
