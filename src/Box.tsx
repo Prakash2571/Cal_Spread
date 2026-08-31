@@ -477,8 +477,11 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
         <div className="toolbar">
           <ThemeToggle />
-          <span className="box-mode" title="Fills are simulated at the executable market touch">
-            PAPER TOUCH
+          <span
+            className="box-mode"
+            title="The execution model the backend is actually running. Fills are always simulated from observed executable books — never real orders."
+          >
+            {(status?.execution_mode ?? "paper").replace(/_/g, " ").toUpperCase()}
           </span>
           <span
             className={`status status--${
@@ -632,7 +635,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Mode</span>
-          <span className="box-stat-v">PAPER TOUCH</span>
+          <span className="box-stat-v">
+            {(status?.execution_mode ?? "—").replace(/_/g, " ").toUpperCase()}
+          </span>
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Lot</span>
@@ -668,9 +673,11 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
             className="box-stat-v"
             title="Approximate staleness of the data versus NSE, from Kite's exchange_timestamp (1-second resolution, and sensitive to server-clock skew — so this is a rough figure, not a precise latency)."
           >
-            {status?.exchange_lag_ms
-              ? `${(status.exchange_lag_ms.median_ms / 1000).toFixed(1)}s (p95 ${(status.exchange_lag_ms.p95_ms / 1000).toFixed(1)}s)`
-              : "—"}
+            {/* Only meaningful on a live feed: with the market shut the last
+                sample is hours old, so the figure is stale, not a real lag. */}
+            {!marketOpen || !status?.exchange_lag_ms
+              ? "—"
+              : `${(status.exchange_lag_ms.median_ms / 1000).toFixed(1)}s (p95 ${(status.exchange_lag_ms.p95_ms / 1000).toFixed(1)}s)`}
           </span>
         </div>
         <div className="box-stat">
