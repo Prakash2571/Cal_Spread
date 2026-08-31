@@ -128,6 +128,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const [history, setHistory] = useState<BoxTrade[]>([]);
   const [chain, setChain] = useState<BoxChain | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  /** Which of the three jobs the page is showing. */
+  const [view, setView] = useState<"opportunities" | "open" | "history">("opportunities");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -288,6 +290,17 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const eligibleCount = useMemo(
     () => opportunities.filter((o) => o.status === "ELIGIBLE").length,
     [opportunities],
+  );
+  // Surfaced on the Open tab so a position that needs attention is visible even
+  // while you are looking at the scanner.
+  const exitEligibleCount = useMemo(() => open.filter((p) => p.exit_eligible).length, [open]);
+  const blockedCount = useMemo(
+    () => open.filter((p) => p.exit_blocked_reason !== null).length,
+    [open],
+  );
+  const closedNet = useMemo(
+    () => history.reduce((acc, t) => acc + (t.net_pnl ?? 0), 0),
+    [history],
   );
 
   /* --------------------------------- render ------------------------------- */
@@ -525,15 +538,58 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
       )}
 
-      {/* ------------------------------ opportunities ---------------------- */}
-      <section className="box-section">
-        <h2 className="box-section-title">
+      {/* One view at a time. The scanner, open book and history are three
+          different jobs, and stacking them made the page a scroll-fest — but the
+          counts stay on the tabs so nothing important is hidden behind a click. */}
+      <nav className="box-views" role="tablist" aria-label="Box view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "opportunities"}
+          className={`btn${view === "opportunities" ? " btn--primary" : ""}`}
+          onClick={() => setView("opportunities")}
+        >
           Opportunities <span className="pill-count">{opportunities.length}</span>
           {eligibleCount > 0 && (
-            <span className="box-badge box-badge--eligible">{eligibleCount} eligible</span>
+            <span className="box-badge box-badge--eligible">{eligibleCount}</span>
           )}
-        </h2>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "open"}
+          className={`btn${view === "open" ? " btn--primary" : ""}`}
+          onClick={() => setView("open")}
+        >
+          Open trades <span className="pill-count">{open.length}</span>
+          {/* Attention markers, so a position needing a look is visible from any tab. */}
+          {exitEligibleCount > 0 && (
+            <span className="box-badge box-badge--exit">{exitEligibleCount}</span>
+          )}
+          {blockedCount > 0 && <span className="box-badge box-badge--warn">{blockedCount}</span>}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "history"}
+          className={`btn${view === "history" ? " btn--primary" : ""}`}
+          onClick={() => {
+            setView("history");
+            void loadHistory();
+          }}
+        >
+          Closed trades <span className="pill-count">{history.length}</span>
+        </button>
+        {view === "history" && closedNet !== 0 && (
+          <span className={`box-views-total ${pnlClass(closedNet)}`}>
+            Realised {rupees(closedNet)}
+          </span>
+        )}
+      </nav>
 
+      {/* ------------------------------ opportunities ---------------------- */}
+      {view === "opportunities" && (
+      <section className="box-section">
         {!running && opportunities.length === 0 ? (
           <p className="box-empty">
             The scanner is stopped. Press <strong>RUN</strong> to start scanning F&amp;O stock and
@@ -668,9 +724,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           </div>
         )}
       </section>
+      )}
 
       {/* --------------------------------- chain --------------------------- */}
-      {expanded && (
+      {view === "opportunities" && expanded && (
         <section className="box-section">
           <h2 className="box-section-title">
             {expanded} chain
@@ -756,6 +813,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       )}
 
       {/* ------------------------------- open boxes ------------------------ */}
+      {view === "open" && (
       <section className="box-section">
         <h2 className="box-section-title">
           Open box trades <span className="pill-count">{open.length}</span>
@@ -765,7 +823,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           </span>
         </h2>
         {open.length === 0 ? (
-          <p className="box-empty">No open paper boxes.</p>
+          <p className="box-empty">
+            No open paper boxes. Qualifying boxes are opened automatically while the scanner is
+            running.
+          </p>
         ) : (
           <div className="box-cards">
             {open.map((p) => (
@@ -780,8 +841,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           </div>
         )}
       </section>
+      )}
 
       {/* ------------------------------ closed boxes ----------------------- */}
+      {view === "history" && (
       <section className="box-section">
         <h2 className="box-section-title">
           Closed box trades <span className="pill-count">{history.length}</span>
@@ -840,6 +903,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           </div>
         )}
       </section>
+      )}
 
       <p className="box-disclaimer">
         <strong>Paper execution.</strong> Every box above is simulated. A paper fill assumes all

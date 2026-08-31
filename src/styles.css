@@ -3876,3 +3876,65 @@ body {
   color: var(--text-2);
   background: var(--surface-3);
 }
+
+
+/* ---- Box page: view switcher (Opportunities | Open | Closed) ----
+   The three jobs are shown one at a time instead of stacked, but every tab keeps
+   its count (and its attention markers) so nothing important hides behind a
+   click. */
+.box-views {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.box-views .btn {
+  gap: var(--sp-1);
+}
+
+/* On the active (filled) tab the count/marker pills need to read against the
+   accent fill rather than the page background. */
+.box-views .btn--primary .pill-count {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.box-views .box-badge {
+  margin-left: 2px;
+}
+
+.box-views-total {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.box-views-total.pnl-pos {
+  color: var(--pos);
+}
+
+.box-views-total.pnl-neg {
+  color: var(--neg);
+}
+
+@media (max-width: 560px) {
+  .box-views {
+    gap: var(--sp-1);
+  }
+  .box-views .btn {
+    padding: 0 var(--sp-2);
+    font-size: var(--fs-3);
+  }
+  .box-views-total {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
