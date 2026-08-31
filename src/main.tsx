@@ -9,6 +9,7 @@ import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-500.css";
 import "@fontsource/jetbrains-mono/latin-600.css";
 import App from "./App.tsx";
+import ScrollToTop from "./ScrollToTop.tsx";
 import { applyTheme, readStoredTheme } from "./ThemeToggle.tsx";
 import "./styles.css";
 
@@ -17,5 +18,6 @@ applyTheme(readStoredTheme());
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
+    <ScrollToTop />
   </React.StrictMode>,
 );

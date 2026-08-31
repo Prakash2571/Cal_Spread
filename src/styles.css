@@ -640,6 +640,24 @@ body {
   border-color: var(--accent-fill-hover);
 }
 
+/* Global shortcut for long Calendar, Analytics, Stock and Box pages. */
+.scroll-top {
+  position: fixed;
+  right: max(var(--sp-5), env(safe-area-inset-right));
+  bottom: max(var(--sp-5), env(safe-area-inset-bottom));
+  z-index: 50;
+  min-width: 68px;
+  min-height: 40px;
+  gap: var(--sp-2);
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-popover);
+}
+
+.scroll-top:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
 /* ================ Banners ================ */
 .banner {
   display: flex;
@@ -779,6 +797,11 @@ body {
 @media (max-width: 480px) {
   .app {
     padding: 0 var(--sp-2) var(--sp-10);
+  }
+  .scroll-top {
+    right: max(var(--sp-3), env(safe-area-inset-right));
+    bottom: max(var(--sp-3), env(safe-area-inset-bottom));
+    min-width: 72px;
   }
   button,
   a.btn,
@@ -3473,6 +3496,72 @@ body {
   font-weight: var(--fw-semibold);
   letter-spacing: var(--tracking-caps);
   color: var(--text-2);
+}
+
+/* Closed trades are folded by IST close day; today alone starts expanded. */
+.box-history-days {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.box-history-day {
+  overflow: hidden;
+  border: 1px solid var(--data-border);
+  border-radius: var(--r-lg);
+  background: var(--data-surface);
+  box-shadow: var(--shadow-data);
+}
+
+.box-history-day-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+  min-height: 44px;
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  color: var(--text-1);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
+  list-style-position: inside;
+  background: var(--surface-1);
+}
+
+.box-history-day-summary:hover {
+  background: var(--surface-2);
+}
+
+.box-history-day[open] > .box-history-day-summary {
+  border-bottom: 1px solid var(--data-border);
+}
+
+.box-history-day-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-2) var(--sp-3);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.box-history-day > .box-table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+@media (max-width: 720px) {
+  .box-history-day-summary {
+    align-items: flex-start;
+  }
+  .box-history-day-meta {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
 }
 
 /* ---- Pills: freshness, liquidity, status ---- */

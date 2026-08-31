@@ -97,6 +97,30 @@ const REJECT_LABEL: Record<string, string> = {
   implausible_close: "no comparable close",
 };
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function istDayKey(iso: string): string {
+  const at = new Date(iso).getTime();
+  return Number.isFinite(at)
+    ? new Date(at + IST_OFFSET_MS).toISOString().slice(0, 10)
+    : "unknown";
+}
+
+function istTodayKey(): string {
+  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function istDayLabel(key: string): string {
+  if (key === "unknown") return "Unknown date";
+  const date = new Date(`${key}T00:00:00+05:30`);
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+}
+
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -107,6 +131,7 @@ function fmtDateTime(iso: string): string {
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
+    timeZone: "Asia/Kolkata",
   });
 }
 
@@ -207,8 +232,23 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     // Entries and exits are discrete events: refresh the history immediately so a
     // closed box appears without waiting for a poll.
     es.addEventListener("entry", () => setLive(true));
-    es.addEventListener("exit", () => {
-      void loadHistory();
+    es.addEventListener("exit", (ev) => {
+      try {
+        const payload = JSON.parse((ev as MessageEvent).data) as { trade?: BoxTrade };
+        if (!payload.trade) {
+          void loadHistory();
+          return;
+        }
+        // The exit stream already carries the complete serialized trade. Put it
+        // at the top immediately and de-duplicate it by id; the archive fetch on
+        // mount/tab-open still reconciles anything missed while disconnected.
+        setHistory((current) => [
+          payload.trade!,
+          ...current.filter((trade) => trade.id !== payload.trade!.id),
+        ]);
+      } catch {
+        void loadHistory();
+      }
     });
     es.onerror = () => setLive(false);
 
@@ -314,6 +354,30 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     () => history.reduce((acc, t) => acc + (t.gross_pnl ?? 0), 0),
     [history],
   );
+  const todayKey = istTodayKey();
+  const historyDays = useMemo(() => {
+    const groups = new Map<string, BoxTrade[]>();
+    for (const trade of history) {
+      const key = istDayKey(trade.closed_at ?? trade.opened_at);
+      const group = groups.get(key);
+      if (group) group.push(trade);
+      else groups.set(key, [trade]);
+    }
+    return [...groups]
+      .sort(([a], [b]) => {
+        if (a === "unknown") return 1;
+        if (b === "unknown") return -1;
+        return b.localeCompare(a);
+      })
+      .map(([key, trades]) => ({
+      key,
+      label: istDayLabel(key),
+      trades,
+      gross: trades.reduce((sum, trade) => sum + (trade.gross_pnl ?? 0), 0),
+      fees: trades.reduce((sum, trade) => sum + (trade.total_charges ?? 0), 0),
+      net: trades.reduce((sum, trade) => sum + (trade.net_pnl ?? 0), 0),
+    }));
+  }, [history]);
 
   /* --------------------------------- render ------------------------------- */
 
@@ -916,56 +980,80 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         {history.length === 0 ? (
           <p className="box-empty">No closed paper boxes yet.</p>
         ) : (
-          <div className="box-table-wrap">
-            <table className="box-table">
-              <thead>
-                <tr>
-                  <th>Underlying</th>
-                  <th>Expiry</th>
-                  <th className="num">K1 → K2</th>
-                  <th>Opened</th>
-                  <th>Closed</th>
-                  <th className="num">Held</th>
-                  <th className="num">Margin</th>
-                  <th className="num">Entry cost</th>
-                  <th className="num">Exit value</th>
-                  <th className="num">Entry fees</th>
-                  <th className="num">Exit fees</th>
-                  <th className="num">Total fees</th>
-                  <th className="num">Gross P&amp;L</th>
-                  <th className="num">Net P&amp;L</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((t) => (
-                  <tr key={t.id}>
-                    <td>
-                      <span className="box-sym">{t.underlying}</span>
-                      {t.is_index && <span className="badge-index">INDEX</span>}
-                    </td>
-                    <td className="box-dim">{formatExpiry(t.expiry)}</td>
-                    <td className="num">
-                      {t.lower_strike} → {t.upper_strike}
-                    </td>
-                    <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
-                    <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
-                    <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
-                    <td className="num box-dim">{rupees(t.margin)}</td>
-                    <td className="num">{rupees(t.entry_box_cost)}</td>
-                    <td className="num">{rupees(t.exit_box_value)}</td>
-                    <td className="num box-dim">{rupees(t.entry_charges?.total ?? null)}</td>
-                    <td className="num box-dim">{rupees(t.exit_charges?.total ?? null)}</td>
-                    <td className="num box-dim">{rupees(t.total_charges)}</td>
-                    <td className={`num ${pnlClass(t.gross_pnl)}`}>{rupees(t.gross_pnl)}</td>
-                    <td className={`num box-net ${pnlClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
-                    <td>
-                      <span className="box-reason">{t.exit_reason ?? "-"}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="box-history-days">
+            {historyDays.map((day) => (
+              <details
+                className="box-history-day"
+                key={day.key}
+                defaultOpen={day.key === todayKey}
+              >
+                <summary className="box-history-day-summary">
+                  <span>
+                    {day.key === todayKey && <strong>Today · </strong>}
+                    {day.label}
+                  </span>
+                  <span className="box-history-day-meta">
+                    <span className="pill-count">
+                      {day.trades.length} {day.trades.length === 1 ? "trade" : "trades"}
+                    </span>
+                    <span className="box-dim">Gross {rupees(day.gross)}</span>
+                    <span className="box-dim">Fees {rupees(day.fees)}</span>
+                    <span className={pnlClass(day.net)}>Net {rupees(day.net)}</span>
+                  </span>
+                </summary>
+                <div className="box-table-wrap">
+                  <table className="box-table">
+                    <thead>
+                      <tr>
+                        <th>Underlying</th>
+                        <th>Expiry</th>
+                        <th className="num">K1 → K2</th>
+                        <th>Opened</th>
+                        <th>Closed</th>
+                        <th className="num">Held</th>
+                        <th className="num">Margin</th>
+                        <th className="num">Entry cost</th>
+                        <th className="num">Exit value</th>
+                        <th className="num">Entry fees</th>
+                        <th className="num">Exit fees</th>
+                        <th className="num">Total fees</th>
+                        <th className="num">Gross P&amp;L</th>
+                        <th className="num">Net P&amp;L</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {day.trades.map((t) => (
+                        <tr key={t.id}>
+                          <td>
+                            <span className="box-sym">{t.underlying}</span>
+                            {t.is_index && <span className="badge-index">INDEX</span>}
+                          </td>
+                          <td className="box-dim">{formatExpiry(t.expiry)}</td>
+                          <td className="num">
+                            {t.lower_strike} → {t.upper_strike}
+                          </td>
+                          <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
+                          <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
+                          <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
+                          <td className="num box-dim">{rupees(t.margin)}</td>
+                          <td className="num">{rupees(t.entry_box_cost)}</td>
+                          <td className="num">{rupees(t.exit_box_value)}</td>
+                          <td className="num box-dim">{rupees(t.entry_charges?.total ?? null)}</td>
+                          <td className="num box-dim">{rupees(t.exit_charges?.total ?? null)}</td>
+                          <td className="num box-dim">{rupees(t.total_charges)}</td>
+                          <td className={`num ${pnlClass(t.gross_pnl)}`}>{rupees(t.gross_pnl)}</td>
+                          <td className={`num box-net ${pnlClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
+                          <td>
+                            <span className="box-reason">{t.exit_reason ?? "-"}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
           </div>
         )}
       </section>
