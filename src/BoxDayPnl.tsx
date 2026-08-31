@@ -41,18 +41,6 @@ export function BoxDayPnlStrip({ dayPnl }: { dayPnl: BoxDayPnl | undefined }) {
         title="Open running net + today's realised net"
         total
       />
-      {dayPnl.cache_enabled && (
-        <span
-          className="box-daypnl-cache"
-          title={
-            dayPnl.last_cached_at
-              ? `Mirrored to Redis at ${new Date(dayPnl.last_cached_at).toLocaleTimeString()} — archived nightly`
-              : "Redis P&L cache enabled — archived nightly"
-          }
-        >
-          cached
-        </span>
-      )}
     </section>
   );
 }

@@ -4309,19 +4309,6 @@ body {
 .box-daypnl-v.is-neg {
   color: var(--neg, #dc2626);
 }
-.box-daypnl-cache {
-  margin-left: auto;
-  align-self: center;
-  font-size: 0.62rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-3);
-  background: color-mix(in srgb, var(--text-3) 14%, transparent);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 0.15rem 0.55rem;
-}
 
 .box-section-title--sub {
   margin-top: 1.25rem;
