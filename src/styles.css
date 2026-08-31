@@ -4269,6 +4269,57 @@ body {
 .box-neg {
   color: var(--neg, #dc2626);
 }
+
+/* ------------------------------------------------------------------ box: running day P&L strip ------ */
+
+.box-daypnl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.75rem;
+  margin: 0.75rem 0;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card, #fff) 60%, transparent);
+}
+.box-daypnl-item {
+  display: flex;
+  flex-direction: column;
+}
+.box-daypnl-k {
+  font-size: 0.68rem;
+  color: var(--muted, #6b7280);
+}
+.box-daypnl-v {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.box-daypnl-total .box-daypnl-k {
+  font-weight: 600;
+  color: var(--fg, #111827);
+}
+.box-daypnl-total .box-daypnl-v {
+  font-size: 1.15rem;
+}
+.box-daypnl-v.is-pos {
+  color: var(--pos, #16a34a);
+}
+.box-daypnl-v.is-neg {
+  color: var(--neg, #dc2626);
+}
+.box-daypnl-cache {
+  margin-left: auto;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #6b7280);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
 .box-section-title--sub {
   margin-top: 1.25rem;
   font-size: 0.95rem;

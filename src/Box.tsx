@@ -24,6 +24,7 @@ import ThemeToggle from "./ThemeToggle.tsx";
 import { DirectionBadge } from "./BoxDirection.tsx";
 import { BoxExecutionHealth } from "./BoxExecutionHealth.tsx";
 import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
+import { BoxDayPnlStrip } from "./BoxDayPnl.tsx";
 
 interface Props {
   /** Whether a Zerodha session is live on the backend (data can flow). */
@@ -698,6 +699,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       {/* One view at a time. The scanner, open book and history are three
           different jobs, and stacking them made the page a scroll-fest — but the
           counts stay on the tabs so nothing important is hidden behind a click. */}
+      <BoxDayPnlStrip dayPnl={status?.day_pnl} />
+
       <BoxExecutionHealth
         metrics={status?.metrics}
         mode={status?.execution_mode ?? "paper_latency"}

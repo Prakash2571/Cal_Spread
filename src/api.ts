@@ -1146,6 +1146,11 @@ export interface BoxStatus {
   /** The active strikes-each-side level (1, 2 or 3). */
   strike_level: number;
   open_positions: number;
+  /**
+   * Running day P&L: open positions' current net + trades closed today.
+   * Optional — absent on a backend built before this field existed.
+   */
+  day_pnl?: BoxDayPnl;
   skipped_for_budget: number;
   skipped_symbols: string[];
   scanner: {
@@ -1195,6 +1200,28 @@ export interface BoxStatus {
   metrics?: BoxMetricsSnapshot;
   last_error: string | null;
   config: BoxConfigView;
+}
+
+/**
+ * The day's running P&L, as computed by the backend: the sum of open positions'
+ * current net P&L plus the realised net of trades closed today. When the Redis
+ * cache is enabled this figure is also mirrored to Upstash and archived nightly.
+ */
+export interface BoxDayPnl {
+  day: string;
+  open_count: number;
+  open_running_net_pnl: number;
+  open_running_gross_pnl: number;
+  closed_count: number;
+  closed_realised_net_pnl: number;
+  closed_realised_gross_pnl: number;
+  /** Open running net + today's realised net — the day's running total (₹). */
+  total_net_pnl: number;
+  total_gross_pnl: number;
+  /** Whether the Redis (Upstash) P&L cache is actively mirroring this figure. */
+  cache_enabled: boolean;
+  /** ISO time the cache was last written, or null. */
+  last_cached_at: string | null;
 }
 
 /** A rolling distribution summary from a bounded ring buffer. */
