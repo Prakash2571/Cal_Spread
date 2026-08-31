@@ -41,15 +41,33 @@ function pnlClass(v: number | null | undefined): string {
   return "";
 }
 
-/** A quote age rendered as a freshness pill. */
+/**
+ * How long ago this leg's order book was last pushed.
+ *
+ * A depth feed only sends a message when the book CHANGES, so a few seconds of
+ * silence on a quiet strike is normal and the book is still the current one —
+ * hence the generous limit. Beyond it the book is no longer trusted for a fill.
+ */
 function Freshness({ ageMs, limit }: { ageMs: number | null; limit: number }) {
   if (ageMs === null) {
-    return <span className="box-fresh box-fresh--bad">no book</span>;
+    return (
+      <span className="box-fresh box-fresh--bad" title="No order book received for this leg yet">
+        no book
+      </span>
+    );
   }
-  const kind = ageMs <= limit ? "ok" : ageMs <= limit * 4 ? "warn" : "bad";
+  const kind = ageMs <= limit ? "ok" : "bad";
+  const text = ageMs < 1000 ? `${ageMs}ms` : `${(ageMs / 1000).toFixed(1)}s`;
   return (
-    <span className={`box-fresh box-fresh--${kind}`} title={`Book received ${ageMs}ms ago`}>
-      {ageMs < 1000 ? `${ageMs}ms` : `${(ageMs / 1000).toFixed(1)}s`}
+    <span
+      className={`box-fresh box-fresh--${kind}`}
+      title={
+        ageMs <= limit
+          ? `Book last changed ${text} ago — within the ${(limit / 1000).toFixed(0)}s trust window. An unchanged book is still the current book.`
+          : `Book has not changed for ${text}, beyond the ${(limit / 1000).toFixed(0)}s trust window, so it is not trusted for a fill.`
+      }
+    >
+      {text}
     </span>
   );
 }
@@ -382,6 +400,18 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       )}
       {/* The single most important thing to say when the exchange is shut: these
           are yesterday's numbers and nothing can be entered from them. */}
+      {/* A dead feed is the case freshness actually guards against: every cached
+          book still looks normal while being of unknown age. */}
+      {status && marketOpen && running && !status.feed_healthy && (
+        <div className="banner banner--error">
+          <strong>Tick feed is down.</strong> No tick has arrived across the whole universe for{" "}
+          {status.feed_age_ms === null
+            ? "some time"
+            : `${(status.feed_age_ms / 1000).toFixed(1)}s`}
+          , so every cached order book is of unknown age. Entries and automatic exits are paused
+          until it recovers — open positions stay open and are not closed on unverifiable prices.
+        </div>
+      )}
       {status && !marketOpen && (
         <div className="banner banner--warn">
           <strong>Market closed.</strong> The prices below are the{" "}
@@ -449,8 +479,28 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           <span className="box-stat-v">1</span>
         </div>
         <div className="box-stat">
-          <span className="box-stat-k">Freshness</span>
-          <span className="box-stat-v">{freshLimit}ms</span>
+          <span className="box-stat-k">Book trusted for</span>
+          <span
+            className="box-stat-v"
+            title="How long an UNCHANGED order book is still accepted. A depth feed only sends a message when the book changes, so silence on a quiet strike is not staleness."
+          >
+            {(freshLimit / 1000).toFixed(0)}s
+          </span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Feed</span>
+          <span
+            className={`box-stat-v ${status && !status.feed_healthy && marketOpen ? "pnl-neg" : ""}`}
+            title="Age of the newest tick across the whole universe. If this goes quiet the connection is down, and entries and automatic exits pause."
+          >
+            {!status
+              ? "-"
+              : !marketOpen
+                ? "idle"
+                : status.feed_healthy
+                  ? `live ${status.feed_age_ms === null ? "" : `(${status.feed_age_ms}ms)`}`
+                  : "DOWN"}
+          </span>
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Watching</span>
@@ -550,6 +600,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                         {o.projected_net_edge === null ? "unpriced" : rupees(o.projected_net_edge)}
                       </td>
                       <td>
+                        {/* Depth ONLY. Staleness has its own column, so a
+                            perfectly deep but quiet book no longer reads as
+                            illiquid. */}
                         {o.price_source === "last_close" ? (
                           <span
                             className="box-liq box-liq--closed"
@@ -557,16 +610,19 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                           >
                             n/a at close
                           </span>
-                        ) : o.liquidity_ok ? (
-                          <span className="box-liq box-liq--ok">
+                        ) : o.depth_ok ? (
+                          <span
+                            className="box-liq box-liq--ok"
+                            title={`One whole lot (${o.lot_size}) rests at the best price on all four legs`}
+                          >
                             {o.lot_size} @ touch
                           </span>
                         ) : (
                           <span
                             className="box-liq box-liq--bad"
-                            title={o.reject ? REJECT_LABEL[o.reject] ?? o.reject : "not executable"}
+                            title="At least one leg does not show a full lot at its best price"
                           >
-                            {o.reject ? REJECT_LABEL[o.reject] ?? o.reject : "thin"}
+                            under 1 lot
                           </span>
                         )}
                       </td>
@@ -584,8 +640,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                             o.status === "UNPRICED"
                               ? "Zerodha could not price the eight box orders, so this box is shown but never auto-traded"
                               : o.status === "INDICATIVE"
-                                ? "Derived from last traded / closing prices while the market is shut — not executable, so it cannot be entered"
-                                : undefined
+                                ? "Derived from last traded prices while the market is shut — not executable, so it cannot be entered"
+                                : o.reject
+                                  ? `Not tradable: ${REJECT_LABEL[o.reject] ?? o.reject}`
+                                  : undefined
                           }
                         >
                           {STATUS_LABEL[o.status]}

@@ -1017,7 +1017,10 @@ export interface BoxOpportunity {
   estimated_exit_charges: number | null;
   safety_buffer: number;
   projected_net_edge: number | null;
+  /** Fresh AND one lot on all four legs. */
   liquidity_ok: boolean;
+  /** One whole lot on all four legs, ignoring how quiet the book is. */
+  depth_ok: boolean;
   worst_age_ms: number | null;
   /** "touch" = executable bid/ask (tradable). "last_close" = market shut. */
   price_source: "touch" | "last_close";
@@ -1034,7 +1037,10 @@ export interface BoxConfigView {
   min_net_edge: number;
   require_priced_charges: boolean;
   safety_buffer: number;
+  /** How long an UNCHANGED book is still trusted. */
   quote_max_age_ms: number;
+  /** Feed-liveness limit: newest tick across the whole universe. */
+  feed_max_age_ms: number;
   underlying_max_age_ms: number;
   strikes_each_side: number;
   max_strikes: number;
@@ -1079,6 +1085,9 @@ export interface BoxStatus {
   hub_connected: boolean;
   quotes: number;
   quote_updates: number;
+  /** Age of the newest tick anywhere in the universe, and the verdict. */
+  feed_age_ms: number | null;
+  feed_healthy: boolean;
   open_positions: number;
   skipped_for_budget: number;
   skipped_symbols: string[];
