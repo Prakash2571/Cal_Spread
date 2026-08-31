@@ -506,7 +506,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           <span className="box-stat-k">Feed</span>
           <span
             className={`box-stat-v ${status && !status.feed_healthy && marketOpen ? "pnl-neg" : ""}`}
-            title="Age of the newest tick across the whole universe. If this goes quiet the connection is down, and entries and automatic exits pause."
+            title="Heartbeat: how long since ANY instrument last ticked. Not a delay from NSE — if it goes quiet the connection is down and trading pauses."
           >
             {!status
               ? "-"
@@ -515,6 +515,17 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                 : status.feed_healthy
                   ? `live ${status.feed_age_ms === null ? "" : `(${status.feed_age_ms}ms)`}`
                   : "DOWN"}
+          </span>
+        </div>
+        <div className="box-stat">
+          <span className="box-stat-k">Exchange lag ≈</span>
+          <span
+            className="box-stat-v"
+            title="Approximate staleness of the data versus NSE, from Kite's exchange_timestamp (1-second resolution, and sensitive to server-clock skew — so this is a rough figure, not a precise latency)."
+          >
+            {status?.exchange_lag_ms
+              ? `${(status.exchange_lag_ms.median_ms / 1000).toFixed(1)}s (p95 ${(status.exchange_lag_ms.p95_ms / 1000).toFixed(1)}s)`
+              : "—"}
           </span>
         </div>
         <div className="box-stat">

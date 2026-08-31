@@ -1088,6 +1088,18 @@ export interface BoxStatus {
   /** Age of the newest tick anywhere in the universe, and the verdict. */
   feed_age_ms: number | null;
   feed_healthy: boolean;
+  /**
+   * APPROXIMATE lag behind the exchange, from Kite's second-resolution
+   * exchange_timestamp. Distinct from feed_age_ms (a liveness heartbeat): this
+   * estimates how stale the data is versus NSE. null until a timestamped packet
+   * has been seen.
+   */
+  exchange_lag_ms: {
+    median_ms: number;
+    p95_ms: number;
+    last_ms: number;
+    samples: number;
+  } | null;
   open_positions: number;
   skipped_for_budget: number;
   skipped_symbols: string[];
