@@ -4147,7 +4147,7 @@ body {
   border: 1px solid currentColor;
 }
 .box-charge-origin--local {
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
 }
 .box-charge-origin--local_verified {
   color: var(--pos, #16a34a);
@@ -4169,7 +4169,7 @@ body {
   gap: 1rem;
 }
 .box-breakdown-row--sub {
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
   padding-left: 0.5rem;
 }
 .box-breakdown-row--net {
@@ -4186,7 +4186,7 @@ body {
 }
 .box-breakdown-gate {
   font-weight: 400;
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
   font-size: 0.72rem;
 }
 
@@ -4202,7 +4202,7 @@ body {
 .box-strike-level-label {
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
   margin-right: 0.1rem;
 }
 .box-strike-level .btn--sm {
@@ -4219,7 +4219,7 @@ body {
   padding: 0.75rem 1rem;
   border: 1px solid var(--border, #e5e7eb);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--card, #fff) 60%, transparent);
+  background: var(--surface-1);
 }
 .box-exec-health-title {
   margin: 0 0 0.5rem;
@@ -4240,7 +4240,7 @@ body {
 .box-exec-sub {
   margin: 0.6rem 0 0.35rem;
   font-size: 0.78rem;
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
 }
 .box-exec-grid {
   display: grid;
@@ -4253,7 +4253,7 @@ body {
 }
 .box-exec-stat-k {
   font-size: 0.68rem;
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
 }
 .box-exec-stat-v {
   font-size: 0.9rem;
@@ -4281,7 +4281,7 @@ body {
   padding: 0.6rem 1rem;
   border: 1px solid var(--border, #e5e7eb);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--card, #fff) 60%, transparent);
+  background: var(--surface-1);
 }
 .box-daypnl-item {
   display: flex;
@@ -4289,7 +4289,7 @@ body {
 }
 .box-daypnl-k {
   font-size: 0.68rem;
-  color: var(--muted, #6b7280);
+  color: var(--text-3);
 }
 .box-daypnl-v {
   font-size: 1rem;
@@ -4298,7 +4298,7 @@ body {
 }
 .box-daypnl-total .box-daypnl-k {
   font-weight: 600;
-  color: var(--fg, #111827);
+  color: var(--text-1);
 }
 .box-daypnl-total .box-daypnl-v {
   font-size: 1.15rem;
