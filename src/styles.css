@@ -4113,3 +4113,79 @@ body {
 .box-chain tbody tr.box-chain-leg-row td {
   background: var(--accent-surface);
 }
+
+
+/* ------------------------------------------------------------------ box: direction + execution breakdown ------ */
+
+.box-dir {
+  display: inline-block;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+}
+.box-dir--long {
+  background: color-mix(in srgb, var(--pos, #16a34a) 16%, transparent);
+  color: var(--pos, #16a34a);
+}
+.box-dir--short {
+  background: color-mix(in srgb, var(--neg, #dc2626) 16%, transparent);
+  color: var(--neg, #dc2626);
+}
+
+.box-charge-origin {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.02rem 0.3rem;
+  border-radius: 4px;
+  margin-left: 0.35rem;
+  opacity: 0.85;
+  border: 1px solid currentColor;
+}
+.box-charge-origin--local {
+  color: var(--muted, #6b7280);
+}
+.box-charge-origin--local_verified {
+  color: var(--pos, #16a34a);
+}
+.box-charge-origin--kite {
+  color: var(--accent, #2563eb);
+}
+
+.box-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+  min-width: 220px;
+}
+.box-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.box-breakdown-row--sub {
+  color: var(--muted, #6b7280);
+  padding-left: 0.5rem;
+}
+.box-breakdown-row--net {
+  margin-top: 0.2rem;
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-weight: 700;
+}
+.box-breakdown-row--net.is-pass .box-breakdown-v {
+  color: var(--pos, #16a34a);
+}
+.box-breakdown-row--net.is-fail .box-breakdown-v {
+  color: var(--neg, #dc2626);
+}
+.box-breakdown-gate {
+  font-weight: 400;
+  color: var(--muted, #6b7280);
+  font-size: 0.72rem;
+}

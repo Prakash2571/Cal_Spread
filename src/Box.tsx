@@ -18,6 +18,7 @@ import {
 } from "./api.ts";
 import { fmt, formatExpiry } from "./format.ts";
 import ThemeToggle from "./ThemeToggle.tsx";
+import { DirectionBadge } from "./BoxDirection.tsx";
 
 interface Props {
   /** Whether a Zerodha session is live on the backend (data can flow). */
@@ -538,18 +539,31 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           <span className="box-stat-v">{status?.state ?? "…"}</span>
         </div>
         <div className="box-stat">
-          <span className="box-stat-k">Entry requirement</span>
+          <span className="box-stat-k">Entry gate</span>
           <span
             className="box-stat-v"
-            title="Measured on the spread alone — charges are estimated and shown, but not deducted before entering"
+            title="A box is entered only when its EXPECTED NET profit — gross minus entry fees, estimated exit fees, simulated execution/slippage cost and the safety buffer — clears this, measured on the executed snapshot"
           >
-            {rupees(cfg?.min_gross_edge ?? null)} spread
+            {rupees(cfg?.min_expected_net_profit ?? null)} expected net
           </span>
         </div>
-        {cfg && cfg.min_net_edge > 0 && (
+        <div className="box-stat">
+          <span className="box-stat-k">Execution</span>
+          <span
+            className="box-stat-v"
+            title={
+              cfg?.execution_mode === "paper_latency"
+                ? `paper_latency: fills from the first WebSocket book at/after a simulated ${cfg?.simulated_latency_ms ?? 0}ms latency`
+                : "paper_touch: fills at the detected touch"
+            }
+          >
+            {cfg?.execution_mode ?? "…"}
+          </span>
+        </div>
+        {cfg && (cfg.directions?.length ?? 0) > 1 && (
           <div className="box-stat">
-            <span className="box-stat-k">Net floor</span>
-            <span className="box-stat-v">{rupees(cfg.min_net_edge)} net</span>
+            <span className="box-stat-k">Directions</span>
+            <span className="box-stat-v">long + short</span>
           </div>
         )}
         <div className="box-stat">
@@ -711,16 +725,18 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
               <thead>
                 <tr>
                   <th>Underlying</th>
+                  <th>Direction</th>
                   <th>Expiry</th>
                   <th className="num">K1</th>
                   <th className="num">K2</th>
                   <th className="num">Width</th>
-                  <th className="num">{marketOpen ? "Exec. cost" : "Close cost"}</th>
-                  <th className="num">Spread edge</th>
+                  <th className="num">{marketOpen ? "Box value" : "Close cost"}</th>
+                  <th className="num">Gross edge</th>
                   <th className="num">Entry fees</th>
                   <th className="num">Est. exit fees</th>
+                  <th className="num">Exec. cost</th>
                   <th className="num">Safety</th>
-                  <th className="num">Net edge</th>
+                  <th className="num">Expected net</th>
                   <th>Liquidity</th>
                   <th>Fresh</th>
                   <th>Status</th>
@@ -745,6 +761,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                         <span className="box-sym">{o.underlying}</span>
                         {o.is_index && <span className="badge-index">INDEX</span>}
                       </td>
+                      <td><DirectionBadge direction={o.direction} /></td>
                       <td className="box-dim">{formatExpiry(o.expiry)}</td>
                       <td className="num">{o.lower_strike}</td>
                       <td className="num">{o.upper_strike}</td>
@@ -753,9 +770,13 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                       <td className={`num ${pnlClass(o.gross_edge)}`}>{rupees(o.gross_edge)}</td>
                       <td className="num box-dim">{rupees(o.entry_charges)}</td>
                       <td className="num box-dim">{rupees(o.estimated_exit_charges)}</td>
+                      <td className="num box-dim">{rupees(o.execution_cost)}</td>
                       <td className="num box-dim">{rupees(o.safety_buffer)}</td>
-                      <td className={`num box-net ${pnlClass(o.projected_net_edge)}`}>
-                        {o.projected_net_edge === null ? "unpriced" : rupees(o.projected_net_edge)}
+                      <td
+                        className={`num box-net ${pnlClass(o.expected_net_profit)}`}
+                        title={`The entry gate is expected net ≥ ${rupees(o.min_expected_net_profit)} after every cost`}
+                      >
+                        {o.expected_net_profit === null ? "unpriced" : rupees(o.expected_net_profit)}
                       </td>
                       <td>
                         {/* Depth ONLY. Staleness has its own column, so a
@@ -1018,6 +1039,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                     <thead>
                       <tr>
                         <th>Underlying</th>
+                        <th>Direction</th>
                         <th>Expiry</th>
                         <th className="num">K1 → K2</th>
                         <th>Opened</th>
@@ -1041,6 +1063,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                             <span className="box-sym">{t.underlying}</span>
                             {t.is_index && <span className="badge-index">INDEX</span>}
                           </td>
+                          <td><DirectionBadge direction={t.direction} /></td>
                           <td className="box-dim">{formatExpiry(t.expiry)}</td>
                           <td className="num">
                             {t.lower_strike} → {t.upper_strike}
@@ -1122,6 +1145,7 @@ function OpenBoxCard({
         <div>
           <span className="box-sym">{p.underlying}</span>
           {p.is_index && <span className="badge-index">INDEX</span>}
+          <DirectionBadge direction={p.direction} />
           <span className="box-card-strikes">
             {p.lower_strike} → {p.upper_strike}
           </span>
@@ -1179,7 +1203,8 @@ function OpenBoxCard({
       </div>
 
       <div className="box-card-grid">
-        <Metric label="Original net edge" value={rupees(p.entry_net_edge)} />
+        <Metric label="Entry edge" value={rupees(p.entry_edge)} />
+        <Metric label="Expected net (entry)" value={rupees(p.expected_net_profit)} />
         <Metric
           label="Margin (all 4 legs)"
           value={p.margin === null ? "unpriced" : rupees(p.margin)}
@@ -1195,7 +1220,18 @@ function OpenBoxCard({
           value={rupees(p.net_pnl)}
           cls={`box-metric--strong ${pnlClass(p.net_pnl)}`}
         />
+        <Metric
+          label="Realisable net"
+          value={rupees(p.realisable_net_pnl)}
+          cls={pnlClass(p.realisable_net_pnl)}
+        />
+        {/* Convergence progress — the point of the strategy. */}
         <Metric label="Remaining edge" value={rupees(p.remaining_edge)} />
+        <Metric label="Captured edge" value={rupees(p.captured_edge)} />
+        <Metric
+          label="Captured %"
+          value={p.captured_pct === null ? "—" : `${Math.round(p.captured_pct * 100)}%`}
+        />
         <Metric label="Exit threshold" value={rupees(p.convergence_threshold)} />
         <Metric label="Min exit profit" value={rupees(p.min_exit_net_pnl)} />
         <Metric label="Profit capture at" value={rupees(p.profit_capture_target)} />

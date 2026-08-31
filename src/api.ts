@@ -963,10 +963,22 @@ export type BoxRejectReason =
   | "insufficient_qty"
   | "below_gross_prefilter"
   | "below_net_edge"
+  | "below_expected_net_profit"
+  | "execution_failed"
   | "unpriced_charges"
   | "duplicate_open"
   | "stale_underlying"
-  | "market_closed";
+  | "market_closed"
+  | "implausible_close";
+
+/** Which way a box is traded. Absent on old data means a long box. */
+export type BoxDirection = "LONG_BOX" | "SHORT_BOX";
+
+/** How a paper fill is simulated. */
+export type BoxExecutionMode = "paper_touch" | "paper_latency";
+
+/** Where a charge figure came from. */
+export type BoxChargeOrigin = "local" | "kite" | "local_verified";
 
 /** Per-leg liquidity/freshness detail behind an opportunity. */
 export interface BoxLegEvaluation {
@@ -1011,12 +1023,23 @@ export interface BoxOpportunity {
   box_width: number;
   lot_size: number;
   quantity: number;
+  /** Which way this box is traded. */
+  direction: BoxDirection;
   entry_box_cost: number | null;
   gross_edge: number | null;
   entry_charges: number | null;
   estimated_exit_charges: number | null;
+  /** Expected execution/slippage cost carried in the projection (₹). */
+  execution_cost: number;
   safety_buffer: number;
   projected_net_edge: number | null;
+  /** gross - entryFees - estExitFees - executionCost - buffer (the entry gate). */
+  expected_net_profit: number | null;
+  min_expected_net_profit: number;
+  /** Whether the charge figures are locally computed or Zerodha-verified. */
+  charge_origin: BoxChargeOrigin;
+  /** The four entry orders, so the direction's sides are unambiguous. */
+  entry_sides: { role: BoxLegRole; side: BoxSide; tradingsymbol: string }[];
   /** Fresh AND one lot on all four legs. */
   liquidity_ok: boolean;
   /** One whole lot on all four legs, ignoring how quiet the book is. */
@@ -1031,10 +1054,23 @@ export interface BoxOpportunity {
 }
 
 export interface BoxConfigView {
-  /** THE ENTRY GATE: minimum GROSS edge (₹) from the spread alone. */
+  /** THE ENTRY GATE: minimum expected NET profit (₹) after every cost. */
+  min_expected_net_profit: number;
+  /** A cheap gross prefilter (₹) — never the decision. */
   min_gross_edge: number;
-  /** Optional additional net floor; 0 means fees do not gate entry. */
+  /** Legacy additional net floor; 0 means it does not raise the gate. */
   min_net_edge: number;
+  /** How a paper fill is simulated, and its simulated delays. */
+  execution_mode: BoxExecutionMode;
+  simulated_decision_ms: number;
+  simulated_latency_ms: number;
+  expected_entry_slippage: number;
+  expected_exit_slippage: number;
+  enable_short_box: boolean;
+  directions: BoxDirection[];
+  min_captured_pct: number;
+  reconcile_charges: boolean;
+  charge_reconcile_warn_pct: number;
   require_priced_charges: boolean;
   safety_buffer: number;
   /** How long an UNCHANGED book is still trusted. */
@@ -1053,7 +1089,6 @@ export interface BoxConfigView {
   expiry_safety_minutes: number;
   max_subscribed_tokens: number;
   lots: number;
-  execution_mode: "paper_touch";
   universe: string;
 }
 
@@ -1070,7 +1105,7 @@ export interface BoxStatus {
   indicative_session_day: string | null;
   /** Legs discarded because they last traded in an earlier session. */
   indicative_stale_legs: number;
-  execution_mode: "paper_touch";
+  execution_mode: BoxExecutionMode;
   authenticated: boolean;
   db_enabled: boolean;
   started_at: number | null;
@@ -1107,35 +1142,105 @@ export interface BoxStatus {
     ticksApplied: number;
     evaluations: number;
     prefilterPasses: number;
-    chargeAttempts: number;
+    qualifyAttempts: number;
+    executionsAttempted: number;
     entriesOpened: number;
     rejectedStale: number;
     rejectedLiquidity: number;
-    rejectedFees: number;
+    rejectedNetProfit: number;
+    rejectedExecution: number;
     rejectedDuplicate: number;
     lastEvaluationAt: number | null;
+    /** Execution-simulation headline figures. */
+    simulated_entries_attempted: number;
+    simulated_entries_filled: number;
+    simulated_entries_failed: number;
+    active_execution_pipelines: number;
   };
   monitor: {
     cycles: number;
     exitsTriggered: number;
     exitsSkippedLiquidity: number;
+    exitsFailedExecution?: number;
     lastCycleAt: number | null;
     running: boolean;
   };
   charges: { calls: number; hits: number; misses: number; failures: number; inFlight: number };
+  /** Asynchronous charge reconciliation against Zerodha. */
+  reconciliation?: {
+    queued: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+    warnings: number;
+    max_abs_diff: number;
+    last_abs_diff: number | null;
+    last_pct_diff: number | null;
+    pending: number;
+    in_flight: number;
+    enabled: boolean;
+    warn_pct: number;
+  };
+  /** Rolling latency / slippage / throughput distributions. */
+  metrics?: BoxMetricsSnapshot;
   last_error: string | null;
   config: BoxConfigView;
+}
+
+/** A rolling distribution summary from a bounded ring buffer. */
+export interface RingSummary {
+  samples: number;
+  count: number;
+  last: number | null;
+  mean: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+  max: number | null;
+}
+
+export interface BoxMetricsSnapshot {
+  execution: {
+    attempted: number;
+    filled: number;
+    failed: number;
+    failure_rate: number;
+    failures_by_reason: Record<string, number>;
+    entry_slippage: RingSummary | null;
+    exit_slippage: RingSummary | null;
+    decision_to_fill_ms: RingSummary | null;
+    qualification_to_fill_ms: RingSummary | null;
+  };
+  latency: {
+    receive_to_evaluation_ms: RingSummary | null;
+    event_loop_lag_ms: RingSummary | null;
+  };
+  throughput: {
+    evaluations_per_sec: number;
+    ws_updates_per_sec: number;
+    ticks_per_sec: number;
+    evaluations_total: number;
+    ws_updates_total: number;
+  };
+  charges: {
+    reconciliations: number;
+    failed_reconciliations: number;
+    warnings: number;
+    discrepancy_rupees: RingSummary | null;
+    discrepancy_pct: RingSummary | null;
+  };
 }
 
 /** One live open box position with its current exit arithmetic. */
 export interface BoxOpenPosition {
   id: string;
   key: string;
-  execution_mode: "paper_touch";
+  execution_mode: BoxExecutionMode;
   underlying: string;
   name: string;
   is_index: boolean;
   expiry: string;
+  direction: BoxDirection;
   lower_strike: number;
   upper_strike: number;
   box_width: number;
@@ -1150,6 +1255,9 @@ export interface BoxOpenPosition {
   estimated_exit_charges_at_entry: number | null;
   safety_buffer: number;
   entry_net_edge: number;
+  expected_net_profit: number | null;
+  entry_execution_cost: number | null;
+  charge_origin: BoxChargeOrigin;
   entry_legs: {
     role: BoxLegRole;
     side: BoxSide;
@@ -1176,15 +1284,26 @@ export interface BoxOpenPosition {
   current_exit_charges: number | null;
   total_charges: number | null;
   net_pnl: number | null;
+  /** Net P&L after the execution/slippage allowance — what an exit realistically nets. */
+  realisable_net_pnl: number | null;
+  estimated_execution_cost: number;
   remaining_edge: number | null;
+  /** Convergence progress. */
+  entry_edge: number;
+  captured_edge: number | null;
+  captured_pct: number | null;
+  time_in_trade_ms: number | null;
   convergence_threshold: number;
   min_exit_net_pnl: number;
   profit_capture_target: number;
+  min_captured_pct: number;
   liquidity_ok: boolean;
   worst_age_ms: number | null;
   exit_eligible: boolean;
   exit_reason: BoxExitReason | null;
   exit_rule_reason: BoxExitReason | null;
+  /** Why it is being held, or why an eligible exit is blocked. */
+  blocked_reason: string | null;
   exit_blocked_reason: string | null;
   expiry_safety: boolean;
   status: "open";
@@ -1205,22 +1324,38 @@ export interface BoxTradeLeg {
   entry_ask: number;
   entry_ask_qty: number;
   entry_quote_at: string | null;
+  detected_price?: number | null;
+  entry_slippage?: number | null;
   exit_price: number | null;
   exit_bid: number | null;
   exit_bid_qty: number | null;
   exit_ask: number | null;
   exit_ask_qty: number | null;
   exit_quote_at: string | null;
+  exit_detected_price?: number | null;
+  exit_slippage?: number | null;
+}
+
+/** The verdict of an asynchronous Zerodha charge reconciliation. */
+export interface BoxChargeReconciliation {
+  status: "pending" | "verified" | "failed";
+  local_total: number | null;
+  reconciled_total: number | null;
+  abs_diff: number | null;
+  pct_diff: number | null;
+  at: string | null;
+  error: string | null;
 }
 
 /** A persisted box paper trade (open or closed). */
 export interface BoxTrade {
   id: string;
-  execution_mode: "paper_touch";
+  execution_mode: BoxExecutionMode;
   underlying: string;
   name: string;
   is_index: boolean;
   expiry: string;
+  direction: BoxDirection;
   lower_strike: number;
   upper_strike: number;
   lot_size: number;
@@ -1235,8 +1370,15 @@ export interface BoxTrade {
   estimated_exit_charges: TradeCharges | null;
   safety_buffer: number;
   entry_net_edge: number;
+  expected_net_profit: number | null;
+  entry_execution_cost: number | null;
+  charge_origin: BoxChargeOrigin;
+  entry_charge_reconciliation: BoxChargeReconciliation | null;
+  exit_charge_reconciliation: BoxChargeReconciliation | null;
   opened_at: string;
   current_remaining_edge: number | null;
+  current_captured_edge: number | null;
+  current_captured_pct: number | null;
   exit_box_value: number | null;
   exit_charges: TradeCharges | null;
   gross_pnl: number | null;
