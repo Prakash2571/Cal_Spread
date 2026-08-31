@@ -3938,3 +3938,16 @@ body {
     flex-basis: 100%;
   }
 }
+
+
+/* Neutral explanation of why an open box has not auto-closed yet — informative,
+   not an error. */
+.box-held {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--border-strong);
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}

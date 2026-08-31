@@ -1130,6 +1130,8 @@ export interface BoxOpenPosition {
   lot_size: number;
   quantity: number;
   opened_at: string;
+  /** Net basket margin the four legs block, captured at entry (₹), or null. */
+  margin: number | null;
   entry_box_cost: number;
   entry_gross_edge: number;
   entry_charges: number | null;
@@ -1214,6 +1216,7 @@ export interface BoxTrade {
   status: "open" | "closed" | "error";
   legs: BoxTradeLeg[];
   box_width: number;
+  margin: number | null;
   entry_box_cost: number;
   entry_gross_edge: number;
   entry_charges: TradeCharges | null;

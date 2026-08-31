@@ -156,7 +156,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
   const loadHistory = useCallback(async () => {
     try {
-      const res = await fetchBoxHistory(100);
+      // Ask for the backend's full cap (up to 1000) rather than the first 100,
+      // so the Closed tab is the whole book, not a recent slice.
+      const res = await fetchBoxHistory(1000);
       setHistory(res.trades);
     } catch {
       /* history is not critical to the control surface */
@@ -862,6 +864,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                   <th>Opened</th>
                   <th>Closed</th>
                   <th className="num">Held</th>
+                  <th className="num">Margin</th>
                   <th className="num">Entry cost</th>
                   <th className="num">Exit value</th>
                   <th className="num">Entry fees</th>
@@ -886,6 +889,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                     <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
                     <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
                     <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
+                    <td className="num box-dim">{rupees(t.margin)}</td>
                     <td className="num">{rupees(t.entry_box_cost)}</td>
                     <td className="num">{rupees(t.exit_box_value)}</td>
                     <td className="num box-dim">{rupees(t.entry_charges?.total ?? null)}</td>
@@ -1000,6 +1004,10 @@ function OpenBoxCard({
 
       <div className="box-card-grid">
         <Metric label="Original net edge" value={rupees(p.entry_net_edge)} />
+        <Metric
+          label="Margin (all 4 legs)"
+          value={p.margin === null ? "unpriced" : rupees(p.margin)}
+        />
         <Metric label="Entry cost" value={rupees(p.entry_box_cost)} />
         <Metric label="Exit value now" value={rupees(p.exit_box_value)} />
         <Metric label="Gross P&L" value={rupees(p.gross_pnl)} cls={pnlClass(p.gross_pnl)} />
@@ -1017,6 +1025,9 @@ function OpenBoxCard({
         <Metric label="Profit capture at" value={rupees(p.profit_capture_target)} />
       </div>
 
+      {/* Say plainly why an open box is NOT closing, so the rules are legible
+          rather than looking like the engine is asleep. */}
+      {!p.exit_eligible && <p className="box-held">{whyHeld(p)}</p>}
       {p.exit_blocked_reason && (
         <p className="box-blocked">
           Exit held back: {p.exit_blocked_reason}. The position stays open and keeps being
@@ -1025,6 +1036,36 @@ function OpenBoxCard({
       )}
     </div>
   );
+}
+
+/**
+ * Why an open box has not auto-closed yet, in one sentence.
+ *
+ * The exit rules are: close when the net P&L is positive AND either the edge has
+ * converged (remaining <= threshold) with net >= the minimum profit, or the
+ * captured profit has reached the target — and only while all four reversed legs
+ * have fresh one-lot liquidity. This turns "not eligible" into the specific
+ * reason so the page never looks like it is doing nothing.
+ */
+function whyHeld(p: BoxOpenPosition): string {
+  if (p.net_pnl === null) {
+    return "Held: charges for this box could not be priced, so its net P&L can't be confirmed — it will not auto-close on an unknown cost.";
+  }
+  if (p.net_pnl <= 0) {
+    return `Held: closing now would realise ${rupees(p.net_pnl)} — the box will not be closed below break-even. It waits for the spread to converge back in profit.`;
+  }
+  if (!p.liquidity_ok) {
+    return "Held: the four-leg one-lot market is not currently executable (see the leg rows above). It will close once liquidity returns.";
+  }
+  const remaining = p.remaining_edge;
+  const converged = remaining !== null && remaining <= p.convergence_threshold;
+  if (!converged && p.net_pnl < p.profit_capture_target) {
+    return `Held: in profit at ${rupees(p.net_pnl)}, but the edge has not converged (remaining ${rupees(remaining)} > ${rupees(p.convergence_threshold)} target) and profit is below the ${rupees(p.profit_capture_target)} capture level. Waiting for one of those.`;
+  }
+  if (converged && p.net_pnl < p.min_exit_net_pnl) {
+    return `Held: the edge has converged, but net profit ${rupees(p.net_pnl)} is below the ${rupees(p.min_exit_net_pnl)} minimum for a convergence exit.`;
+  }
+  return "Held: monitoring — exit conditions not yet met.";
 }
 
 function Metric({ label, value, cls }: { label: string; value: string; cls?: string }) {
