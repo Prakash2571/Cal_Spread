@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only token, and no secrets: the build is a pure typecheck + bundle. It
+# never contacts Zerodha, MongoDB, Redis or the market.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install (locked)
+        run: npm ci
+
+      # `npm run build` is `tsc -b && vite build`, so this one step both
+      # typechecks the app (strict, incl. noUnusedLocals) and produces the bundle.
+      - name: Build
+        run: npm run build
