@@ -4309,6 +4309,97 @@ body {
 .box-daypnl-v.is-neg {
   color: var(--neg, #dc2626);
 }
+/* Margin deployed is capital, not profit: no P&L colour, and set apart from the
+   figures either side of it so it is not misread as part of the day's result. */
+.box-daypnl-item--neutral {
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--border, #e5e7eb);
+}
+.box-daypnl-item--neutral .box-daypnl-v {
+  color: var(--text-2);
+}
+.box-daypnl-sub {
+  font-size: 0.66rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ box: admin threshold editor ------ */
+
+.box-gates {
+  margin: 0.5rem 0 0.75rem;
+}
+.box-gates-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.box-gates-summary {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.box-gates-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  margin-top: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+.box-gates-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 22rem;
+}
+.box-gates-k {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.box-gates-field input {
+  width: 11rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--surface-0, #fff);
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.box-gates-field input[aria-invalid="true"] {
+  border-color: var(--neg, #dc2626);
+}
+.box-gates-hint {
+  font-size: 0.68rem;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+.box-gates-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex-basis: 100%;
+}
+.box-gates-note {
+  font-size: 0.68rem;
+  color: var(--text-3);
+  max-width: 40rem;
+}
+.box-gates-msg {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.72rem;
+}
+.box-gates-msg--error {
+  color: var(--neg, #dc2626);
+}
+.box-gates-msg--ok {
+  color: var(--pos, #16a34a);
+}
 
 .box-section-title--sub {
   margin-top: 1.25rem;

@@ -13,6 +13,7 @@ import {
   stopBoxScanner,
   type BoxChain,
   type BoxExecutionAttempt,
+  type BoxHistorySource,
   type BoxOpenPosition,
   type BoxOpportunity,
   type BoxSnapshot,
@@ -25,6 +26,7 @@ import { DirectionBadge } from "./BoxDirection.tsx";
 import { BoxExecutionHealth } from "./BoxExecutionHealth.tsx";
 import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
 import { BoxDayPnlStrip } from "./BoxDayPnl.tsx";
+import { BoxGates } from "./BoxGates.tsx";
 import { BoxHelp } from "./BoxHelp.tsx";
 
 interface Props {
@@ -172,11 +174,22 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [live, setLive] = useState(false);
+  /** Closed-trade loading state, kept apart from the control surface's own error. */
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  /** Which tier served today's trades: memory / redis / mongo. */
+  const [historySource, setHistorySource] = useState<BoxHistorySource | null>(null);
+  const [historyDbEnabled, setHistoryDbEnabled] = useState(true);
 
   // The stream pushes a full snapshot a couple of times a second. It is buffered
   // and flushed on an interval so a busy scanner cannot re-render this page on
   // every frame — the backend has already made the trading decision by then.
   const pending = useRef<BoxSnapshot | null>(null);
+  /**
+   * Ids of closed trades held with their full execution audit, so a later
+   * audit-stripped copy of the same trade cannot replace it. See mergeHistory.
+   */
+  const fullRows = useRef<Set<string>>(new Set());
 
   const running = status?.running === true;
 
@@ -191,21 +204,99 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     }
   }, []);
 
+  /**
+   * Merge closed trades into the list, newest-closed first.
+   *
+   * Never a plain replace. Three sources feed this list — the fast "today" fetch,
+   * the slower full-book fetch and live SSE `exit` events — and they can land in
+   * any order, so it is keyed on id and no source can drop another's trades.
+   *
+   * `lite` says whether the incoming rows have had their execution-audit blobs
+   * stripped (the fast path does that; the full book does not). A lite row must not
+   * overwrite a full one already in state — an SSE `exit` delivers the complete
+   * trade, and a later "today" refresh would otherwise quietly hollow it out.
+   *
+   * Which rows are full is tracked here rather than sniffed off the row, because
+   * `BoxTrade` deliberately does not model the audit blobs at all: nothing on this
+   * page renders them, so the wire carries fields the type has no reason to declare.
+   */
+  const mergeHistory = useCallback((incoming: BoxTrade[], lite = false) => {
+    setHistory((current) => {
+      const byId = new Map<string, BoxTrade>();
+      for (const trade of current) byId.set(trade.id, trade);
+      for (const trade of incoming) {
+        // Keep the richer row: only skip when a lite row would replace a full one.
+        if (lite && fullRows.current.has(trade.id)) continue;
+        if (!lite) fullRows.current.add(trade.id);
+        byId.set(trade.id, trade);
+      }
+      return [...byId.values()].sort((a, b) =>
+        (b.closed_at ?? b.opened_at).localeCompare(a.closed_at ?? a.opened_at),
+      );
+    });
+  }, []);
+
+  /**
+   * TODAY's closed trades — the fast path.
+   *
+   * The backend answers this from memory (or Redis after a restart), so the
+   * session the operator is actually watching appears immediately instead of
+   * waiting on a sort over the whole closed book.
+   */
+  const loadToday = useCallback(async () => {
+    try {
+      const res = await fetchBoxHistory(0, "today");
+      // Audit-stripped rows: never let them overwrite a fuller row already held.
+      mergeHistory(res.trades, res.lite ?? true);
+      setHistorySource(res.source ?? null);
+      setHistoryError(null);
+      return true;
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "Failed to load today's closed trades.",
+      );
+      return false;
+    }
+  }, [mergeHistory]);
+
+  /**
+   * The FULL closed book, including earlier days. Slower by nature, so it runs
+   * after (and independently of) the fast path.
+   *
+   * The error is surfaced rather than swallowed: this list is the trade log, and an
+   * empty one that silently meant "the request failed" was indistinguishable from
+   * "nothing has been closed" — which is exactly how a broken history query hid
+   * itself while the day-P&L strip cheerfully reported closed trades.
+   */
   const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
     try {
       // Ask for the backend's full cap (up to 1000) rather than the first 100,
       // so the Closed tab is the whole book, not a recent slice.
-      const res = await fetchBoxHistory(1000);
-      setHistory(res.trades);
-    } catch {
-      /* history is not critical to the control surface */
+      const res = await fetchBoxHistory(1000, "all");
+      mergeHistory(res.trades, res.lite ?? false);
+      setHistoryDbEnabled(res.dbEnabled);
+      setHistoryError(null);
+    } catch (err) {
+      // Today's rows may already be on screen from the fast path; say so rather
+      // than implying the whole log is gone.
+      setHistoryError(
+        `${err instanceof Error ? err.message : "Failed to load the closed-trade history."}` +
+          " Earlier days may be missing.",
+      );
+    } finally {
+      setHistoryLoading(false);
     }
-  }, []);
+  }, [mergeHistory]);
 
   useEffect(() => {
     if (!canTrade) return;
     void loadStatus();
-    void loadHistory();
+    // Two phases: today's closed trades first (memory/Redis, immediate), then the
+    // full book in the background. The old single full-book fetch meant the tab
+    // showed nothing until the slowest query on the page finished — or forever, if
+    // it failed.
+    void loadToday().then(() => loadHistory());
     // A first opportunity/open snapshot, so the page is populated before the
     // stream's first frame arrives.
     fetchBoxOpportunities()
@@ -214,7 +305,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         setStatus(r.status);
       })
       .catch(() => {});
-  }, [canTrade, loadStatus, loadHistory]);
+  }, [canTrade, loadStatus, loadToday, loadHistory]);
 
   /* --------------------------------- stream ------------------------------- */
 
@@ -246,18 +337,22 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       try {
         const payload = JSON.parse((ev as MessageEvent).data) as { trade?: BoxTrade };
         if (!payload.trade) {
-          void loadHistory();
+          // An exit happened but the frame carried no trade: re-read TODAY only.
+          // That is the day the exit belongs to, and it is the cheap query.
+          void loadToday();
           return;
         }
         // The exit stream already carries the complete serialized trade. Put it
         // at the top immediately and de-duplicate it by id; the archive fetch on
         // mount/tab-open still reconciles anything missed while disconnected.
+        // Recorded as a full row so a later "today" refresh cannot strip it.
+        fullRows.current.add(payload.trade.id);
         setHistory((current) => [
           payload.trade!,
           ...current.filter((trade) => trade.id !== payload.trade!.id),
         ]);
       } catch {
-        void loadHistory();
+        void loadToday();
       }
     });
     es.onerror = () => setLive(false);
@@ -266,7 +361,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       window.clearInterval(flush);
       es.close();
     };
-  }, [canTrade, loadHistory]);
+  }, [canTrade, loadToday]);
 
   /* --------------------------------- chain -------------------------------- */
 
@@ -344,7 +439,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     try {
       setOpen(await closeBoxTrade(id));
       setNotice("Box closed at the executable touch.");
-      void loadHistory();
+      // A manual close lands in today, so the cheap fast path is enough.
+      void loadToday();
     } catch (err) {
       // A refusal (no one-lot market) is the expected, meaningful case here.
       setError(err instanceof Error ? err.message : "Failed to close the box.");
@@ -355,6 +451,28 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
   const cfg = status?.config;
   const freshLimit = cfg?.quote_max_age_ms ?? 1500;
+  /**
+   * The ACTIVE strikes-each-side level the backend is monitoring on.
+   *
+   * `status.strike_level` (the live control) is authoritative; `config.strike_level`
+   * is the same number and is the fallback. NOT `config.strikes_each_side`, which
+   * is the immutable ATM ±3 CAP — reading that is what made the status strip claim
+   * ±3 no matter which level was selected.
+   */
+  const strikeLevel = status?.strike_level ?? cfg?.strike_level ?? 3;
+  /** Strike PAIRS in the active window: C(n,2) for n = 2·level+1 strikes. */
+  const strikePairs =
+    cfg?.max_candidates_per_underlying ??
+    ((strikeLevel * 2 + 1) * (strikeLevel * 2)) / 2;
+  /**
+   * Whether the backend will build a last-close view with the scanner stopped.
+   *
+   * Needs the feature switched on AND a Zerodha session, since the closes are
+   * fetched over REST. Without both, promising "building the last-close view…" would
+   * be a spinner for work that is never going to happen — so the plain
+   * "press RUN" message is the honest one.
+   */
+  const closedViewExpected = (cfg?.indicative_discovery ?? false) && authenticated;
   // The backend is the authority on market hours; default to "open" only once we
   // actually have a status, so the page never claims tradability it can't back.
   const marketOpen = status ? status.market_open : true;
@@ -382,6 +500,20 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     () => history.reduce((acc, t) => acc + (t.gross_pnl ?? 0), 0),
     [history],
   );
+  /** Total basket margin every listed closed box blocked (a sum, not a peak). */
+  const closedMargin = useMemo(
+    () => history.reduce((acc, t) => acc + (t.margin ?? 0), 0),
+    [history],
+  );
+  /**
+   * What the backend's day summary says was closed today.
+   *
+   * Used to catch the exact disagreement that hid the broken history query: the
+   * strip reporting "Closed today (164)" while the list rendered "No closed paper
+   * boxes yet". If these two ever disagree again, the empty state says so out loud
+   * instead of implying nothing was traded.
+   */
+  const dayPnlClosedCount = status?.day_pnl?.closed_count ?? 0;
   const todayKey = istTodayKey();
   // `<details>` has no React "defaultOpen", and an uncontrolled `open` would be
   // reset by the frequent snapshot re-renders on this page. So the open state is
@@ -415,6 +547,15 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       gross: trades.reduce((sum, trade) => sum + (trade.gross_pnl ?? 0), 0),
       fees: trades.reduce((sum, trade) => sum + (trade.total_charges ?? 0), 0),
       net: trades.reduce((sum, trade) => sum + (trade.net_pnl ?? 0), 0),
+      /**
+       * Total basket margin these boxes blocked, and how many are missing a
+       * figure. Summed over the day, so it is an upper bound on what was blocked
+       * at any single instant rather than a peak: boxes that opened and closed at
+       * different times never held their margin simultaneously.
+       */
+      margin: trades.reduce((sum, trade) => sum + (trade.margin ?? 0), 0),
+      marginUnknown: trades.filter((trade) => trade.margin === null || trade.margin === undefined)
+        .length,
     }));
   }, [history]);
 
@@ -619,7 +760,13 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         )}
         <div className="box-stat">
           <span className="box-stat-k">Safety buffer</span>
-          <span className="box-stat-v" title="Reported in the net figure, not part of the entry gate">
+          {/* It IS part of the gate: the backend deducts it inside the expected-net
+              figure the gate tests against, so raising it makes entry strictly
+              harder. The old tooltip said the opposite. */}
+          <span
+            className="box-stat-v"
+            title="Deducted inside the expected-net figure the entry gate tests, so it is part of the entry decision — not just a reported number"
+          >
             {rupees(cfg?.safety_buffer ?? null)}
           </span>
         </div>
@@ -633,7 +780,18 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Strikes</span>
-          <span className="box-stat-v">ATM ±{cfg?.strikes_each_side ?? 3}</span>
+          {/* The ACTIVE level, not the cap. This used to render
+              `strikes_each_side` — the immutable ATM ±3 ceiling — so it read ±3
+              however narrow a window the admin had actually selected. */}
+          <span
+            className="box-stat-v"
+            title={`Monitoring ${strikeLevel * 2 + 1} strikes (ATM ±${strikeLevel}), up to ${strikePairs} strike pairs per underlying. Maximum ±${cfg?.strikes_each_side ?? 3}.`}
+          >
+            ATM ±{strikeLevel}
+            {cfg && strikeLevel < cfg.strikes_each_side && (
+              <span className="box-dim"> of ±{cfg.strikes_each_side}</span>
+            )}
+          </span>
         </div>
         <div className="box-stat">
           <span className="box-stat-k">Mode</span>
@@ -697,6 +855,16 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
       </section>
 
+      {/* The two thresholds above that an admin can actually change at runtime. */}
+      <BoxGates
+        cfg={cfg}
+        canTrade={canTrade}
+        onSaved={(next) => {
+          setStatus(next.status);
+          setNotice(null);
+        }}
+      />
+
       {status && status.skipped_for_budget > 0 && (
         <div className="banner banner--warn">
           {status.skipped_for_budget} underlying(s) are outside the live-feed token budget
@@ -749,7 +917,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           className={`btn${view === "history" ? " btn--primary" : ""}`}
           onClick={() => {
             setView("history");
-            void loadHistory();
+            // Today first (instant), then reconcile the full book behind it.
+            void loadToday().then(() => loadHistory());
             void fetchBoxExecutionAttempts(100).then(setAttempts).catch(() => {});
           }}
         >
@@ -757,6 +926,13 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </button>
         {view === "history" && history.length > 0 && (
           <span className="box-views-total">
+            <span
+              className="box-dim"
+              title="Total basket margin every listed box blocked, summed. Not a peak: boxes closed at different times did not hold their margin at the same moment."
+            >
+              Margin {rupees(closedMargin)}
+            </span>
+            {"  ·  "}
             <span className="box-dim">Gross {rupees(closedGross)}</span>
             {"  −  "}
             <span className="box-dim">Fees {rupees(closedFees)}</span>
@@ -769,11 +945,23 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       {/* ------------------------------ opportunities ---------------------- */}
       {view === "opportunities" && (
       <section className="box-section">
-        {!running && opportunities.length === 0 ? (
+        {!running && opportunities.length === 0 && !marketOpen && closedViewExpected ? (
+          /* Market shut AND stopped, and the backend does build the last-close view
+             without RUN. Only claim a pass is coming when that is actually true —
+             gated on `indicative_discovery`, on Zerodha being connected, and on
+             whether a pass has already completed, so this never spins forever
+             asserting work that will not happen. */
+          <p className="box-empty">
+            {status?.indicative_at ? null : <span className="spinner" />}
+            {status?.indicative_at
+              ? `The last session's closes were checked ${fmtDateTime(new Date(status.indicative_at).toISOString())} and no box in the ATM ±${strikeLevel} window had a coherent, mispriced close. Nothing is executable while the market is shut.`
+              : `Building the last-close view of the ATM ±${strikeLevel} window… This is a read-only look at how boxes were priced at the close; nothing can be entered while the market is shut.`}
+          </p>
+        ) : !running && opportunities.length === 0 ? (
           <p className="box-empty">
             The scanner is stopped. Press <strong>RUN</strong> to start scanning F&amp;O stock and
-            index options — only the ATM ±3 window of each underlying is monitored, so at most 21
-            strike pairs per symbol.
+            index options — only the ATM ±{strikeLevel} window of each underlying is monitored, so at
+            most {strikePairs} strike pairs per symbol.
           </p>
         ) : opportunities.length === 0 ? (
           <p className="box-empty">
@@ -1071,9 +1259,35 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       <section className="box-section">
         <h2 className="box-section-title">
           Closed box trades <span className="pill-count">{history.length}</span>
+          {historyLoading && (
+            <span className="box-chain-meta">
+              <span className="spinner" /> loading earlier days…
+            </span>
+          )}
+          {!historyLoading && historySource && historySource !== "none" && (
+            <span className="box-chain-meta" title="Where today's closed trades were served from. memory/redis are the fast paths; mongo means the cache was cold.">
+              today from {historySource}
+            </span>
+          )}
         </h2>
+        {/* Never let a failed fetch look like "nothing has been closed". */}
+        {historyError && <div className="banner banner--warn">{historyError}</div>}
+        {!historyDbEnabled && (
+          <div className="banner banner--warn">
+            The box database is not connected on the server, so the closed-trade log cannot be
+            read. Trades closed in this session may still be listed from memory.
+          </div>
+        )}
         {history.length === 0 ? (
-          <p className="box-empty">No closed paper boxes yet.</p>
+          <p className="box-empty">
+            {historyError
+              ? "The closed-trade log could not be loaded — see the message above."
+              : historyLoading
+                ? "Loading closed paper boxes…"
+                : dayPnlClosedCount > 0
+                  ? `The day summary reports ${dayPnlClosedCount} box(es) closed today, but none could be listed. This is a load failure, not an empty log — try reloading.`
+                  : "No closed paper boxes yet."}
+          </p>
         ) : (
           <div className="box-history-days">
             {historyDays.map((day) => (
@@ -1091,6 +1305,20 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                   <span className="box-history-day-meta">
                     <span className="pill-count">
                       {day.trades.length} {day.trades.length === 1 ? "trade" : "trades"}
+                    </span>
+                    <span
+                      className="box-dim"
+                      title={
+                        `Total basket margin these ${day.trades.length} box(es) blocked, summed over the day — ` +
+                        `an upper bound on what was blocked at any one instant, since boxes closed at ` +
+                        `different times did not hold their margin simultaneously.` +
+                        (day.marginUnknown > 0
+                          ? ` ${day.marginUnknown} box(es) have no margin figure and are excluded.`
+                          : "")
+                      }
+                    >
+                      Margin {rupees(day.margin)}
+                      {day.marginUnknown > 0 ? ` (${day.marginUnknown} n/a)` : ""}
                     </span>
                     <span className="box-dim">Gross {rupees(day.gross)}</span>
                     <span className="box-dim">Fees {rupees(day.fees)}</span>

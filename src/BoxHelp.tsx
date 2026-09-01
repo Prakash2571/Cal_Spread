@@ -166,10 +166,10 @@ export function BoxHelp() {
               <Section title="Every label on this page">
                 <Glossary
                   rows={[
-                    ["Entry gate", "Minimum expected net profit, after every cost, before a box is taken."],
+                    ["Entry gate", "Minimum expected net profit, after every cost, before a box is taken. Editable from ‘Edit thresholds’ — the change is saved on the server and applies to NEW boxes only."],
                     ["Execution / Mode", "Which fill model is running (see above). These must agree."],
                     ["Directions", "Whether long boxes, short boxes or both are being scanned."],
-                    ["Safety buffer", "A risk allowance subtracted inside the expected-net figure. Not a stop-loss."],
+                    ["Safety buffer", "A risk allowance subtracted inside the expected-net figure, so it is part of the entry decision — raising it makes the gate harder to clear. Not a stop-loss. Also editable from ‘Edit thresholds’."],
                     ["Universe", "What is scanned: F&O stocks plus supported indices, options only."],
                     ["Prices", "Live executable quotes, or ‘Last close’ when the market is shut — indicative only, nothing can trade."],
                     ["Strikes ATM ±", "How many strikes each side of at-the-money are scanned. Narrowing it only affects NEW boxes; open positions are untouched."],
@@ -183,6 +183,7 @@ export function BoxHelp() {
                     ["Expected net", "Gross edge after charges, expected exit slippage and the safety buffer. This is what the gate tests."],
                     ["Realisable net", "What an open box would net if closed now, minus an allowance for the slippage the exit itself will cost."],
                     ["Realised net", "The actual result once the exit has executed — no allowances left, nothing estimated."],
+                    ["Margin used today", "Zerodha basket margin these boxes blocked: currently-open plus boxes already closed today. It is a SUM over the day, not a peak — boxes that opened and closed at different times never held their margin at the same moment, so treat it as an upper bound on what was blocked at any one instant. Boxes whose margin call failed are excluded and counted as ‘n/a’."],
                     ["Slippage", "Fill price versus the price that was on screen when the box was spotted. Positive always means it went against you."],
                     ["Liquidity", "Whether a whole lot is genuinely resting at the touch on all four legs. Without it, nothing is entered or exited."],
                     ["Fresh", "Age of the order book behind a quote. Older than the trust window and it is not used."],
