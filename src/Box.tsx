@@ -185,6 +185,11 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   // and flushed on an interval so a busy scanner cannot re-render this page on
   // every frame — the backend has already made the trading decision by then.
   const pending = useRef<BoxSnapshot | null>(null);
+  /**
+   * Ids of closed trades held with their full execution audit, so a later
+   * audit-stripped copy of the same trade cannot replace it. See mergeHistory.
+   */
+  const fullRows = useRef<Set<string>>(new Set());
 
   const running = status?.running === true;
 
@@ -210,15 +215,19 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
    * stripped (the fast path does that; the full book does not). A lite row must not
    * overwrite a full one already in state — an SSE `exit` delivers the complete
    * trade, and a later "today" refresh would otherwise quietly hollow it out.
+   *
+   * Which rows are full is tracked here rather than sniffed off the row, because
+   * `BoxTrade` deliberately does not model the audit blobs at all: nothing on this
+   * page renders them, so the wire carries fields the type has no reason to declare.
    */
   const mergeHistory = useCallback((incoming: BoxTrade[], lite = false) => {
     setHistory((current) => {
       const byId = new Map<string, BoxTrade>();
       for (const trade of current) byId.set(trade.id, trade);
       for (const trade of incoming) {
-        const existing = byId.get(trade.id);
         // Keep the richer row: only skip when a lite row would replace a full one.
-        if (existing && lite && existing.entry_execution !== null) continue;
+        if (lite && fullRows.current.has(trade.id)) continue;
+        if (!lite) fullRows.current.add(trade.id);
         byId.set(trade.id, trade);
       }
       return [...byId.values()].sort((a, b) =>
@@ -336,6 +345,8 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         // The exit stream already carries the complete serialized trade. Put it
         // at the top immediately and de-duplicate it by id; the archive fetch on
         // mount/tab-open still reconciles anything missed while disconnected.
+        // Recorded as a full row so a later "today" refresh cannot strip it.
+        fullRows.current.add(payload.trade.id);
         setHistory((current) => [
           payload.trade!,
           ...current.filter((trade) => trade.id !== payload.trade!.id),
