@@ -1162,6 +1162,14 @@ export interface BoxStatus {
   day_pnl?: BoxDayPnl;
   skipped_for_budget: number;
   skipped_symbols: string[];
+  /**
+   * Underlyings left out of the LAST-CLOSE PREVIEW by its own cap — a display
+   * limit while the market is shut, NOT the live-feed token budget above.
+   * Optional: absent on a backend built before the preview cap existed.
+   */
+  skipped_indicative_cap?: number;
+  skipped_indicative_symbols?: string[];
+  indicative_max_underlyings?: number;
   scanner: {
     ticksApplied: number;
     evaluations: number;
