@@ -1098,6 +1098,15 @@ export interface BoxConfigView {
   leg_timeout_ms?: number;
   /** Whether the exit floor is judged on realisable net pre-execution. */
   exit_use_realisable_net?: boolean;
+  /** Whether the last-close view covers the whole universe with the scanner off. */
+  indicative_discovery?: boolean;
+  /** Whether today's closed trades are mirrored to Redis for a fast read. */
+  closed_cache_enabled?: boolean;
+  /** The thresholds an admin may change from the UI, with their bounds. */
+  tunable?: {
+    min_expected_net_profit: { min: number; max: number };
+    safety_buffer: { min: number; max: number };
+  };
 }
 
 export interface BoxStatus {
@@ -1218,6 +1227,19 @@ export interface BoxDayPnl {
   /** Open running net + today's realised net — the day's running total (₹). */
   total_net_pnl: number;
   total_gross_pnl: number;
+  /**
+   * MARGIN DEPLOYED TODAY (₹): the Zerodha basket margin these boxes blocked.
+   *
+   * `total_margin_used` is a SUM over the day, not a peak: boxes that opened and
+   * closed at different times never held their margin at the same moment, so it is
+   * an upper bound on what was blocked at any one instant. Optional — absent on a
+   * backend built before these fields existed.
+   */
+  open_margin_used?: number;
+  closed_margin_used?: number;
+  total_margin_used?: number;
+  /** Boxes whose margin call never returned, so they are missing from the sums. */
+  margin_unknown_count?: number;
   /** Whether the Redis (Upstash) P&L cache is actively mirroring this figure. */
   cache_enabled: boolean;
   /** ISO time the cache was last written, or null. */
@@ -1646,16 +1668,70 @@ export async function fetchBoxTrades(): Promise<{
   );
 }
 
-export async function fetchBoxHistory(limit = 300): Promise<{
+/** Which tier of the backend's closed-trade store answered a history request. */
+export type BoxHistorySource = "memory" | "redis" | "mongo" | "none";
+
+export interface BoxHistoryResponse {
   dbEnabled: boolean;
   trades: BoxTrade[];
-}> {
-  const res = await fetch(`${API_BASE_URL}/api/box/trades/history?limit=${limit}`, {
+  /** "today" for the fast path, "all" for the full book. Older backends omit it. */
+  scope?: "today" | "all";
+  /** Where the rows came from, so a slow path is visible rather than mysterious. */
+  source?: BoxHistorySource;
+  /** The IST day a "today" response covers. */
+  day?: string;
+  /** Whether the Redis accelerator for today's trades is configured. */
+  cacheEnabled?: boolean;
+  /**
+   * True when the execution-audit blobs (`entry_execution`, `entry_legging`,
+   * `exit_execution`, per-leg depth) have been stripped from these rows.
+   *
+   * The fast "today" path serves stripped rows — the Closed-trades table renders
+   * none of that, and caching depth ladders would be wasteful. It matters on merge:
+   * a stripped row must not overwrite a full one already held.
+   */
+  lite?: boolean;
+}
+
+/**
+ * Closed box trades.
+ *
+ * `scope: "today"` is the FAST path — the backend answers it from memory, or from
+ * Redis after a restart, never with a full-book Mongo sort. The page asks for that
+ * first so the current session appears immediately, then fetches the whole book in
+ * the background where a slower load does not matter.
+ */
+export async function fetchBoxHistory(
+  limit = 300,
+  scope: "today" | "all" = "all",
+): Promise<BoxHistoryResponse> {
+  const qs =
+    scope === "today" ? "?scope=today" : `?scope=all&limit=${encodeURIComponent(limit)}`;
+  const res = await fetch(`${API_BASE_URL}/api/box/trades/history${qs}`, {
     headers: getHeaders(),
   });
-  return readJson<{ dbEnabled: boolean; trades: BoxTrade[] }>(
+  return readJson<BoxHistoryResponse>(res, "Failed to load box trade history");
+}
+
+/**
+ * ADMIN: set the live entry gate (₹ expected net) and/or safety buffer (₹).
+ *
+ * Persisted server-side, so it survives a restart and is shared by every browser.
+ * Applies to NEW boxes only — positions already open are never re-judged against a
+ * changed threshold.
+ */
+export async function saveBoxSettings(patch: {
+  min_expected_net_profit?: number;
+  safety_buffer?: number;
+}): Promise<{ config: BoxConfigView; status: BoxStatus }> {
+  const res = await fetch(`${API_BASE_URL}/api/box/settings`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(patch),
+  });
+  return readJson<{ ok?: boolean; config: BoxConfigView; status: BoxStatus }>(
     res,
-    "Failed to load box trade history",
+    "Failed to save the box settings",
   );
 }
 
