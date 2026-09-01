@@ -278,12 +278,26 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       setHistoryDbEnabled(res.dbEnabled);
       setHistoryError(null);
     } catch (err) {
-      // Today's rows may already be on screen from the fast path; say so rather
-      // than implying the whole log is gone.
-      setHistoryError(
-        `${err instanceof Error ? err.message : "Failed to load the closed-trade history."}` +
-          " Earlier days may be missing.",
-      );
+      // A big book can still be too slow for whatever sits in front of the API
+      // (this failed with a gateway 504 before the audit blobs were projected out
+      // of the query). A SHORTER window is far better than no earlier days at all,
+      // so degrade rather than give up.
+      try {
+        const res = await fetchBoxHistory(200, "all");
+        mergeHistory(res.trades, res.lite ?? false);
+        setHistoryDbEnabled(res.dbEnabled);
+        setHistoryError(
+          "The full closed-trade history was too slow to load, so this is the 200 most recent" +
+            " closed boxes. Today is complete.",
+        );
+      } catch {
+        // Today's rows may already be on screen from the fast path; say so rather
+        // than implying the whole log is gone.
+        setHistoryError(
+          `${err instanceof Error ? err.message : "Failed to load the closed-trade history."}` +
+            " Earlier days may be missing — today's trades are unaffected.",
+        );
+      }
     } finally {
       setHistoryLoading(false);
     }
@@ -870,6 +884,20 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           {status.skipped_for_budget} underlying(s) are outside the live-feed token budget
           ({cfg?.max_subscribed_tokens} instruments) and are not being scanned
           {status.skipped_symbols.length > 0 ? `: ${status.skipped_symbols.join(", ")}…` : "."}
+        </div>
+      )}
+      {/* A DIFFERENT limit, and it used to be reported as the one above — which
+          blamed the live-feed token budget while the market was shut and nothing
+          was streaming at all. This one only trims the read-only preview. */}
+      {status && (status.skipped_indicative_cap ?? 0) > 0 && (
+        <div className="banner banner--info">
+          Last-close preview is limited to the {status.indicative_max_underlyings ?? 150} most
+          liquid underlyings, so {status.skipped_indicative_cap} more are not priced in this view.
+          Nothing is being traded either way while the market is shut, and pressing{" "}
+          <strong>RUN</strong> scans on the live-feed budget instead
+          {status.skipped_indicative_symbols && status.skipped_indicative_symbols.length > 0
+            ? `. Not previewed: ${status.skipped_indicative_symbols.join(", ")}…`
+            : "."}
         </div>
       )}
 
