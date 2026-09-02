@@ -636,7 +636,11 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           <ThemeToggle />
           <span
             className="box-mode"
-            title="The execution model the backend is actually running. Fills are always simulated from observed executable books — never real orders."
+            title={
+              status?.execution_mode === "live"
+                ? "The execution model the backend is actually running. LIVE: fills are real broker orders, gated by the fail-closed durable order manager."
+                : "The execution model the backend is actually running. Fills are simulated from observed executable books — never real orders."
+            }
           >
             {(status?.execution_mode ?? "paper").replace(/_/g, " ").toUpperCase()}
           </span>
@@ -1423,10 +1427,21 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       )}
 
       <p className="box-disclaimer">
-        <strong>Paper execution.</strong> Every box above is simulated. A paper fill assumes all
-        four one-lot legs were simultaneously executable at the touch recorded in that snapshot.
-        Real trading can differ because of inter-leg latency, queue position, depth disappearing,
-        partial fills, order rejection and legging risk. These are not exchange fills.
+        {status?.execution_mode === "live" ? (
+          <>
+            <strong>Live execution.</strong> Boxes above are opened with real broker orders through
+            the fail-closed durable order manager. Real trading still carries inter-leg latency,
+            queue position, depth disappearing, partial fills, order rejection and legging risk —
+            see the execution-health panel above for the measured figures.
+          </>
+        ) : (
+          <>
+            <strong>Paper execution.</strong> Every box above is simulated. A paper fill assumes all
+            four one-lot legs were simultaneously executable at the touch recorded in that snapshot.
+            Real trading can differ because of inter-leg latency, queue position, depth disappearing,
+            partial fills, order rejection and legging risk. These are not exchange fills.
+          </>
+        )}
       </p>
     </div>
   );

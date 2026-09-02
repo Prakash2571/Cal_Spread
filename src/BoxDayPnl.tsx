@@ -42,29 +42,45 @@ export function BoxDayPnlStrip({ dayPnl }: { dayPnl: BoxDayPnl | undefined }) {
       {/* Margin is capital deployed, not profit, so it is deliberately rendered
           without the P&L colouring — a big number here is not a good or a bad
           thing. Hidden entirely on a backend that does not report it. */}
-      {dayPnl.total_margin_used !== undefined && (
+      {(dayPnl.cumulative_trade_margin ?? dayPnl.total_margin_used) !== undefined && (
         <div
           className="box-daypnl-item box-daypnl-item--neutral"
           title={
             `Zerodha basket margin these boxes blocked: ${rupees(dayPnl.open_margin_used)} currently ` +
             `open + ${rupees(dayPnl.closed_margin_used)} from boxes already closed today. ` +
-            `A SUM over the day, so it is an upper bound on what was blocked at any single ` +
+            `This is a SUM over the day, so it is an upper bound on what was blocked at any single ` +
             `instant — boxes that opened and closed at different times never held their margin ` +
-            `at the same time.` +
+            `at the same time. It is NOT the peak concurrent figure shown separately below.` +
             (dayPnl.margin_unknown_count
               ? ` ${dayPnl.margin_unknown_count} box(es) have no margin figure and are excluded.`
               : "")
           }
         >
-          <span className="box-daypnl-k">Margin used today</span>
+          <span className="box-daypnl-k">Cumulative trade margin</span>
           <span className="box-daypnl-v">
-            {rupees(dayPnl.total_margin_used)}
+            {rupees(dayPnl.cumulative_trade_margin ?? dayPnl.total_margin_used)}
             {dayPnl.margin_unknown_count ? (
               <span className="box-dim"> ({dayPnl.margin_unknown_count} n/a)</span>
             ) : null}
           </span>
           <span className="box-daypnl-sub">
             {rupees(dayPnl.open_margin_used)} open · {rupees(dayPnl.closed_margin_used)} closed
+          </span>
+        </div>
+      )}
+      {dayPnl.peak_concurrent_margin !== undefined && (
+        <div
+          className="box-daypnl-item box-daypnl-item--neutral"
+          title={
+            "Highest OPEN margin actually observed at a sampled instant since this backend " +
+            "process started. This is a real sampled measurement, not an estimate — it can " +
+            "understate the true peak if it happened between samples, but it is never fabricated " +
+            "for time before this process was running."
+          }
+        >
+          <span className="box-daypnl-k">Peak concurrent margin</span>
+          <span className="box-daypnl-v">
+            {dayPnl.peak_concurrent_margin === null ? "—" : rupees(dayPnl.peak_concurrent_margin)}
           </span>
         </div>
       )}

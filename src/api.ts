@@ -974,8 +974,8 @@ export type BoxRejectReason =
 /** Which way a box is traded. Absent on old data means a long box. */
 export type BoxDirection = "LONG_BOX" | "SHORT_BOX";
 
-/** How a paper fill is simulated. */
-export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging";
+/** How an entry is executed: three paper models, or real broker orders. */
+export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging" | "live";
 
 /** Where a charge figure came from. */
 export type BoxChargeOrigin = "local" | "kite" | "local_verified";
@@ -1060,7 +1060,7 @@ export interface BoxConfigView {
   min_gross_edge: number;
   /** Legacy additional net floor; 0 means it does not raise the gate. */
   min_net_edge: number;
-  /** How a paper fill is simulated, and its simulated delays. */
+  /** How an entry is executed, and its simulated delays (paper modes only). */
   execution_mode: BoxExecutionMode;
   simulated_decision_ms: number;
   simulated_latency_ms: number;
@@ -1245,7 +1245,16 @@ export interface BoxDayPnl {
    */
   open_margin_used?: number;
   closed_margin_used?: number;
+  /** @deprecated Identical to `cumulative_trade_margin`; kept for older dashboards. */
   total_margin_used?: number;
+  /** Explicit SUM over the day (open + closed) — never a concurrent/peak figure. */
+  cumulative_trade_margin?: number;
+  /**
+   * Highest OPEN margin actually observed at a sampled instant since the backend
+   * process started. `null` until a first sample exists — NEVER back-filled or
+   * estimated for time before the process was running.
+   */
+  peak_concurrent_margin?: number | null;
   /** Boxes whose margin call never returned, so they are missing from the sums. */
   margin_unknown_count?: number;
   /** Whether the Redis (Upstash) P&L cache is actively mirroring this figure. */
@@ -1268,15 +1277,61 @@ export interface RingSummary {
 
 export interface BoxMetricsSnapshot {
   execution: {
+    /**
+     * PARENT strategy-attempt lifecycle: one entry per detected candidate that
+     * actually entered an order pipeline. Internal leg/order retries never
+     * change this number — see `retries` below.
+     */
     attempted: number;
-    filled: number;
+    /** completed = successful + failed + partial_recovered + partial_unresolved + aborted. */
+    completed: number;
+    successful: number;
+    partial_recovered: number;
+    partial_unresolved: number;
     failed: number;
+    aborted: number;
+    /** Internal leg/order retries inside an attempt — never a new attempt. */
+    retries: number;
+    /** @deprecated Alias for `successful`, kept for older dashboards. */
+    filled: number;
+    /** (failed + partial_unresolved) / completed. */
     failure_rate: number;
+    /** successful / completed. */
+    success_rate: number;
+    /** Fixed rejection taxonomy (stale/depth/edge/latency/etc.), keyed by reason. */
+    rejection_categories: Record<string, number>;
+    /** @deprecated Alias for `rejection_categories`. */
     failures_by_reason: Record<string, number>;
+    /**
+     * Detection expected net − realised expected net at actual fill prices (₹).
+     * Positive means the mispricing decayed/worsened between detection and fill.
+     */
+    decision_deterioration: RingSummary | null;
+    /**
+     * Arrival-book execution slippage (₹): fill vs. the ARRIVAL reference book
+     * (BUY: fill−arrival, SELL: arrival−fill), × filled quantity. Zero is a valid,
+     * meaningful reading when the fill matched the captured arrival book exactly
+     * — it is not the same as "unmeasured" (see `samples` on the ring summary).
+     */
+    execution_slippage: RingSummary | null;
+    /** @deprecated Legacy detection-touch comparison; prefer `execution_slippage`. */
     entry_slippage: RingSummary | null;
     exit_slippage: RingSummary | null;
     decision_to_fill_ms: RingSummary | null;
     qualification_to_fill_ms: RingSummary | null;
+    /** Latency broken into its components; a component absent for this mode is null. */
+    latency: {
+      detection_to_decision_ms: RingSummary | null;
+      decision_to_order_send_ms: RingSummary | null;
+      simulated_or_real_order_latency_ms: RingSummary | null;
+      /** live-only. */
+      order_send_to_ack_ms: RingSummary | null;
+      /** live-only. */
+      ack_to_fill_ms: RingSummary | null;
+      detection_to_fill_ms: RingSummary | null;
+    };
+    /** Terminal calls that conflicted with an already-resolved attempt (diagnostic only). */
+    terminal_conflicts: number;
   };
   latency: {
     receive_to_evaluation_ms: RingSummary | null;
