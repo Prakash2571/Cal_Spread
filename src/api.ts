@@ -974,8 +974,8 @@ export type BoxRejectReason =
 /** Which way a box is traded. Absent on old data means a long box. */
 export type BoxDirection = "LONG_BOX" | "SHORT_BOX";
 
-/** How a paper fill is simulated. */
-export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging";
+/** How an entry is executed: three paper models, or real broker orders. */
+export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging" | "live";
 
 /** Where a charge figure came from. */
 export type BoxChargeOrigin = "local" | "kite" | "local_verified";
@@ -1060,7 +1060,7 @@ export interface BoxConfigView {
   min_gross_edge: number;
   /** Legacy additional net floor; 0 means it does not raise the gate. */
   min_net_edge: number;
-  /** How a paper fill is simulated, and its simulated delays. */
+  /** How an entry is executed, and its simulated delays (paper modes only). */
   execution_mode: BoxExecutionMode;
   simulated_decision_ms: number;
   simulated_latency_ms: number;
