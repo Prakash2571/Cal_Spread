@@ -6,6 +6,7 @@ import {
   fetchFnoBoard,
   fetchQuotes,
   getStatus,
+  type RuntimeStatus,
   logout,
   loginUrl,
   streamUrl,
@@ -53,7 +54,15 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [verifying, setVerifying] = useState(false);
+  /**
+   * The ACTIVE broker's market data is usable.
+   *
+   * Deliberately NOT "Zerodha is logged in": that conflation is what left the board
+   * blank while Dhan was authenticated and streaming.
+   */
   const [authenticated, setAuthenticated] = useState(false);
+  /** Full runtime readiness of the active broker, for banners and diagnostics. */
+  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [adminRole, setAdminRole] = useState<AdminRole>(null);
   const [live, setLive] = useState(false);
 
@@ -389,7 +398,11 @@ export default function App() {
       .catch(() => setAdminRole(null));
     
     getStatus()
-      .then((s) => setAuthenticated(s.authenticated))
+      .then((s) => {
+        setRuntime(s);
+        setAuthenticated(s.authenticated);
+        if (s.broker) setActiveBroker(s.broker);
+      })
       .catch(() => setAuthenticated(false));
     // Dividend yields come from Yahoo (independent of Zerodha login).
     fetchDividends()
@@ -423,6 +436,8 @@ export default function App() {
     const id = setInterval(() => {
       getStatus()
         .then((s) => {
+          setRuntime(s);
+          if (s.broker) setActiveBroker(s.broker);
           if (s.authenticated) setAuthenticated(true);
         })
         .catch(() => {
@@ -955,12 +970,47 @@ export default function App() {
       {verifying && <div className="banner">Verifying your login…</div>}
 
       {isFullAdmin && !authenticated && !verifying && (
+        // Names the ACTIVE broker. Telling an operator to connect Zerodha while Dhan is
+        // the active broker sent them to fix the wrong thing.
         <div className="banner">
-          Click{" "}
-          <a className="link" href={loginUrl()}>
-            Connect to Zerodha
-          </a>{" "}
-          to stream live prices &amp; premium/discount.
+          {activeBroker === "dhan" ? (
+            <>
+              <button className="link link--button" onClick={() => setBrokerPanelOpen(true)}>
+                Connect Dhan
+              </button>{" "}
+              to stream live prices &amp; premium/discount.
+              {runtime?.problems && runtime.problems.length > 0 && (
+                // Every reason, never collapsed into one vague line.
+                <ul className="banner-reasons">
+                  {runtime.problems.map((p) => (
+                    <li key={p}>{p}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <>
+              Click{" "}
+              <a className="link" href={loginUrl()}>
+                Connect to Zerodha
+              </a>{" "}
+              to stream live prices &amp; premium/discount.
+            </>
+          )}
+        </div>
+      )}
+      {/* Connected and subscribed-to-nothing is its own failure, and used to be
+          invisible: the panel said Feed=Live while every card showed "-". */}
+      {isFullAdmin && authenticated && runtime?.feed_state === "CONNECTED_NO_SUBSCRIPTIONS" && (
+        <div className="banner banner--warn">
+          {activeBroker === "dhan" ? "Dhan" : "Zerodha"} feed is connected but nothing is
+          subscribed yet — prices will appear once the board loads.
+        </div>
+      )}
+      {isFullAdmin && authenticated && runtime?.feed_state === "STALE" && (
+        <div className="banner banner--warn">
+          No {activeBroker === "dhan" ? "Dhan" : "Zerodha"} tick received recently. The
+          feed may have stalled — check the Broker panel.
         </div>
       )}
 
@@ -1008,7 +1058,29 @@ export default function App() {
           isFullAdmin={isFullAdmin}
           onClose={() => setBrokerPanelOpen(false)}
           // Adopt the SERVER's answer, so the badge can never disagree with reality.
-          onBrokerChanged={(broker) => setActiveBroker(broker)}
+          onBrokerChanged={(broker) => {
+            const changed = activeBroker !== null && activeBroker !== broker;
+            setActiveBroker(broker);
+            if (!changed) return;
+            // A BROKER CHANGE INVALIDATES EVERY PRICE ON SCREEN. Kite and Dhan tokens
+            // are different namespaces, so the tick map is keyed by ids that no longer
+            // mean anything — leaving it would display the previous broker's prices
+            // against the new broker's board.
+            setTicks({});
+            setBoard([]);
+            setRuntime(null);
+            setAuthenticated(false);
+            setBrokerPanelOpen(false);
+            // Refetch the board in the NEW namespace; the stream effect then reopens
+            // SSE with the new tokens.
+            void loadBoard();
+            void getStatus()
+              .then((s) => {
+                setRuntime(s);
+                setAuthenticated(s.authenticated);
+              })
+              .catch(() => undefined);
+          }}
         />
       )}
       {tokenModalOpen && (

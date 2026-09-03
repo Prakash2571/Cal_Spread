@@ -32,6 +32,20 @@ import {
 } from "./api.ts";
 import { BrokerBadge } from "./BoxBroker.tsx";
 
+/**
+ * Operator-facing feed labels.
+ *
+ * `CONNECTED_NO_SUBSCRIPTIONS` gets its own wording because it is the state the old
+ * boolean hid: transport healthy, no data, nothing explaining the empty board.
+ */
+const FEED_LABEL: Record<string, string> = {
+  DOWN: "Down",
+  CONNECTING: "Connecting…",
+  CONNECTED_NO_SUBSCRIPTIONS: "Connected · no subscriptions",
+  LIVE: "Live",
+  STALE: "Stale",
+};
+
 interface Props {
   /** Full admin only: switching broker moves the whole system. */
   isFullAdmin: boolean;
@@ -130,6 +144,7 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
 
   const active = status?.broker ?? null;
   const health = status?.health ?? null;
+  const feed = status?.feed ?? null;
 
   /** Per-broker connection state, so each row can be judged on its own. */
   const connected = (broker: BrokerId): boolean =>
@@ -170,9 +185,12 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
               </span>
             </div>
             <div className="metric-row">
-              <span className="metric-label">Feed</span>
-              <span className={`metric-value ${health?.feed_connected ? "pos" : "neg"}`}>
-                {health?.feed_connected ? "Live" : "Down"}
+              <span className="metric-label">Market data</span>
+              {/* The STATE, not just "is a socket open". A connected feed with nothing
+                  subscribed is not Live — that conflation is what reported a healthy
+                  feed while every card on the board showed "-". */}
+              <span className={`metric-value feed-state--${feed?.state ?? "DOWN"}`}>
+                {feed ? FEED_LABEL[feed.state] : "…"}
               </span>
             </div>
             <div className="metric-row">
@@ -182,6 +200,31 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
               </span>
             </div>
           </div>
+
+          {/* The numbers behind the state, so "Live" can be checked rather than trusted. */}
+          {feed && (
+            <dl className="broker-feed-grid">
+              <dt>Last tick</dt>
+              <dd>{feed.feed_age_ms === null ? "never" : `${feed.feed_age_ms} ms ago`}</dd>
+              <dt>Subscriptions</dt>
+              <dd>
+                {feed.subscribed.toLocaleString()}
+                {status?.subscriptions && (
+                  <>
+                    {" "}
+                    <span className="box-dim">
+                      (browser {status.subscriptions.browser}, strategy{" "}
+                      {status.subscriptions.strategy})
+                    </span>
+                  </>
+                )}
+              </dd>
+              <dt>Instruments</dt>
+              <dd>{(status?.instruments ?? 0).toLocaleString()}</dd>
+              <dt>Generation</dt>
+              <dd>{status?.generation ?? "—"}</dd>
+            </dl>
+          )}
 
           {/* Operator-facing reasons, e.g. an unverified static IP. */}
           {health?.problems && health.problems.length > 0 && (
@@ -274,17 +317,45 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
           {/* Static-IP verification is cached server-side, so after whitelisting an
               address in the Dhan dashboard this is what picks it up. Offered only when
               Dhan is active and its IP check is what is blocking trading. */}
-          {active === "dhan" && status?.dhan_static_ip?.ready === false && (
-            <div className="broker-ip">
-              <div className="broker-row-note">
-                Configured IP: <code>{status.dhan_static_ip.configured_ip ?? "not set"}</code>
-                {status.dhan_static_ip.primary_ip && (
-                  <> · Dhan holds: <code>{status.dhan_static_ip.primary_ip}</code></>
-                )}
-                {status.dhan_static_ip.secondary_ip && (
-                  <>, <code>{status.dhan_static_ip.secondary_ip}</code></>
-                )}
-              </div>
+          {active === "dhan" && status?.dhan_static_ip && (
+            <div className={`broker-ip${status.dhan_static_ip.ready ? " is-ok" : ""}`}>
+              <dl className="broker-feed-grid">
+                <dt>Server IP</dt>
+                <dd><code>{status.dhan_static_ip.configured_ip ?? "not set"}</code></dd>
+                <dt>Dhan whitelist</dt>
+                <dd>
+                  {status.dhan_static_ip.primary_ip || status.dhan_static_ip.secondary_ip ? (
+                    <>
+                      <code>{status.dhan_static_ip.primary_ip ?? "—"}</code>
+                      {status.dhan_static_ip.secondary_ip && (
+                        <>, <code>{status.dhan_static_ip.secondary_ip}</code></>
+                      )}
+                    </>
+                  ) : (
+                    "none reported"
+                  )}
+                </dd>
+                <dt>API verified</dt>
+                {/* THREE states, not two: "never checked" is not the same as "failed". */}
+                <dd>
+                  {status.dhan_static_ip.api_verified === true
+                    ? "YES"
+                    : status.dhan_static_ip.api_verified === false
+                      ? "NO"
+                      : "not checked"}
+                </dd>
+                <dt>Declared</dt>
+                <dd>{status.dhan_static_ip.declared ? "yes" : "no"}</dd>
+                <dt>Checked</dt>
+                <dd>
+                  {status.dhan_static_ip.checked_at
+                    ? new Date(status.dhan_static_ip.checked_at).toLocaleTimeString()
+                    : "never"}
+                </dd>
+              </dl>
+              {status.dhan_static_ip.error && (
+                <div className="broker-row-note">{status.dhan_static_ip.error}</div>
+              )}
               <button
                 className="btn btn--sm"
                 disabled={!isFullAdmin || busy !== null}
