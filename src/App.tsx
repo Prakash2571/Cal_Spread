@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MagnifyingGlassIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import {
   createSession,
@@ -9,7 +9,9 @@ import {
   type RuntimeStatus,
   logout,
   loginUrl,
-  streamUrl,
+  StaleBrokerTokensError,
+  API_ORIGIN,
+  browserTickStreamDeps,
   getAdminStatus,
   logoutAdmin,
   verifyAdminSecret,
@@ -30,6 +32,14 @@ import {
   type Trade,
   type AdminRole,
 } from "./api.ts";
+import {
+  boardMarketDataTokens,
+  describeTokenRequest,
+  marketDataPhase,
+  IDLE_STREAM_STATE,
+  type StreamState,
+} from "./marketData.ts";
+import { TickStream } from "./tickStream.ts";
 import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
@@ -77,7 +87,17 @@ export default function App() {
   const [sortOi, setSortOi] = useState(false);
   const [sortSpread, setSortSpread] = useState(false);
   const [sortDepth, setSortDepth] = useState(false);
-  const [streamOpen, setStreamOpen] = useState(false);
+  /**
+   * Aggregated live-stream health.
+   *
+   * A single boolean could not distinguish "no stream yet" from "stream open, no data",
+   * which is why the banner could sit on "Connecting…" indefinitely.
+   */
+  const [streamState, setStreamState] = useState<StreamState>(IDLE_STREAM_STATE);
+  /** REST snapshot failures, previously swallowed entirely. */
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  /** Non-fatal stream problems (e.g. falling back to chunked streams). */
+  const [streamError, setStreamError] = useState<string | null>(null);
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [rfRate, setRfRate] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem("cal_spread_rf") ?? "");
@@ -428,52 +448,109 @@ export default function App() {
     void refreshTrades();
   }, [adminRole]);
 
-  // While no Zerodha session is active, poll the backend so that ANY open
-  // public tab automatically starts showing live data once the admin connects
-  // Zerodha (no manual refresh needed).
-  useEffect(() => {
-    if (authenticated) return;
-    const id = setInterval(() => {
-      getStatus()
-        .then((s) => {
-          setRuntime(s);
-          if (s.broker) setActiveBroker(s.broker);
-          if (s.authenticated) setAuthenticated(true);
-        })
-        .catch(() => {
-          /* backend unreachable - keep trying */
-        });
-    }, 15000);
-    return () => clearInterval(id);
-  }, [authenticated]);
+  /** Re-read runtime status on demand (stream opened, first tick, broker change). */
+  const refreshRuntime = useCallback(async () => {
+    try {
+      const s = await getStatus();
+      setRuntime(s);
+      if (s.broker) setActiveBroker(s.broker);
+      if (s.authenticated) setAuthenticated(true);
+    } catch {
+      /* backend unreachable — the poll below keeps trying */
+    }
+  }, []);
 
-  // Open ONE live stream for every token once a Zerodha session is active on
-  // the backend (works for ANY visitor, not just the admin who logged in).
+  // Poll runtime status CONTINUOUSLY, not only until a session appears.
+  //
+  // This used to bail out with `if (authenticated) return`, so polling stopped the
+  // moment a session existed. But `feed_state` keeps changing afterwards —
+  // CONNECTED_NO_SUBSCRIPTIONS -> CONNECTING -> LIVE as browser streams open and ticks
+  // start arriving. Freezing the poll froze the banner, which is why it kept insisting
+  // "nothing is subscribed yet" long after subscriptions existed.
+  useEffect(() => {
+    const id = setInterval(() => {
+      void refreshRuntime();
+    }, 7000);
+    return () => clearInterval(id);
+  }, [refreshRuntime]);
+
+  // Live market data for the whole board, for ANY visitor once the active broker has a
+  // session (not just the admin who logged in).
+  //
+  // The token list is POSTed rather than put in a URL. Listing ~816 ten-digit tokens in
+  // a query string produced a 9022-character request line, which nginx rejects with 414
+  // before the backend runs — so no subscription was ever registered and every cell
+  // showed "-". See marketData.ts / tickStream.ts.
   useEffect(() => {
     if (!authenticated || board.length === 0) return;
 
-    const tokens = board.flatMap((b) => [
-      b.spot_token,
-      ...b.futures.map((f) => f.token),
-    ]);
+    // DEDUPLICATED once, here, and used for both the snapshot and the stream so the two
+    // can never disagree about what is being watched.
+    const tokens = boardMarketDataTokens(board);
 
-    // 1) Seed prices immediately via REST snapshot (works even after market
-    //    close, so spot AND futures premiums show right away).
+    // Logged in production too, once per board load. These are exactly the numbers that
+    // identify this class of failure, and having to reproduce them by hand is what made
+    // the original diagnosis slow.
+    const diag = describeTokenRequest(board, API_ORIGIN);
+    console.log(
+      `[MarketData] board=${diag.board} rawTokens=${diag.rawTokens} ` +
+        `uniqueTokens=${diag.uniqueTokens}`,
+    );
+    console.log(
+      `[MarketData] singleGetUrlLength=${diag.singleUrlLength} (the shape nginx rejected ` +
+        `with 414) fallbackChunks=${diag.chunks} maxChunkUrlLength=${diag.maxChunkUrlLength} ` +
+        `withinLimit=${diag.withinUrlLimit}`,
+    );
+
+    let cancelled = false;
+
+    // 1) SNAPSHOT FIRST. Seeds prices immediately and is the ONLY source outside market
+    //    hours, so a failure here must be visible rather than swallowed.
     fetchQuotes(tokens)
       .then((seed) => {
-        if (seed.length === 0) return;
+        if (cancelled || seed.length === 0) return;
         setTicks((prev) => {
           const next = { ...prev };
           for (const t of seed) next[t.token] = t;
           return next;
         });
+        setQuoteError(null);
       })
-      .catch(() => {
-        /* non-fatal: live stream may still fill values during market hours */
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        if (err instanceof StaleBrokerTokensError) {
+          void loadBoard();
+          return;
+        }
+        // Previously discarded. That silence is what made a 414 look like a quiet market.
+        console.error("[MarketData] REST quote seed failed:", message);
+        setQuoteError(`Price snapshot failed: ${message}`);
       });
 
-    // 2) Live updates via WebSocket-backed SSE.
-    const es = new EventSource(streamUrl(tokens));
+    // 2) LIVE UPDATES over a single session-backed SSE connection.
+    const stream = new TickStream(tokens, {
+      onTicks: (incoming) => {
+        for (const t of incoming) tickBuffer.current[t.token] = t;
+        setLive(true);
+      },
+      onState: (state) => setStreamState(state),
+      // The feed state changes AFTER these happen, so the banner must be re-read or it
+      // stays stuck on whatever it said when the page loaded.
+      onOpened: () => void refreshRuntime(),
+      onFirstTick: () => void refreshRuntime(),
+      onFatal: (message) => {
+        setLive(false);
+        setStreamState(IDLE_STREAM_STATE);
+        setError(message);
+        void refreshRuntime();
+      },
+      onError: (message) => {
+        console.warn("[MarketData]", message);
+        setStreamError(message);
+      },
+    }, browserTickStreamDeps());
+    void stream.start();
 
     // Batch ticks and flush twice a second to keep rendering smooth.
     const flush = setInterval(() => {
@@ -482,29 +559,11 @@ export default function App() {
       tickBuffer.current = {};
     }, 500);
 
-    es.onopen = () => setStreamOpen(true);
-    es.onmessage = (ev) => {
-      try {
-        const incoming = JSON.parse(ev.data) as Tick[];
-        for (const t of incoming) tickBuffer.current[t.token] = t;
-        setLive(true);
-      } catch {
-        // ignore malformed frame
-      }
-    };
-    es.addEventListener("kite_error", () => {
-      setLive(false);
-      setStreamOpen(false);
-      setAuthenticated(false);
-      setError("Live feed disconnected - the data provider session ended.");
-      es.close();
-    });
-    es.onerror = () => setLive(false);
-
     return () => {
+      cancelled = true;
       clearInterval(flush);
-      setStreamOpen(false);
-      es.close();
+      setStreamState(IDLE_STREAM_STATE);
+      stream.close();
     };
   }, [authenticated, board]);
 
@@ -622,13 +681,22 @@ export default function App() {
     return list;
   }, [board, query, arbOnly, sortMinArb, sortMaxArb, sortOi, sortSpread, sortDepth, ticks]);
 
-  const status = live
-    ? { kind: "live", label: "Live" }
-    : streamOpen
-      ? { kind: "wait", label: "Awaiting ticks" }
-      : authenticated
-        ? { kind: "wait", label: "Connecting…" }
-        : { kind: "idle", label: "Login for live" };
+  // Derived from stream COUNTS plus tick arrival, so each distinct situation gets its
+  // own label instead of everything collapsing into "Connecting…".
+  const status = useMemo(() => {
+    switch (marketDataPhase(streamState, live, authenticated)) {
+      case "live":
+        return { kind: "live", label: "Live" };
+      case "degraded":
+        return { kind: "wait", label: "Live (reconnecting)" };
+      case "awaiting-ticks":
+        return { kind: "wait", label: "Awaiting ticks" };
+      case "connecting":
+        return { kind: "wait", label: "Connecting…" };
+      default:
+        return { kind: "idle", label: "Login for live" };
+    }
+  }, [streamState, live, authenticated]);
 
   // Full-admin verification route
   // Accept /admin/verify and any trailing segment (e.g. the /admin/verify/dhan URL
@@ -999,14 +1067,23 @@ export default function App() {
           )}
         </div>
       )}
+      {/* A failed price snapshot used to be discarded silently, which is precisely how a
+          414 from the proxy looked identical to a quiet market. */}
+      {quoteError && <div className="banner banner--warn">{quoteError}</div>}
+      {streamError && <div className="banner banner--warn">{streamError}</div>}
       {/* Connected and subscribed-to-nothing is its own failure, and used to be
-          invisible: the panel said Feed=Live while every card showed "-". */}
-      {isFullAdmin && authenticated && runtime?.feed_state === "CONNECTED_NO_SUBSCRIPTIONS" && (
-        <div className="banner banner--warn">
-          {activeBroker === "dhan" ? "Dhan" : "Zerodha"} feed is connected but nothing is
-          subscribed yet — prices will appear once the board loads.
-        </div>
-      )}
+          invisible: the panel said Feed=Live while every card showed "-".
+          Suppressed once streams are actually open, because the status poll can still be
+          a few seconds behind reality and a stale warning is worse than none. */}
+      {isFullAdmin &&
+        authenticated &&
+        runtime?.feed_state === "CONNECTED_NO_SUBSCRIPTIONS" &&
+        streamState.open === 0 && (
+          <div className="banner banner--warn">
+            {activeBroker === "dhan" ? "Dhan" : "Zerodha"} feed is connected but nothing is
+            subscribed yet — prices will appear once the board loads.
+          </div>
+        )}
       {isFullAdmin && authenticated && runtime?.feed_state === "STALE" && (
         <div className="banner banner--warn">
           No {activeBroker === "dhan" ? "Dhan" : "Zerodha"} tick received recently. The
@@ -1071,6 +1148,12 @@ export default function App() {
             setRuntime(null);
             setAuthenticated(false);
             setBrokerPanelOpen(false);
+            // The old broker's streams are torn down by the board effect's cleanup; clear
+            // the derived state so the banner cannot report the previous broker's health.
+            setStreamState(IDLE_STREAM_STATE);
+            setQuoteError(null);
+            setStreamError(null);
+            setLive(false);
             // Refetch the board in the NEW namespace; the stream effect then reopens
             // SSE with the new tokens.
             void loadBoard();

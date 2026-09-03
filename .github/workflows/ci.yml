@@ -33,3 +33,9 @@ jobs:
       # typechecks the app (strict, incl. noUnusedLocals) and produces the bundle.
       - name: Build
         run: npm run build
+
+      # The market-data token/transport logic is pure and has no DOM dependency, so it
+      # runs under node:test directly against the TypeScript sources (Node 22 strips
+      # types natively). No bundler or jsdom needed.
+      - name: Test
+        run: npm test

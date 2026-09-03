@@ -7,7 +7,7 @@ import {
   fetchOptionOiFrame,
   fetchOptionPrevClose,
   fetchQuotes,
-  streamUrl,
+  browserTickStreamDeps,
   type FuturesOiContract,
   type FuturesOiPoint,
   OI_FRAME_OPTIONS,
@@ -17,6 +17,7 @@ import {
   type OptionPrevClose,
   type Tick,
 } from "./api.ts";
+import { TickStream } from "./tickStream.ts";
 import LineChart, { type ChartSeries } from "./LineChart.tsx";
 import OiHistogram, { type HistPoint, type HistSeries } from "./OiHistogram.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
@@ -458,9 +459,13 @@ export default function Analytics({ authenticated, onBack }: Props) {
   useEffect(() => {
     if (!authenticated || !chain) return;
 
+    // Deduplicated: an option chain can repeat a token across rows, and a duplicate
+    // inflates the subscription refcount for no benefit.
     const tokens = [
-      chain.spot_token,
-      ...chain.strikes.flatMap((s) => [s.ce_token, s.pe_token]),
+      ...new Set([
+        chain.spot_token,
+        ...chain.strikes.flatMap((s) => [s.ce_token, s.pe_token]),
+      ]),
     ];
 
     // Guarded like every other effect: switching expiry tears this down and clears
@@ -485,7 +490,22 @@ export default function Analytics({ authenticated, onBack }: Props) {
         /* stream may still fill values during market hours */
       });
 
-    const es = new EventSource(streamUrl(tokens));
+    // Same session-backed transport as the board. An ATM +/-30 chain is ~123 tokens,
+    // which fits in a URL today -- but it is the same failure waiting for a wider chain,
+    // and one transport means one thing to reason about.
+    const stream = new TickStream(tokens, {
+      onTicks: (incoming) => {
+        for (const t of incoming) tickBuffer.current[t.token] = t;
+        setLive(true);
+      },
+      onState: () => {
+        /* the chain view shows only live/not-live */
+      },
+      onFatal: () => setLive(false),
+      onError: (message) => console.warn("[Analytics]", message),
+    }, browserTickStreamDeps());
+    void stream.start();
+
     const flush = window.setInterval(() => {
       if (Object.keys(tickBuffer.current).length === 0) return;
       setTicks((prev) => {
@@ -496,25 +516,10 @@ export default function Analytics({ authenticated, onBack }: Props) {
       tickBuffer.current = {};
     }, 500);
 
-    es.onmessage = (ev) => {
-      try {
-        const incoming = JSON.parse(ev.data) as Tick[];
-        for (const t of incoming) tickBuffer.current[t.token] = t;
-        setLive(true);
-      } catch {
-        /* ignore malformed frame */
-      }
-    };
-    es.addEventListener("kite_error", () => {
-      setLive(false);
-      es.close();
-    });
-    es.onerror = () => setLive(false);
-
     return () => {
       cancelled = true;
       window.clearInterval(flush);
-      es.close();
+      stream.close();
     };
   }, [authenticated, chain]);
 
