@@ -97,23 +97,50 @@ export interface InstrumentsResponse {
 export type AdminRole = "full" | "trade" | null;
 
 /** Verify the FULL admin secret (/admin/verify) and get an admin token. */
+export interface AdminVerifyResult {
+  success: boolean;
+  token: string;
+  /** The broker that is active after this verification. */
+  broker?: BrokerId;
+  /**
+   * Set when the requested broker could NOT be activated because Box exposure or
+   * in-flight work exists. The login still succeeds — otherwise the operator could
+   * never reach the UI to clear whatever is blocking the switch — so the session
+   * stays on the previous broker and this explains why.
+   */
+  brokerSwitchRefused?: boolean;
+  brokerSwitchBlockers?: { reason: string; detail: string }[];
+}
+
 export async function verifyAdminSecret(
   secret: string,
-): Promise<{ success: boolean; token: string }> {
+  broker?: BrokerId,
+): Promise<AdminVerifyResult> {
   const res = await fetch(`${API_BASE_URL}/api/admin/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret }),
+    // `broker` is omitted entirely when not chosen, so an older backend that does
+    // not understand it behaves exactly as before.
+    body: JSON.stringify(broker ? { secret, broker } : { secret }),
   });
   const body = (await res.json()) as {
     success?: boolean;
     token?: string;
+    broker?: BrokerId;
+    broker_switch_refused?: boolean;
+    broker_switch_blockers?: { reason: string; detail: string }[];
     error?: string;
   };
   if (!res.ok) {
     throw new Error(body.error ?? `Admin verification failed (HTTP ${res.status}).`);
   }
-  return { success: !!body.success, token: body.token ?? "" };
+  return {
+    success: !!body.success,
+    token: body.token ?? "",
+    ...(body.broker ? { broker: body.broker } : {}),
+    ...(body.broker_switch_refused ? { brokerSwitchRefused: true } : {}),
+    ...(body.broker_switch_blockers ? { brokerSwitchBlockers: body.broker_switch_blockers } : {}),
+  };
 }
 
 /** Verify the TRADE-ACCESS password (/admin/access) and get a trade token. */
@@ -140,6 +167,14 @@ export async function verifyAccessSecret(
 export async function getAdminStatus(): Promise<{
   authenticated: boolean;
   role: AdminRole;
+  /**
+   * The ACTIVE broker. Reported to both roles: a trade-access user inherits it and
+   * needs to know which broker they are looking at, they just cannot change it.
+   *
+   * NOTE `authenticated` here is the ADMIN session, never a broker session. Broker
+   * connectivity comes from fetchBrokerStatus().
+   */
+  broker?: BrokerId;
 }> {
   const headers: HeadersInit = {};
   if (adminToken) {
@@ -977,8 +1012,32 @@ export type BoxDirection = "LONG_BOX" | "SHORT_BOX";
 /** How an entry is executed: three paper models, or real broker orders. */
 export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging" | "live";
 
-/** Where a charge figure came from. */
-export type BoxChargeOrigin = "local" | "kite" | "local_verified";
+/**
+ * Which broker a record belongs to.
+ *
+ * Only ONE broker is ever active for new trades, but history from both coexists,
+ * so every trade carries its own. Absent on data written before broker identity
+ * existed, which means Zerodha — the only broker the app ever had.
+ */
+export type BrokerId = "zerodha" | "dhan";
+
+/** Compact badge text for a broker. */
+export function brokerLabel(broker: BrokerId | null | undefined): string {
+  return broker === "dhan" ? "DHAN" : "ZERODHA";
+}
+
+/**
+ * Where a charge figure came from.
+ *
+ * The `dhan` values exist because Dhan's brokerage differs from Zerodha's: a Dhan
+ * trade's costs must never be displayed as if Zerodha had priced them.
+ */
+export type BoxChargeOrigin =
+  | "local"
+  | "kite"
+  | "local_verified"
+  | "dhan"
+  | "dhan_estimate";
 
 /** Per-leg liquidity/freshness detail behind an opportunity. */
 export interface BoxLegEvaluation {
@@ -1123,6 +1182,10 @@ export interface BoxStatus {
   /** Legs discarded because they last traded in an earlier session. */
   indicative_stale_legs: number;
   execution_mode: BoxExecutionMode;
+  /** The broker that owns the feed, scanner and execution right now. */
+  broker?: BrokerId;
+  /** Distinct brokers holding open exposure — normally just the active one. */
+  brokers_with_open_positions?: BrokerId[];
   authenticated: boolean;
   db_enabled: boolean;
   started_at: number | null;
@@ -1407,6 +1470,8 @@ export interface BoxOpenPosition {
   id: string;
   key: string;
   execution_mode: BoxExecutionMode;
+  /** Which broker created this position. Absent on legacy rows ⇒ zerodha. */
+  broker?: BrokerId;
   underlying: string;
   name: string;
   is_index: boolean;
@@ -1522,6 +1587,8 @@ export interface BoxChargeReconciliation {
 export interface BoxTrade {
   id: string;
   execution_mode: BoxExecutionMode;
+  /** Which broker created this trade. Absent on legacy rows ⇒ zerodha. */
+  broker?: BrokerId;
   underlying: string;
   name: string;
   is_index: boolean;
@@ -1815,6 +1882,224 @@ export async function closeBoxTrade(id: string): Promise<BoxOpenPosition[]> {
     "Failed to close the box position",
   );
   return body.open ?? [];
+}
+
+/** What the backend returns after a successful Box trade deletion. */
+export interface BoxDeleteResult {
+  deleted_id: string;
+  /** The corrected status — counts, day P&L and margin already recomputed. */
+  status: BoxStatus;
+  /** The corrected open-position list. */
+  open: BoxOpenPosition[];
+  /** The corrected closed-today list, so the Closed tab updates at once. */
+  closed_today: {
+    trades: BoxTrade[];
+    source?: BoxHistorySource;
+    day?: string;
+    lite?: boolean;
+  };
+}
+
+/**
+ * PERMANENTLY delete a PAPER box trade (open, closed or errored).
+ *
+ * FULL ADMIN ONLY and irreversible. The backend REFUSES a live trade with 409 —
+ * an open one because real broker exposure may still exist, a closed one because
+ * it is the audit record of real executed orders — and that message is surfaced
+ * to the user as-is rather than reworded.
+ *
+ * The response carries the already-recomputed status, open positions and
+ * closed-today list, so the caller can apply corrected numbers immediately
+ * without a reload or a second round trip.
+ */
+export async function deleteBoxTrade(
+  id: string,
+  reason?: string,
+): Promise<BoxDeleteResult> {
+  const res = await fetch(`${API_BASE_URL}/api/box/trades/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+    ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+  });
+  return readJson<BoxDeleteResult>(res, "Failed to delete the box trade");
+}
+
+/* ============================================================================
+ *  Broker management + Dhan authentication
+ *
+ *  Only AUTHENTICATION/SETUP is broker-specific. Every data call (board, quotes,
+ *  history, minute, Box) stays broker-agnostic: the backend routes it to whichever
+ *  broker is active, so there are no dhanFetchBoard()/kiteFetchBoard() pairs.
+ * ========================================================================== */
+
+/** One reason a broker switch was refused. */
+export interface BrokerSwitchBlocker {
+  reason: string;
+  detail: string;
+}
+
+/** Session state of one broker. Never contains a token. */
+export interface BrokerSession {
+  broker: BrokerId;
+  /** The BROKER session is usable — not merely that the admin password was accepted. */
+  authenticated: boolean;
+  client_id: string | null;
+  client_name: string | null;
+  token_expires_at: number | null;
+  token_expired: boolean;
+  login_day: string | null;
+  login_at: number | null;
+}
+
+/**
+ * Capability readiness, split so data and trading fail independently.
+ *
+ * Dhan order placement needs static-IP whitelisting that market data does not, so a
+ * deployment can legitimately be data-ready and trading-blocked.
+ */
+export interface BrokerHealth {
+  broker: BrokerId;
+  authenticated: boolean;
+  token_expires_at: number | null;
+  token_expired: boolean;
+  data_ready: boolean;
+  trading_ready: boolean;
+  /** null for brokers with no such requirement (Zerodha) — not false. */
+  static_ip_configured: boolean | null;
+  feed_connected: boolean;
+  feed_age_ms: number | null;
+  problems: string[];
+}
+
+export interface BrokerStatus {
+  broker: BrokerId;
+  session: BrokerSession;
+  health: BrokerHealth;
+  dhan_configured: boolean;
+  dhan_instruments: number;
+  dhan_instruments_loaded_at: number | null;
+}
+
+/** The active broker with its session and readiness. Any admin role may read it. */
+export async function fetchBrokerStatus(): Promise<BrokerStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/broker/status`, { headers: getHeaders() });
+  return readJson<BrokerStatus>(res, "Failed to load the broker status");
+}
+
+/** Why a switch would be refused, without attempting it. Lets the UI pre-warn. */
+export async function fetchBrokerSwitchBlockers(
+  broker: BrokerId,
+): Promise<{ broker: BrokerId; blockers: BrokerSwitchBlocker[] }> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/broker/switch-blockers?broker=${encodeURIComponent(broker)}`,
+    { headers: getHeaders() },
+  );
+  return readJson(res, "Failed to check the broker switch");
+}
+
+/**
+ * Switch the active broker. FULL ADMIN only.
+ *
+ * Throws with the backend's 409 message when Box exposure or in-flight work exists;
+ * the blockers are attached so the UI can list every one instead of surfacing them a
+ * single refusal at a time.
+ */
+export async function selectBroker(broker: BrokerId): Promise<BrokerStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/broker/select`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ broker }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      blockers?: BrokerSwitchBlocker[];
+    };
+    const err = new Error(body.error ?? `Failed to select ${broker} (HTTP ${res.status}).`) as Error & {
+      blockers?: BrokerSwitchBlocker[];
+    };
+    if (body.blockers) err.blockers = body.blockers;
+    throw err;
+  }
+  return readJson<BrokerStatus>(res, "Failed to select the broker");
+}
+
+/** Dhan session + readiness. Never includes the access token or the API secret. */
+export interface DhanStatus {
+  broker: "dhan";
+  active: boolean;
+  configured: boolean;
+  authenticated: boolean;
+  token_expired: boolean;
+  token_expires_at: number | null;
+  data_ready: boolean;
+  trading_ready: boolean;
+  static_ip_configured: boolean | null;
+  feed_connected: boolean;
+  feed_age_ms: number | null;
+  problems: string[];
+  instruments: number;
+  session: {
+    client_id: string;
+    client_name: string;
+    client_ucc: string;
+    power_of_attorney: boolean;
+    token_expires_at: number | null;
+    token_expired: boolean;
+    login_date: string;
+    login_at: string | null;
+  } | null;
+}
+
+export async function fetchDhanStatus(): Promise<DhanStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/dhan/status`, { headers: getHeaders() });
+  return readJson<DhanStatus>(res, "Failed to load the Dhan status");
+}
+
+/**
+ * STEP 1 of the Dhan login: ask the backend for the browser login URL.
+ *
+ * The consent is generated server-side because it needs the API secret, which must
+ * never reach the browser. The caller then navigates to `login_url`.
+ */
+export async function beginDhanLogin(): Promise<{ login_url: string; consent_app_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/dhan/login`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  return readJson<{ login_url: string; consent_app_id: string }>(
+    res,
+    "Failed to start the Dhan login",
+  );
+}
+
+/**
+ * STEP 3: hand the redirect's `tokenId` to the backend, which exchanges it for a
+ * session and keeps the token server-side.
+ *
+ * The tokenId is SINGLE-USE, so the caller must guard against React StrictMode's
+ * double effect invocation — exactly as the Zerodha flow does.
+ */
+export async function createDhanSession(tokenId: string): Promise<{
+  authenticated: boolean;
+  broker: BrokerId;
+  client_id: string | null;
+  client_name: string | null;
+  token_expires_at: number | null;
+}> {
+  const res = await fetch(`${API_BASE_URL}/api/dhan/session`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ tokenId }),
+  });
+  return readJson(res, "Failed to complete the Dhan login");
+}
+
+export async function logoutDhan(): Promise<void> {
+  await fetch(`${API_BASE_URL}/api/dhan/logout`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
 }
 
 /** SSE URL for live box state (token in the query: EventSource cannot set headers). */

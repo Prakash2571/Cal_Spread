@@ -3,6 +3,7 @@ import { ArrowLeftIcon } from "@phosphor-icons/react";
 import {
   boxStreamUrl,
   closeBoxTrade,
+  deleteBoxTrade,
   fetchBoxChain,
   fetchBoxExecutionAttempts,
   fetchBoxHistory,
@@ -19,10 +20,13 @@ import {
   type BoxSnapshot,
   type BoxStatus,
   type BoxTrade,
+  type BrokerId,
 } from "./api.ts";
 import { fmt, formatExpiry } from "./format.ts";
 import ThemeToggle from "./ThemeToggle.tsx";
 import { DirectionBadge } from "./BoxDirection.tsx";
+import { BrokerBadge, BrokerHistoryFilter, type BrokerFilter } from "./BoxBroker.tsx";
+import BoxDeleteModal from "./BoxDeleteModal.tsx";
 import { BoxExecutionHealth } from "./BoxExecutionHealth.tsx";
 import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
 import { BoxDayPnlStrip } from "./BoxDayPnl.tsx";
@@ -173,6 +177,19 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
+  /** The trade the destructive delete modal is confirming, or null when closed. */
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    underlying: string;
+    direction: BoxTrade["direction"];
+    broker?: BrokerId | null;
+    lower_strike: number;
+    upper_strike: number;
+    status: "open" | "closed" | "error";
+  } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** Closed-history broker filter. Only rendered when both brokers appear. */
+  const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>("all");
   const [live, setLive] = useState(false);
   /** Closed-trade loading state, kept apart from the control surface's own error. */
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -463,6 +480,40 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
     }
   }
 
+  /**
+   * Delete a PAPER trade and apply the backend's corrected state immediately.
+   *
+   * The response already carries the recomputed status, open positions and
+   * closed-today list, so nothing here re-derives a number locally — subtracting
+   * fields in the browser is exactly how a UI ends up disagreeing with the server.
+   * The card disappears and every figure updates without a reload.
+   */
+  async function handleDelete(id: string, reason: string) {
+    setDeletingId(id);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await deleteBoxTrade(id, reason);
+      setStatus(result.status);
+      setOpen(result.open ?? []);
+      // Drop it from whichever list is on screen, then adopt the server's corrected
+      // closed-today rows so the Closed tab and its totals agree with the backend.
+      setHistory((prev) => {
+        const corrected = result.closed_today?.trades ?? [];
+        const correctedIds = new Set(corrected.map((t) => t.id));
+        const older = prev.filter((t) => t.id !== id && !correctedIds.has(t.id));
+        return [...corrected, ...older];
+      });
+      setDeleteTarget(null);
+      setNotice("Trade deleted. Counts, P&L and margin have been recalculated.");
+    } catch (err) {
+      // A 409 refusal (live trade / mid-exit) is the meaningful case: surface it as-is.
+      setError(err instanceof Error ? err.message : "Failed to delete the trade.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const cfg = status?.config;
   const freshLimit = cfg?.quote_max_age_ms ?? 1500;
   /**
@@ -540,9 +591,35 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   const setDayOpen = useCallback((key: string, next: boolean) => {
     setDayOverrides((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
   }, []);
+  /**
+   * How many closed trades each broker contributed.
+   *
+   * Drives whether the broker filter is worth showing at all: on a Zerodha-only
+   * deployment offering a Dhan filter would imply Dhan trades exist somewhere.
+   * Rows with no `broker` are Zerodha, matching the backend's legacy default.
+   */
+  const brokerCounts = useMemo(() => {
+    let zerodha = 0;
+    let dhan = 0;
+    for (const t of history) {
+      if (t.broker === "dhan") dhan++;
+      else zerodha++;
+    }
+    return { all: history.length, zerodha, dhan };
+  }, [history]);
+
+  /** Closed trades after the broker filter. */
+  const visibleHistory = useMemo(
+    () =>
+      brokerFilter === "all"
+        ? history
+        : history.filter((t) => (t.broker ?? "zerodha") === brokerFilter),
+    [history, brokerFilter],
+  );
+
   const historyDays = useMemo(() => {
     const groups = new Map<string, BoxTrade[]>();
-    for (const trade of history) {
+    for (const trade of visibleHistory) {
       const key = istDayKey(trade.closed_at ?? trade.opened_at);
       const group = groups.get(key);
       if (group) group.push(trade);
@@ -571,7 +648,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       marginUnknown: trades.filter((trade) => trade.margin === null || trade.margin === undefined)
         .length,
     }));
-  }, [history]);
+  }, [visibleHistory]);
 
   /* --------------------------------- render ------------------------------- */
 
@@ -744,6 +821,14 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
       {/* ------------------------------ status strip ----------------------- */}
       <section className="box-strip">
+        {/* BROKER first: which venue owns the feed, the scanner and execution is the
+            single most important thing about everything else on this page. */}
+        <div className="box-stat">
+          <span className="box-stat-k">Broker</span>
+          <span className="box-stat-v">
+            <BrokerBadge broker={status?.broker} />
+          </span>
+        </div>
         <div className="box-stat">
           <span className="box-stat-k">Status</span>
           <span className="box-stat-v">{status?.state ?? "…"}</span>
@@ -1279,6 +1364,21 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                 freshLimit={freshLimit}
                 closing={closingId === p.id}
                 onClose={() => void handleClose(p.id)}
+                deleting={deletingId === p.id}
+                {...(p.execution_mode !== "live"
+                  ? {
+                      onDelete: () =>
+                        setDeleteTarget({
+                          id: p.id,
+                          underlying: p.underlying,
+                          direction: p.direction,
+                          broker: p.broker,
+                          lower_strike: p.lower_strike,
+                          upper_strike: p.upper_strike,
+                          status: "open",
+                        }),
+                    }
+                  : {})}
               />
             ))}
           </div>
@@ -1301,6 +1401,13 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
               today from {historySource}
             </span>
           )}
+          {/* Historical trades from both brokers coexist; this narrows the view
+              without ever hiding that the other broker's history exists. */}
+          <BrokerHistoryFilter
+            value={brokerFilter}
+            onChange={setBrokerFilter}
+            counts={brokerCounts}
+          />
         </h2>
         {/* Never let a failed fetch look like "nothing has been closed". */}
         {historyError && <div className="banner banner--warn">{historyError}</div>}
@@ -1368,6 +1475,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                         <th>Opened</th>
                         <th>Closed</th>
                         <th className="num">Held</th>
+                        <th>Broker</th>
                         <th className="num">Margin</th>
                         <th className="num">Entry cost</th>
                         <th className="num">Exit value</th>
@@ -1377,6 +1485,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                         <th className="num">Gross P&amp;L</th>
                         <th className="num">Net P&amp;L</th>
                         <th>Reason</th>
+                        <th aria-label="Actions" />
                       </tr>
                     </thead>
                     <tbody>
@@ -1394,6 +1503,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                           <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
                           <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
                           <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
+                          <td><BrokerBadge broker={t.broker} /></td>
                           <td className="num box-dim">{rupees(t.margin)}</td>
                           <td className="num">{rupees(t.entry_box_cost)}</td>
                           <td className="num">{rupees(t.exit_box_value)}</td>
@@ -1404,6 +1514,37 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
                           <td className={`num box-net ${pnlClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
                           <td>
                             <span className="box-reason">{t.exit_reason ?? "-"}</span>
+                          </td>
+                          <td>
+                            {t.execution_mode === "live" ? (
+                              // A closed LIVE trade is the audit record of real
+                              // executed orders and is deliberately retained.
+                              <span
+                                className="box-dim"
+                                title="Closed LIVE trades are retained as the audit record of real executed orders."
+                              >
+                                retained
+                              </span>
+                            ) : (
+                              <button
+                                className="btn btn--sm btn--danger"
+                                disabled={deletingId === t.id}
+                                title="Permanently delete this PAPER trade and recalculate all Box statistics"
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    id: t.id,
+                                    underlying: t.underlying,
+                                    direction: t.direction,
+                                    broker: t.broker,
+                                    lower_strike: t.lower_strike,
+                                    upper_strike: t.upper_strike,
+                                    status: t.status,
+                                  })
+                                }
+                              >
+                                {deletingId === t.id ? "Deleting…" : "Delete"}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1443,6 +1584,21 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           </>
         )}
       </p>
+
+      {/* Destructive confirmation. Rendered last so it overlays the whole page. */}
+      {deleteTarget && (
+        <BoxDeleteModal
+          underlying={deleteTarget.underlying}
+          direction={deleteTarget.direction}
+          broker={deleteTarget.broker}
+          lowerStrike={deleteTarget.lower_strike}
+          upperStrike={deleteTarget.upper_strike}
+          status={deleteTarget.status}
+          busy={deletingId === deleteTarget.id}
+          onConfirm={(reason) => void handleDelete(deleteTarget.id, reason)}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1475,12 +1631,20 @@ function OpenBoxCard({
   freshLimit,
   closing,
   onClose,
+  onDelete,
+  deleting,
 }: {
   p: BoxOpenPosition;
   freshLimit: number;
   closing: boolean;
   onClose: () => void;
+  /** Absent for a LIVE position: real exposure must be flattened, not deleted. */
+  onDelete?: () => void;
+  deleting: boolean;
 }) {
+  // A live position never gets a delete affordance. Its record is the only link to
+  // real broker exposure, so removing it would orphan that exposure entirely.
+  const isLive = p.execution_mode === "live";
   const exitByRole = new Map(p.exit_legs.map((l) => [l.role, l]));
   return (
     <div className={`box-card${p.exit_eligible ? " box-card--exiting" : ""}`}>
@@ -1489,6 +1653,7 @@ function OpenBoxCard({
           <span className="box-sym">{p.underlying}</span>
           {p.is_index && <span className="badge-index">INDEX</span>}
           <DirectionBadge direction={p.direction} />
+          <BrokerBadge broker={p.broker} />
           <span className="box-card-strikes">
             {p.lower_strike} → {p.upper_strike}
           </span>
@@ -1503,11 +1668,32 @@ function OpenBoxCard({
           <button
             className="btn btn--sm"
             onClick={onClose}
-            disabled={closing}
+            disabled={closing || deleting}
             title="Close now at the current executable touch"
           >
             {closing ? "Closing…" : "Close now"}
           </button>
+          {isLive ? (
+            // Stated rather than hidden, so the restriction is understood instead of
+            // looking like a missing feature.
+            <span
+              className="box-dim box-delete-blocked"
+              title="A live position's record is the only link to real broker exposure. Deleting it would orphan that exposure."
+            >
+              Close/flatten this live position before removing records.
+            </span>
+          ) : (
+            onDelete && (
+              <button
+                className="btn btn--sm btn--danger"
+                onClick={onDelete}
+                disabled={deleting || closing}
+                title="Permanently delete this PAPER trade and recalculate all Box statistics"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            )
+          )}
         </div>
       </div>
 

@@ -13,6 +13,8 @@ import {
   logoutAdmin,
   verifyAdminSecret,
   verifyAccessSecret,
+  createDhanSession,
+  type BrokerId,
   createTrade,
   listTrades,
   closeTrade,
@@ -30,6 +32,7 @@ import {
 import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
+import { BrokerBadge } from "./BoxBroker.tsx";
 import TradesPanel from "./TradesPanel.tsx";
 import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
@@ -221,6 +224,15 @@ export default function App() {
 
   const tickBuffer = useRef<TickMap>({});
   const verifyGuard = useRef(false);
+  /**
+   * Separate guard for the Dhan tokenId.
+   *
+   * Its OWN ref, not shared with the Zerodha one: the two redirects can never occur in
+   * the same page load, but sharing a guard would mean whichever flow ran first
+   * silently disarmed the other.
+   */
+  const dhanVerifyGuard = useRef(false);
+  const [activeBroker, setActiveBroker] = useState<BrokerId | null>(null);
 
   async function loadBoard() {
     setLoading(true);
@@ -267,6 +279,7 @@ export default function App() {
     if (route === "/box") title = "Box Arbitrage | Calspread";
     if (route === "/admin/verify") title = "Admin Verification | Calspread";
     if (route === "/admin/access") title = "Trade Access | Calspread";
+    if (route === "/dhan/verify") title = "Connecting Dhan | Calspread";
     if (route.startsWith("/stock/")) {
       title = `${decodeURIComponent(route.slice("/stock/".length))} | Calspread`;
     }
@@ -315,13 +328,53 @@ export default function App() {
       .finally(() => setVerifying(false));
   }, []);
 
+  // Handle the Dhan redirect at /dhan/verify?tokenId=...
+  useEffect(() => {
+    if (window.location.pathname !== "/dhan/verify") return;
+    // A tokenId is SINGLE-USE, exactly like Zerodha's request_token. Without this
+    // guard React StrictMode's double effect invocation consumes it twice and the
+    // second attempt fails, which looks like a broken login.
+    if (dhanVerifyGuard.current) return;
+    dhanVerifyGuard.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const tokenId = params.get("tokenId");
+
+    if (!tokenId) {
+      setError("Dhan login was cancelled or rejected. Please try again.");
+      window.history.replaceState({}, "", "/");
+      return;
+    }
+
+    setVerifying(true);
+    createDhanSession(tokenId)
+      .then((session) => {
+        // The Dhan SESSION is now live. Note this does not by itself switch the
+        // active broker — that is a separate, guarded step, so connecting Dhan can
+        // never silently move the system off Zerodha while exposure is open.
+        setActiveBroker(session.broker);
+        setError(null);
+        window.history.replaceState({}, "", "/");
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Dhan login failed.");
+        window.history.replaceState({}, "", "/");
+      })
+      .finally(() => setVerifying(false));
+  }, []);
+
   // Load the board + auth status on first open.
   useEffect(() => {
     void loadBoard();
     
     // Check admin authentication + role (full vs trade-access)
     getAdminStatus()
-      .then((s) => setAdminRole(s.role))
+      .then((s) => {
+        setAdminRole(s.role);
+        // The BACKEND is the authority on which broker is active. Adopting it here
+        // means a reload shows the truth rather than whatever this tab last selected.
+        if (s.broker) setActiveBroker(s.broker);
+      })
       .catch(() => setAdminRole(null));
     
     getStatus()
@@ -556,12 +609,16 @@ export default function App() {
     return (
       <Admin
         verify={verifyAdminSecret}
+        chooseBroker
         title="Admin Verification"
-        subtitle="Enter the admin secret for full access (Zerodha + trades)."
+        subtitle="Choose a broker and enter the admin secret for full access."
         placeholder="Enter admin secret"
-        onAuthenticated={() => {
+        onAuthenticated={(result) => {
           setAdminRole("full");
-          goHome();
+          if (result.broker) setActiveBroker(result.broker);
+          // A refused switch keeps the operator on this screen's warning; only a
+          // clean verification navigates away.
+          if (!result.brokerSwitchRefused) goHome();
         }}
       />
     );
@@ -575,8 +632,10 @@ export default function App() {
         title="Trade Access"
         subtitle="Enter the access code to view and take trades."
         placeholder="Enter access code"
-        onAuthenticated={() => {
+        onAuthenticated={(result) => {
           setAdminRole("trade");
+          // Trade-access INHERITS the active broker; it never chooses one.
+          if (result.broker) setActiveBroker(result.broker);
           goHome();
         }}
       />
@@ -673,6 +732,9 @@ export default function App() {
             />
           </label>
           <ThemeToggle />
+          {adminAuthenticated && activeBroker && (
+            <BrokerBadge broker={activeBroker} />
+          )}
           {(authenticated || adminAuthenticated) && (
             <span className={`status status--${status.kind}`}>
               <span className="status-dot" />

@@ -4548,3 +4548,224 @@ body {
     gap: 0.15rem;
   }
 }
+
+
+/* ==========================================================================
+   Broker identity + Box trade deletion
+   --------------------------------------------------------------------------
+   Two brokers can appear in history at once, so a trade's broker has to be
+   readable at a glance without competing with the direction pill next to it.
+   The broker badge is therefore NEUTRAL-toned rather than semantic: long/short
+   owns the green/red vocabulary on this page, and a second colour-coded pill
+   beside it would make "DHAN" look like a verdict on the trade.
+   ========================================================================== */
+
+.box-broker {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Zerodha: the incumbent — quiet, so existing screens do not suddenly shout. */
+.box-broker--zerodha {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+  border-color: color-mix(in srgb, var(--fg) 16%, transparent);
+}
+
+/* Dhan: distinguishable at a glance, still not green/red. */
+.box-broker--dhan {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.box-broker-filter {
+  display: inline-flex;
+  gap: 0.3rem;
+  margin-left: 0.6rem;
+  vertical-align: middle;
+}
+
+/* ---- the compact broker/session/feed/trading readout ---- */
+
+.box-broker-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.box-broker-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+}
+.box-ok {
+  color: var(--pos, #16a34a);
+  font-weight: 600;
+}
+.box-bad {
+  color: var(--neg, #dc2626);
+  font-weight: 600;
+}
+.box-broker-problems {
+  margin: 0.3rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.74rem;
+  color: var(--neg, #dc2626);
+}
+.box-broker-problems li {
+  margin: 0.1rem 0;
+}
+
+/* ---- deletion ---- */
+
+/*
+ * The live-position explanation that stands in for a delete button.
+ * Wrapped and dimmed: it is a reason, not an action, and must not read as a
+ * disabled control the operator could enable somehow.
+ */
+.box-delete-blocked {
+  font-size: 0.72rem;
+  max-width: 22rem;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.box-delete-warning {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Spelling out exactly which numbers move, so "permanent" is concrete. */
+.box-delete-effects {
+  margin: 0 0 0.9rem;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--fg) 78%, transparent);
+}
+.box-delete-effects li {
+  margin: 0.15rem 0;
+}
+
+.box-delete-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.9rem;
+}
+.box-delete-reason input {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--fg);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.box-delete-reason input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+
+/* ---- broker selection on /admin/verify ---- */
+
+.admin-broker {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.admin-broker legend {
+  padding: 0 0.35rem;
+}
+
+.admin-broker-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/*
+ * A whole-card radio target rather than a bare dot: this choice decides which venue
+ * every subsequent price, charge and order belongs to, so it deserves a deliberate
+ * click area rather than a 12px control.
+ */
+.admin-broker-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.admin-broker-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.admin-broker-option.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+/* The native radio stays for keyboard and screen-reader users, just not for layout. */
+.admin-broker-option input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.admin-broker-option:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.admin-broker-name {
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+.admin-broker-hint {
+  font-size: 0.68rem;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  line-height: 1.25;
+}
+.admin-broker-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+}
+
+/*
+ * A REFUSED broker switch is a warning, not an error: the operator is signed in and
+ * the session works, it is just still on the previous broker. Styling it as an error
+ * would imply the login failed.
+ */
+.admin-warn {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn, #d97706) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #d97706) 38%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.admin-warn ul {
+  margin: 0.35rem 0;
+  padding-left: 1.05rem;
+}
+.admin-warn li {
+  margin: 0.15rem 0;
+}
