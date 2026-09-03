@@ -4676,3 +4676,96 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+
+/* ---- broker selection on /admin/verify ---- */
+
+.admin-broker {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem 0.8rem;
+  margin-bottom: 0.9rem;
+}
+.admin-broker legend {
+  padding: 0 0.35rem;
+}
+
+.admin-broker-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/*
+ * A whole-card radio target rather than a bare dot: this choice decides which venue
+ * every subsequent price, charge and order belongs to, so it deserves a deliberate
+ * click area rather than a 12px control.
+ */
+.admin-broker-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.admin-broker-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.admin-broker-option.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+/* The native radio stays for keyboard and screen-reader users, just not for layout. */
+.admin-broker-option input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.admin-broker-option:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.admin-broker-name {
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+.admin-broker-hint {
+  font-size: 0.68rem;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+  line-height: 1.25;
+}
+.admin-broker-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--fg) 62%, transparent);
+}
+
+/*
+ * A REFUSED broker switch is a warning, not an error: the operator is signed in and
+ * the session works, it is just still on the previous broker. Styling it as an error
+ * would imply the login failed.
+ */
+.admin-warn {
+  margin: 0.6rem 0 0.9rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn, #d97706) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #d97706) 38%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.admin-warn ul {
+  margin: 0.35rem 0;
+  padding-left: 1.05rem;
+}
+.admin-warn li {
+  margin: 0.15rem 0;
+}
