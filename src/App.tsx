@@ -33,6 +33,7 @@ import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
 import { BrokerBadge } from "./BoxBroker.tsx";
+import BrokerPanel from "./BrokerPanel.tsx";
 import TradesPanel from "./TradesPanel.tsx";
 import TradeConfirmModal from "./TradeConfirmModal.tsx";
 import StockDetail from "./StockDetail.tsx";
@@ -233,6 +234,7 @@ export default function App() {
    */
   const dhanVerifyGuard = useRef(false);
   const [activeBroker, setActiveBroker] = useState<BrokerId | null>(null);
+  const [brokerPanelOpen, setBrokerPanelOpen] = useState(false);
 
   async function loadBoard() {
     setLoading(true);
@@ -277,8 +279,8 @@ export default function App() {
     let title = "Calspread";
     if (route === "/analytics") title = "Options Analytics | Calspread";
     if (route === "/box") title = "Box Arbitrage | Calspread";
-    if (route === "/admin/verify") title = "Admin Verification | Calspread";
-    if (route === "/admin/access") title = "Trade Access | Calspread";
+    if (route.startsWith("/admin/verify")) title = "Admin Verification | Calspread";
+    if (route.startsWith("/admin/access")) title = "Trade Access | Calspread";
     if (route === "/dhan/verify") title = "Connecting Dhan | Calspread";
     if (route.startsWith("/stock/")) {
       title = `${decodeURIComponent(route.slice("/stock/".length))} | Calspread`;
@@ -288,7 +290,16 @@ export default function App() {
 
   // Once authenticated, leave the admin login routes.
   useEffect(() => {
-    if (adminAuthenticated && (route === "/admin/verify" || route === "/admin/access")) {
+    // Only bounce a SIGNED-IN admin away from the plain login screens. `?switch=1`
+    // deliberately still renders /admin/verify, because that is how an already-signed-in
+    // operator reaches the broker picker — bouncing unconditionally is what made the
+    // broker choice effectively one-shot and left the UI stuck on the first selection.
+    const wantsSwitch = new URLSearchParams(window.location.search).get("switch") === "1";
+    if (
+      adminAuthenticated &&
+      !wantsSwitch &&
+      (route === "/admin/verify" || route === "/admin/access")
+    ) {
       goHome();
     }
   }, [adminAuthenticated, route]);
@@ -605,11 +616,26 @@ export default function App() {
         : { kind: "idle", label: "Login for live" };
 
   // Full-admin verification route
-  if (route === "/admin/verify" && !adminAuthenticated) {
+  // Accept /admin/verify and any trailing segment (e.g. the /admin/verify/dhan URL
+  // people naturally try), rather than silently falling through to the board.
+  const isAdminVerifyRoute = route === "/admin/verify" || route.startsWith("/admin/verify/");
+  const isAdminAccessRoute = route === "/admin/access" || route.startsWith("/admin/access/");
+  /** A signed-in admin re-opening the picker to CHANGE broker. */
+  const wantsBrokerSwitch =
+    new URLSearchParams(window.location.search).get("switch") === "1";
+  /** A broker preselected by the URL, so /admin/verify/dhan lands on Dhan. */
+  const routeBroker: BrokerId | null = route.endsWith("/dhan")
+    ? "dhan"
+    : route.endsWith("/zerodha")
+      ? "zerodha"
+      : null;
+
+  if (isAdminVerifyRoute && (!adminAuthenticated || wantsBrokerSwitch)) {
     return (
       <Admin
         verify={verifyAdminSecret}
         chooseBroker
+        {...(routeBroker ? { initialBroker: routeBroker } : {})}
         title="Admin Verification"
         subtitle="Choose a broker and enter the admin secret for full access."
         placeholder="Enter admin secret"
@@ -625,7 +651,7 @@ export default function App() {
   }
 
   // Trade-access route (view & take trades only, no Zerodha controls)
-  if (route === "/admin/access" && !adminAuthenticated) {
+  if (isAdminAccessRoute && !adminAuthenticated) {
     return (
       <Admin
         verify={verifyAccessSecret}
@@ -733,7 +759,14 @@ export default function App() {
           </label>
           <ThemeToggle />
           {adminAuthenticated && activeBroker && (
-            <BrokerBadge broker={activeBroker} />
+            <button
+              type="button"
+              className="broker-chip"
+              onClick={() => setBrokerPanelOpen(true)}
+              title="Change broker, connect or disconnect"
+            >
+              <BrokerBadge broker={activeBroker} />
+            </button>
           )}
           {(authenticated || adminAuthenticated) && (
             <span className={`status status--${status.kind}`}>
@@ -886,8 +919,23 @@ export default function App() {
               </div>
             </details>
           )}
+          {isFullAdmin && (
+            <button
+              className="btn"
+              onClick={() => setBrokerPanelOpen(true)}
+              title="Switch broker, connect or disconnect"
+            >
+              Broker
+            </button>
+          )}
           {isFullAdmin ? (
-            authenticated ? (
+            // The connect button must name the ACTIVE broker. Hard-coding "Zerodha"
+            // here is what made a Dhan session look impossible to establish.
+            activeBroker === "dhan" ? (
+              <button className="btn btn--primary" onClick={() => setBrokerPanelOpen(true)}>
+                Connect to Dhan
+              </button>
+            ) : authenticated ? (
               <button className="btn" onClick={() => void handleFullLogout()}>
                 Logout
               </button>
@@ -955,6 +1003,14 @@ export default function App() {
         </div>
       )}
 
+      {brokerPanelOpen && (
+        <BrokerPanel
+          isFullAdmin={isFullAdmin}
+          onClose={() => setBrokerPanelOpen(false)}
+          // Adopt the SERVER's answer, so the badge can never disagree with reality.
+          onBrokerChanged={(broker) => setActiveBroker(broker)}
+        />
+      )}
       {tokenModalOpen && (
         <AccessTokenModal onClose={() => setTokenModalOpen(false)} />
       )}

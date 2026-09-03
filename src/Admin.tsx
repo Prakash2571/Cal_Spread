@@ -19,6 +19,13 @@ interface AdminProps {
    * capability exists for them.
    */
   chooseBroker?: boolean;
+  /**
+   * Broker preselected by the URL (e.g. /admin/verify/dhan).
+   *
+   * Only a starting value — the operator can still change it before submitting, so a
+   * bookmarked URL is a convenience rather than a hidden commitment.
+   */
+  initialBroker?: BrokerId;
 }
 
 const BROKERS: { id: BrokerId; label: string; hint: string }[] = [
@@ -41,9 +48,10 @@ export default function Admin({
   subtitle = "Enter the admin secret to access management features",
   placeholder = "Enter admin secret",
   chooseBroker = false,
+  initialBroker,
 }: AdminProps) {
   const [secret, setSecret] = useState("");
-  const [broker, setBroker] = useState<BrokerId>("zerodha");
+  const [broker, setBroker] = useState<BrokerId>(initialBroker ?? "zerodha");
   const [error, setError] = useState<string | null>(null);
   /** A refused broker switch: the login still worked, so it is a warning not an error. */
   const [blockers, setBlockers] = useState<{ reason: string; detail: string }[] | null>(null);
