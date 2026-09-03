@@ -15,9 +15,17 @@ function normalizeBaseUrl(raw: string): string {
     .replace(/\/api$/i, ""); // drop a trailing /api (endpoints add it themselves)
 }
 
+import { StaleBrokerTokensError } from "./apiErrors.ts";
+import type { EventSourceLike, TickStreamDeps } from "./tickStream.ts";
+
 const API_BASE_URL = normalizeBaseUrl(
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001",
 );
+
+/** The backend origin, exposed so diagnostics can report real request sizes. */
+export const API_ORIGIN = API_BASE_URL;
+
+export { StaleBrokerTokensError, StreamSessionExpiredError } from "./apiErrors.ts";
 
 let adminToken: string | null = localStorage.getItem("cal_spread_admin_token");
 
@@ -638,27 +646,133 @@ export async function fetchFnoDetail(symbol: string): Promise<FnoDetail> {
   return body;
 }
 
-/** URL for the live SSE tick stream for the given instrument tokens. */
+/**
+ * URL for the live SSE tick stream, LEGACY query-string form.
+ *
+ * Only safe for SMALL token lists. A full board (~816 tokens x 10 digits) produces a
+ * ~9 KB request line, and nginx rejects a request line larger than one header buffer
+ * (8 KB by default) with 414 before the backend ever sees it — which is exactly why the
+ * board showed no prices at all. Use `createStreamSession` + `sessionStreamUrl` for
+ * anything board-sized; `chunkTokens` bounds this path when it is used as a fallback.
+ */
 export function streamUrl(tokens: number[]): string {
   const url = `${API_BASE_URL}/api/stream?tokens=${tokens.join(",")}`;
   return adminToken ? `${url}&x-admin-token=${encodeURIComponent(adminToken)}` : url;
 }
 
+export interface StreamSession {
+  id: string;
+  tokens: number;
+  broker: BrokerId;
+  generation: number;
+}
+
+/**
+ * Exchange a token list for a short stream-session id.
+ *
+ * The tokens travel in a POST BODY, so the subsequent SSE URL is a constant ~60 bytes
+ * no matter how large the board grows. `EventSource` cannot send a body itself, which
+ * is why this is a separate round trip rather than one request.
+ */
+export async function createStreamSession(tokens: number[]): Promise<StreamSession> {
+  const res = await fetch(`${API_BASE_URL}/api/stream/session`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ tokens }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Partial<StreamSession> & { error?: string };
+  if (res.status === 409) {
+    throw new StaleBrokerTokensError(body.error ?? "Board belongs to a previous broker.");
+  }
+  if (!res.ok || !body.id) {
+    throw new Error(body.error ?? `Could not open a market-data session (HTTP ${res.status}).`);
+  }
+  return {
+    id: body.id,
+    tokens: body.tokens ?? tokens.length,
+    broker: (body.broker ?? "zerodha") as BrokerId,
+    generation: body.generation ?? 0,
+  };
+}
+
+/** SSE URL for a stream session. Constant size, independent of the token count. */
+export function sessionStreamUrl(id: string): string {
+  return `${API_BASE_URL}/api/stream/session/${encodeURIComponent(id)}`;
+}
+
 /**
  * One-time snapshot of last price + close for the given tokens (REST).
- * Works regardless of market hours, so values/premiums show even after close.
+ *
+ * POSTs the token list: as a GET the full board exceeded nginx's request-line limit and
+ * returned 414, so the price seed silently failed and cells stayed "-" even after
+ * market hours, when the snapshot is the ONLY source of data.
  */
 export async function fetchQuotes(tokens: number[]): Promise<Tick[]> {
-  const headers: HeadersInit = {};
-  if (adminToken) {
-    headers["x-admin-token"] = adminToken;
+  const res = await fetch(`${API_BASE_URL}/api/quotes`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ tokens }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { ticks?: Tick[]; error?: string };
+  if (res.status === 409) {
+    throw new StaleBrokerTokensError(body.error ?? "Board belongs to a previous broker.");
   }
-  const res = await fetch(`${API_BASE_URL}/api/quotes?tokens=${tokens.join(",")}`, { headers });
-  const body = (await res.json()) as { ticks: Tick[]; error?: string };
   if (!res.ok) {
     throw new Error(body.error ?? `Failed to load quotes (HTTP ${res.status}).`);
   }
-  return body.ticks;
+  return body.ticks ?? [];
+}
+
+/** Live market-data health. Public: it drives the banner every visitor sees. */
+export interface MarketDataStatus {
+  broker: BrokerId;
+  generation: number;
+  subscriptions: {
+    browser: number;
+    scanner: number;
+    strategy: number;
+    analytics: number;
+    tokens: number;
+    leases: number;
+  };
+  sessions: { sessions: number; connections: number; tokens: number };
+  feed: {
+    state: "DOWN" | "CONNECTING" | "CONNECTED_NO_SUBSCRIPTIONS" | "LIVE" | "STALE";
+    connected: boolean;
+    subscribed: number;
+    universe: number | null;
+    feed_age_ms: number | null;
+    last_tick_at: number | null;
+    detail: string;
+  };
+  upstream: {
+    broker: BrokerId;
+    wanted: number | null;
+    subscribed: number | null;
+    socket_connected: boolean;
+    last_tick_at: number | null;
+  };
+}
+
+export async function getMarketDataStatus(): Promise<MarketDataStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/market-data/status`);
+  if (!res.ok) throw new Error(`Market-data status unavailable (HTTP ${res.status}).`);
+  return res.json();
+}
+
+/**
+ * The real browser transports for `TickStream`.
+ *
+ * Lives here, next to the transport code, so `tickStream.ts` needs no browser globals
+ * and stays unit-testable with fakes.
+ */
+export function browserTickStreamDeps(): TickStreamDeps {
+  return {
+    createSession: createStreamSession,
+    sessionUrl: sessionStreamUrl,
+    legacyUrl: streamUrl,
+    makeEventSource: (url) => new EventSource(url) as unknown as EventSourceLike,
+  };
 }
 
 // ---------------- Historical spread (2-year daily) ----------------
