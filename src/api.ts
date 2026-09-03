@@ -1971,6 +1971,19 @@ export interface BrokerHealth {
   problems: string[];
 }
 
+/** The full static-IP picture: what the operator declared vs what Dhan holds. */
+export interface DhanStaticIpState {
+  ready: boolean;
+  declared: boolean;
+  configured_ip: string | null;
+  /** true (matched), false (mismatch/unreachable), null (never checked). */
+  api_verified: boolean | null;
+  primary_ip: string | null;
+  secondary_ip: string | null;
+  checked_at: number | null;
+  error: string | null;
+}
+
 export interface BrokerStatus {
   broker: BrokerId;
   session: BrokerSession;
@@ -1978,6 +1991,8 @@ export interface BrokerStatus {
   dhan_configured: boolean;
   dhan_instruments: number;
   dhan_instruments_loaded_at: number | null;
+  dhan_static_ip?: DhanStaticIpState;
+  last_margin_source?: string | null;
 }
 
 /** The active broker with its session and readiness. Any admin role may read it. */
@@ -2093,6 +2108,28 @@ export async function createDhanSession(tokenId: string): Promise<{
     body: JSON.stringify({ tokenId }),
   });
   return readJson(res, "Failed to complete the Dhan login");
+}
+
+/**
+ * Re-verify the configured server IP against Dhan's whitelist.
+ *
+ * Exposed as an explicit action because the verdict is cached server-side: after
+ * whitelisting an address in the Dhan dashboard, this is what picks it up without
+ * waiting for a restart or a broker switch.
+ */
+export async function verifyDhanIp(): Promise<{
+  ok: boolean;
+  verified: boolean;
+  configured_ip: string;
+  primary_ip: string | null;
+  secondary_ip: string | null;
+  error: string | null;
+}> {
+  const res = await fetch(`${API_BASE_URL}/api/dhan/verify-ip`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  return readJson(res, "Failed to verify the Dhan static IP");
 }
 
 export async function logoutDhan(): Promise<void> {

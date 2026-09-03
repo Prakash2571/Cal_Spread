@@ -24,6 +24,7 @@ import {
   logout as logoutZerodha,
   logoutDhan,
   selectBroker,
+  verifyDhanIp,
   type BrokerId,
   type BrokerStatus,
   type BrokerSwitchBlocker,
@@ -93,6 +94,22 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
       window.location.href = login_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start the Dhan login.");
+      setBusy(null);
+    }
+  }
+
+  async function handleVerifyIp() {
+    setBusy("verify:ip");
+    setError(null);
+    try {
+      const result = await verifyDhanIp();
+      // Surface Dhan's own answer rather than a generic failure: "no IP whitelisted"
+      // and "does not match" need different actions from the operator.
+      if (!result.verified && result.error) setError(result.error);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to verify the static IP.");
+    } finally {
       setBusy(null);
     }
   }
@@ -253,6 +270,31 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
               );
             })}
           </div>
+
+          {/* Static-IP verification is cached server-side, so after whitelisting an
+              address in the Dhan dashboard this is what picks it up. Offered only when
+              Dhan is active and its IP check is what is blocking trading. */}
+          {active === "dhan" && status?.dhan_static_ip?.ready === false && (
+            <div className="broker-ip">
+              <div className="broker-row-note">
+                Configured IP: <code>{status.dhan_static_ip.configured_ip ?? "not set"}</code>
+                {status.dhan_static_ip.primary_ip && (
+                  <> · Dhan holds: <code>{status.dhan_static_ip.primary_ip}</code></>
+                )}
+                {status.dhan_static_ip.secondary_ip && (
+                  <>, <code>{status.dhan_static_ip.secondary_ip}</code></>
+                )}
+              </div>
+              <button
+                className="btn btn--sm"
+                disabled={!isFullAdmin || busy !== null}
+                title="Re-check this server's IP against Dhan's whitelist"
+                onClick={() => void handleVerifyIp()}
+              >
+                {busy === "verify:ip" ? "Verifying…" : "Verify static IP"}
+              </button>
+            </div>
+          )}
 
           {/* A refused switch is the expected, meaningful case — never hidden. */}
           {blockers && (
