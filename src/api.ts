@@ -501,7 +501,35 @@ export async function setRfRate(rf: number): Promise<void> {
 }
 
 /** Backend health/auth status. */
-export async function getStatus(): Promise<{ authenticated: boolean }> {
+/**
+ * Runtime readiness of the ACTIVE broker.
+ *
+ * `authenticated` used to mean "Zerodha has a session", which made the whole app
+ * unusable with Dhan active: the browser saw false, never opened SSE, and showed
+ * `LTP -` behind a "Connect to Zerodha" banner. It now means THE ACTIVE BROKER can
+ * serve market data.
+ *
+ * The separate fields exist so a single boolean is never overloaded again: a broker can
+ * be authenticated but not data-ready, data-ready but not trading-ready, and connected
+ * but with nothing subscribed.
+ */
+export interface RuntimeStatus {
+  status: string;
+  /** The ACTIVE broker's market data is usable. */
+  authenticated: boolean;
+  broker?: BrokerId;
+  broker_authenticated?: boolean;
+  market_data_ready?: boolean;
+  feed_connected?: boolean;
+  feed_state?: "DOWN" | "CONNECTING" | "CONNECTED_NO_SUBSCRIPTIONS" | "LIVE" | "STALE";
+  trading_ready?: boolean;
+  problems?: string[];
+  generation?: number;
+  /** Zerodha's OWN session. For the admin UI only — never gates market data. */
+  zerodha_session?: boolean;
+}
+
+export async function getStatus(): Promise<RuntimeStatus> {
   const res = await fetch(`${API_BASE_URL}/api/status`);
   if (!res.ok) throw new Error(`Backend not reachable (HTTP ${res.status}).`);
   return res.json();
@@ -1984,8 +2012,31 @@ export interface DhanStaticIpState {
   error: string | null;
 }
 
+/** Truthful feed state — connection AND subscriptions AND data arrival. */
+export interface FeedHealthView {
+  state: "DOWN" | "CONNECTING" | "CONNECTED_NO_SUBSCRIPTIONS" | "LIVE" | "STALE";
+  connected: boolean;
+  subscribed: number;
+  universe: number | null;
+  feed_age_ms: number | null;
+  last_tick_at: number | null;
+  detail: string;
+}
+
 export interface BrokerStatus {
   broker: BrokerId;
+  generation?: number;
+  feed?: FeedHealthView;
+  subscriptions?: {
+    browser: number;
+    scanner: number;
+    strategy: number;
+    analytics: number;
+    tokens: number;
+    leases: number;
+  };
+  instruments?: number;
+  instruments_loaded_at?: number | null;
   session: BrokerSession;
   health: BrokerHealth;
   dhan_configured: boolean;
