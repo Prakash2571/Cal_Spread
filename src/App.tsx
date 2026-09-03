@@ -8,6 +8,7 @@ import {
   getStatus,
   type RuntimeStatus,
   logout,
+  logoutDhan,
   loginUrl,
   StaleBrokerTokensError,
   API_ORIGIN,
@@ -40,6 +41,7 @@ import {
   type StreamState,
 } from "./marketData.ts";
 import { TickStream } from "./tickStream.ts";
+import { primaryAuthAction } from "./brokerAction.ts";
 import StockCard from "./StockCard.tsx";
 import SkeletonCard from "./SkeletonCard.tsx";
 import Admin from "./Admin.tsx";
@@ -279,7 +281,11 @@ export default function App() {
   }
 
   async function handleLogout() {
-    await logout();
+    // Disconnects the ACTIVE broker. This unconditionally called Zerodha's logout, so
+    // with Dhan active it cleared an irrelevant Kite session and left the Dhan session
+    // connected — the button said "Logout" and nothing the user cared about logged out.
+    if (activeBroker === "dhan") await logoutDhan();
+    else await logout();
     setAuthenticated(false);
     setLive(false);
   }
@@ -681,6 +687,22 @@ export default function App() {
     return list;
   }, [board, query, arbOnly, sortMinArb, sortMaxArb, sortOi, sortSpread, sortDepth, ticks]);
 
+  /**
+   * Whether the ACTIVE broker has a session.
+   *
+   * `broker_authenticated` rather than `authenticated`: the latter also requires market
+   * data to be ready, so a connected Dhan account whose static IP is still being
+   * verified would read as "not logged in" and be offered a connect button it does not
+   * need. Falls back to local state when the runtime poll has not landed yet.
+   */
+  const brokerConnected = runtime?.broker_authenticated ?? authenticated;
+
+  /** Which primary auth button the header shows. See brokerAction.ts. */
+  const authAction = useMemo(
+    () => primaryAuthAction(activeBroker, brokerConnected),
+    [activeBroker, brokerConnected],
+  );
+
   // Derived from stream COUNTS plus tick arrival, so each distinct situation gets its
   // own label instead of everything collapsing into "Connecting…".
   const status = useMemo(() => {
@@ -1012,19 +1034,27 @@ export default function App() {
             </button>
           )}
           {isFullAdmin ? (
-            // The connect button must name the ACTIVE broker. Hard-coding "Zerodha"
-            // here is what made a Dhan session look impossible to establish.
-            activeBroker === "dhan" ? (
-              <button className="btn btn--primary" onClick={() => setBrokerPanelOpen(true)}>
-                Connect to Dhan
+            // The choice itself lives in `primaryAuthAction`, which tests connectedness
+            // ONCE for whichever broker is active. The Dhan branch here used to render
+            // "Connect to Dhan" unconditionally, never consulting the session, so a
+            // connected Dhan account streaming live prices still showed a connect
+            // button. Keeping the decision in one tested function is what stops that
+            // asymmetry coming back a third time.
+            authAction.kind === "logout" ? (
+              <button
+                className="btn"
+                onClick={() => void handleFullLogout()}
+                title={`Disconnect ${authAction.broker === "dhan" ? "Dhan" : "Zerodha"} and sign out`}
+              >
+                {authAction.label}
               </button>
-            ) : authenticated ? (
-              <button className="btn" onClick={() => void handleFullLogout()}>
-                Logout
+            ) : authAction.kind === "connect-dhan" ? (
+              <button className="btn btn--primary" onClick={() => setBrokerPanelOpen(true)}>
+                {authAction.label}
               </button>
             ) : (
               <a className="btn btn--primary" href={loginUrl()}>
-                Connect to Zerodha
+                {authAction.label}
               </a>
             )
           ) : adminAuthenticated ? (
