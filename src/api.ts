@@ -977,8 +977,32 @@ export type BoxDirection = "LONG_BOX" | "SHORT_BOX";
 /** How an entry is executed: three paper models, or real broker orders. */
 export type BoxExecutionMode = "paper_touch" | "paper_latency" | "paper_legging" | "live";
 
-/** Where a charge figure came from. */
-export type BoxChargeOrigin = "local" | "kite" | "local_verified";
+/**
+ * Which broker a record belongs to.
+ *
+ * Only ONE broker is ever active for new trades, but history from both coexists,
+ * so every trade carries its own. Absent on data written before broker identity
+ * existed, which means Zerodha — the only broker the app ever had.
+ */
+export type BrokerId = "zerodha" | "dhan";
+
+/** Compact badge text for a broker. */
+export function brokerLabel(broker: BrokerId | null | undefined): string {
+  return broker === "dhan" ? "DHAN" : "ZERODHA";
+}
+
+/**
+ * Where a charge figure came from.
+ *
+ * The `dhan` values exist because Dhan's brokerage differs from Zerodha's: a Dhan
+ * trade's costs must never be displayed as if Zerodha had priced them.
+ */
+export type BoxChargeOrigin =
+  | "local"
+  | "kite"
+  | "local_verified"
+  | "dhan"
+  | "dhan_estimate";
 
 /** Per-leg liquidity/freshness detail behind an opportunity. */
 export interface BoxLegEvaluation {
@@ -1123,6 +1147,10 @@ export interface BoxStatus {
   /** Legs discarded because they last traded in an earlier session. */
   indicative_stale_legs: number;
   execution_mode: BoxExecutionMode;
+  /** The broker that owns the feed, scanner and execution right now. */
+  broker?: BrokerId;
+  /** Distinct brokers holding open exposure — normally just the active one. */
+  brokers_with_open_positions?: BrokerId[];
   authenticated: boolean;
   db_enabled: boolean;
   started_at: number | null;
@@ -1407,6 +1435,8 @@ export interface BoxOpenPosition {
   id: string;
   key: string;
   execution_mode: BoxExecutionMode;
+  /** Which broker created this position. Absent on legacy rows ⇒ zerodha. */
+  broker?: BrokerId;
   underlying: string;
   name: string;
   is_index: boolean;
@@ -1522,6 +1552,8 @@ export interface BoxChargeReconciliation {
 export interface BoxTrade {
   id: string;
   execution_mode: BoxExecutionMode;
+  /** Which broker created this trade. Absent on legacy rows ⇒ zerodha. */
+  broker?: BrokerId;
   underlying: string;
   name: string;
   is_index: boolean;
@@ -1815,6 +1847,46 @@ export async function closeBoxTrade(id: string): Promise<BoxOpenPosition[]> {
     "Failed to close the box position",
   );
   return body.open ?? [];
+}
+
+/** What the backend returns after a successful Box trade deletion. */
+export interface BoxDeleteResult {
+  deleted_id: string;
+  /** The corrected status — counts, day P&L and margin already recomputed. */
+  status: BoxStatus;
+  /** The corrected open-position list. */
+  open: BoxOpenPosition[];
+  /** The corrected closed-today list, so the Closed tab updates at once. */
+  closed_today: {
+    trades: BoxTrade[];
+    source?: BoxHistorySource;
+    day?: string;
+    lite?: boolean;
+  };
+}
+
+/**
+ * PERMANENTLY delete a PAPER box trade (open, closed or errored).
+ *
+ * FULL ADMIN ONLY and irreversible. The backend REFUSES a live trade with 409 —
+ * an open one because real broker exposure may still exist, a closed one because
+ * it is the audit record of real executed orders — and that message is surfaced
+ * to the user as-is rather than reworded.
+ *
+ * The response carries the already-recomputed status, open positions and
+ * closed-today list, so the caller can apply corrected numbers immediately
+ * without a reload or a second round trip.
+ */
+export async function deleteBoxTrade(
+  id: string,
+  reason?: string,
+): Promise<BoxDeleteResult> {
+  const res = await fetch(`${API_BASE_URL}/api/box/trades/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+    ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+  });
+  return readJson<BoxDeleteResult>(res, "Failed to delete the box trade");
 }
 
 /** SSE URL for live box state (token in the query: EventSource cannot set headers). */
