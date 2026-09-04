@@ -152,3 +152,53 @@ export function playBoxEntrySound(): void {
 export function playBoxExitSound(): void {
   playCue(500, 380);
 }
+
+/**
+ * Explicitly resume the shared AudioContext.
+ *
+ * Browsers create the context SUSPENDED and only allow it to start from inside a user
+ * gesture (click / tap / key). Event-driven entry and exit cues have no gesture of their
+ * own, so on a fresh page load they stay silent until the user interacts. Calling this
+ * from a real event handler unlocks the context so those later cues can play. Safe to
+ * call repeatedly; swallows every error.
+ */
+export function unlockBoxAudio(): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === "suspended") {
+      void ctx.resume().catch((err) => debugLog("unlock resume failed", err));
+    }
+  } catch (err) {
+    debugLog("unlockBoxAudio failed", err);
+  }
+}
+
+/**
+ * Play a short TEST — the entry cue immediately followed by the exit cue — so the user can
+ * confirm audio works and hear both distinguishable sounds. Because it runs from a click,
+ * it also unlocks the context for later event-driven cues. Deliberately ignores the on/off
+ * preference: it is an explicit user action to check the sound.
+ */
+export function playBoxTestSound(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const play = () => {
+      const now = ctx.currentTime;
+      // Entry pair (rising), then the exit pair (falling) once it has resolved.
+      playTone(ctx, 420, now);
+      playTone(ctx, 560, now + 0.08);
+      playTone(ctx, 500, now + 0.5);
+      playTone(ctx, 380, now + 0.58);
+    };
+
+    if (ctx.state === "suspended") {
+      void ctx.resume().then(play).catch((err) => debugLog("test resume failed", err));
+      return;
+    }
+    play();
+  } catch (err) {
+    debugLog("playBoxTestSound failed", err);
+  }
+}
