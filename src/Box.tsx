@@ -32,6 +32,8 @@ import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
 import { BoxDayPnlStrip } from "./BoxDayPnl.tsx";
 import { BoxGates } from "./BoxGates.tsx";
 import { BoxHelp } from "./BoxHelp.tsx";
+import BoxSoundToggle from "./BoxSoundToggle.tsx";
+import { useBoxSounds } from "./useBoxSounds.ts";
 
 interface Props {
   /** Whether a Zerodha session is live on the backend (data can flow). */
@@ -161,6 +163,7 @@ function duration(fromIso: string, toIso: string | null): string {
 }
 
 export default function Box({ authenticated, canTrade, onBack }: Props) {
+  const { soundEnabled, toggleSound, notifyOpenSnapshot, notifyExit } = useBoxSounds();
   const [status, setStatus] = useState<BoxStatus | null>(null);
   const [opportunities, setOpportunities] = useState<BoxOpportunity[]>([]);
   const [open, setOpen] = useState<BoxOpenPosition[]>([]);
@@ -351,6 +354,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       setStatus(snap.status);
       setOpportunities(snap.opportunities);
       setOpen(snap.open_trades);
+      // Entry cue is driven off this live open set (first frame is baseline). Purely a
+      // UX side effect — it cannot influence anything above it.
+      notifyOpenSnapshot(snap.open_trades.map((t) => t.id));
     }, 400);
 
     es.addEventListener("snapshot", (ev) => {
@@ -378,6 +384,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         // mount/tab-open still reconciles anything missed while disconnected.
         // Recorded as a full row so a later "today" refresh cannot strip it.
         fullRows.current.add(payload.trade.id);
+        // Exit cue: the `exit` event fires only on a real close (never on connect or a
+        // delete), and is deduped by id, so this is the correct "successfully closed"
+        // signal. Side effect only.
+        notifyExit(payload.trade.id);
         setHistory((current) => [
           payload.trade!,
           ...current.filter((trade) => trade.id !== payload.trade!.id),
@@ -392,7 +402,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       window.clearInterval(flush);
       es.close();
     };
-  }, [canTrade, loadToday]);
+    // notifyOpenSnapshot / notifyExit are stable (empty-dep callbacks), so listing them
+    // cannot cause the stream to re-open.
+  }, [canTrade, loadToday, notifyOpenSnapshot, notifyExit]);
 
   /* --------------------------------- chain -------------------------------- */
 
@@ -710,6 +722,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
         <div className="toolbar">
           <BoxHelp />
+          <BoxSoundToggle enabled={soundEnabled} onToggle={toggleSound} />
           <ThemeToggle />
           <span
             className="box-mode"

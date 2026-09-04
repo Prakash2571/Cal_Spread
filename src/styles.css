@@ -370,11 +370,13 @@ body {
   min-width: 0;
 }
 
-.theme-toggle {
+.theme-toggle,
+.box-sound-toggle {
   gap: var(--sp-2);
 }
 
-.theme-toggle svg {
+.theme-toggle svg,
+.box-sound-toggle svg {
   flex: none;
 }
 
@@ -432,11 +434,13 @@ body {
     display: none;
   }
 
-  .theme-toggle span {
+  .theme-toggle span,
+  .box-sound-toggle span {
     display: none;
   }
 
-  .theme-toggle {
+  .theme-toggle,
+  .box-sound-toggle {
     width: 32px;
     padding: 0;
   }
