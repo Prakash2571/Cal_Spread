@@ -15,7 +15,7 @@
  * always comes from the server's own status, so it cannot drift from reality.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   beginDhanLogin,
   fetchBrokerStatus,
@@ -61,18 +61,35 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
   const [error, setError] = useState<string | null>(null);
   const [blockers, setBlockers] = useState<BrokerSwitchBlocker[] | null>(null);
 
+  /**
+   * Held in a ref so `refresh` has a STABLE identity.
+   *
+   * `refresh` used to depend on the `onBrokerChanged` prop, which the parent passes as an
+   * inline arrow. Its identity therefore changed on every App render — and App re-renders
+   * about twice a second while the feed is live, because each tick flush replaces the tick
+   * map. The `useEffect([refresh])` below then re-ran at that rate, hammering
+   * /api/broker/status AND Dhan's status endpoint ~2x/second for as long as the panel was
+   * open, and resetting this panel's own state under the operator's cursor.
+   */
+  const onBrokerChangedRef = useRef(onBrokerChanged);
+  useEffect(() => {
+    onBrokerChangedRef.current = onBrokerChanged;
+  }, [onBrokerChanged]);
+
   const refresh = useCallback(async () => {
     try {
       const next = await fetchBrokerStatus();
       setStatus(next);
-      onBrokerChanged?.(next.broker);
+      onBrokerChangedRef.current?.(next.broker);
       // Dhan detail is best-effort: a Zerodha-only deployment has none, and that must
       // not surface as an error on this panel.
       setDhan(await fetchDhanStatus().catch(() => null));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load the broker status.");
     }
-  }, [onBrokerChanged]);
+    // No dependency on the prop — see onBrokerChangedRef above. This must stay [] so the
+    // effect below runs ONCE per mount instead of on every parent render.
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -85,7 +102,10 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
     try {
       const next = await selectBroker(broker);
       setStatus(next);
-      onBrokerChanged?.(next.broker);
+      // Notify ONCE, from refresh() below. Calling it here too ran the parent's whole
+      // invalidation twice — and the second run used a stale closure that still saw the
+      // OLD active broker, so it re-cleared the board and kicked off a second concurrent
+      // loadBoard(), producing a visible "board appears, blanks, reappears" flicker.
       await refresh();
     } catch (err) {
       // A 409 carries the blocker list. Show every one — an operator with three

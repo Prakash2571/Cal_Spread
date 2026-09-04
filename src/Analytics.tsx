@@ -519,6 +519,11 @@ export default function Analytics({ authenticated, onBack }: Props) {
     return () => {
       cancelled = true;
       window.clearInterval(flush);
+      // Clear the buffer HERE, not only in the chain-fetch callback. The old stream stays
+      // open until this cleanup runs, so ticks arriving after the buffer was cleared for a
+      // new expiry were flushed into that new expiry's tick map — including the shared spot
+      // token, whose stale value looks entirely plausible.
+      tickBuffer.current = {};
       stream.close();
     };
   }, [authenticated, chain]);

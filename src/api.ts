@@ -2298,10 +2298,24 @@ export async function verifyDhanIp(): Promise<{
 }
 
 export async function logoutDhan(): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/dhan/logout`, {
-    method: "POST",
-    headers: getHeaders(),
-  });
+  // Mirrors `logout()`: never rejects, and never claims success on an error status.
+  //
+  // It used to neither catch nor check `res.ok`, so a network failure rejected out of the
+  // header's `onClick` (an unhandled rejection) and the caller's `setAuthenticated(false)`
+  // / token clear never ran — the user pressed Logout and nothing happened, with no error
+  // shown. An HTTP 500 was worse: it resolved, so the UI reported a disconnect that had
+  // not occurred.
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/dhan/logout`, {
+      method: "POST",
+      headers: getHeaders(),
+    });
+    if (!res.ok) {
+      console.warn(`[api] Dhan logout returned HTTP ${res.status}; clearing locally anyway.`);
+    }
+  } catch (err) {
+    console.warn("[api] Dhan logout request failed; clearing locally anyway.", err);
+  }
 }
 
 /** SSE URL for live box state (token in the query: EventSource cannot set headers). */

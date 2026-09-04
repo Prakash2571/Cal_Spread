@@ -246,7 +246,12 @@ export default function App() {
 
   function updateRf(value: string) {
     const n = parseFloat(value);
-    setRfRate(value === "" ? 0 : n);
+    // Never store NaN. A partial entry ("-", ".", "1e") parses to NaN, which React
+    // rejects as a controlled input value (blanking the box) and which fairPrice()
+    // silently substitutes with rf=0 — so every card's Fair and PREM/DISC quietly
+    // recomputed at zero with no indication anything was wrong.
+    if (value === "") setRfRate(0);
+    else if (Number.isFinite(n)) setRfRate(n);
     if (Number.isFinite(n)) {
       localStorage.setItem("cal_spread_rf", String(n));
       // Full admin only: sync to backend so it can be read via GET /api/rf.
@@ -460,7 +465,11 @@ export default function App() {
       const s = await getStatus();
       setRuntime(s);
       if (s.broker) setActiveBroker(s.broker);
-      if (s.authenticated) setAuthenticated(true);
+      // ADOPT the server's answer in BOTH directions. This used to only ever set true,
+      // so a session that expired server-side left the UI insisting it was authenticated:
+      // the stream was never torn down, stale prices kept rendering as if live, and the
+      // "connect your broker" banner never appeared.
+      setAuthenticated(s.authenticated);
     } catch {
       /* backend unreachable — the poll below keeps trying */
     }
@@ -549,7 +558,14 @@ export default function App() {
         setLive(false);
         setStreamState(IDLE_STREAM_STATE);
         setError(message);
+        // RE-ARM, don't just report. A TickStream that has gone fatal is stopped for good,
+        // and this effect only re-runs when `authenticated` or `board` changes — neither of
+        // which a fatal feed altered. The result was a permanently dead feed sitting on
+        // "Connecting…" until the user reloaded the page. Refetching the board changes
+        // `board`'s identity, which rebuilds the stream; `refreshRuntime` then also adopts
+        // a genuinely lost session and tears the effect down instead.
         void refreshRuntime();
+        void loadBoard();
       },
       onError: (message) => {
         console.warn("[MarketData]", message);
@@ -568,7 +584,16 @@ export default function App() {
     return () => {
       cancelled = true;
       clearInterval(flush);
+      // The BUFFER must be dropped too, not just the tick map. It survives this effect,
+      // so on a broker change the pending Kite-namespaced ticks were flushed into the
+      // freshly cleared Dhan-keyed map 500ms later — re-injecting the previous broker's
+      // prices under colliding token integers, which is exactly what clearing `ticks`
+      // was meant to prevent.
+      tickBuffer.current = {};
       setStreamState(IDLE_STREAM_STATE);
+      // Without this, `marketDataPhase` still saw hasTicks=true with zero open streams
+      // and reported "Live" while nothing was connected.
+      setLive(false);
       stream.close();
     };
   }, [authenticated, board]);
