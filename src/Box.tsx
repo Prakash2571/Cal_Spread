@@ -163,7 +163,7 @@ function duration(fromIso: string, toIso: string | null): string {
 }
 
 export default function Box({ authenticated, canTrade, onBack }: Props) {
-  const { soundEnabled, toggleSound, notifyOpenSnapshot, notifyExit } = useBoxSounds();
+  const { soundEnabled, toggleSound, notifyOpenSnapshot, notifyExit, testSound } = useBoxSounds();
   const [status, setStatus] = useState<BoxStatus | null>(null);
   const [opportunities, setOpportunities] = useState<BoxOpportunity[]>([]);
   const [open, setOpen] = useState<BoxOpenPosition[]>([]);
@@ -722,7 +722,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
 
         <div className="toolbar">
           <BoxHelp />
-          <BoxSoundToggle enabled={soundEnabled} onToggle={toggleSound} />
+          <BoxSoundToggle enabled={soundEnabled} onToggle={toggleSound} onTest={testSound} />
           <ThemeToggle />
           <span
             className="box-mode"

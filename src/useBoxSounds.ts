@@ -14,6 +14,8 @@ import {
   saveBoxSoundPref,
   playBoxEntrySound,
   playBoxExitSound,
+  playBoxTestSound,
+  unlockBoxAudio,
 } from "./lib/boxSounds.ts";
 import { BoxSoundTracker } from "./lib/boxSoundTracker.ts";
 
@@ -24,6 +26,12 @@ export interface BoxSoundsApi {
   notifyOpenSnapshot: (openIds: string[]) => void;
   /** Report a closed trade id from the `exit` event. */
   notifyExit: (tradeId: string) => void;
+  /**
+   * Play a test cue so the user can confirm audio works. Being a real click, it also
+   * unlocks the AudioContext so later event-driven cues can play after a page refresh.
+   * Plays regardless of the on/off preference — it is an explicit check.
+   */
+  testSound: () => void;
 }
 
 export function useBoxSounds(): BoxSoundsApi {
@@ -44,8 +52,25 @@ export function useBoxSounds(): BoxSoundsApi {
     setSoundEnabled((prev) => {
       const next = !prev;
       saveBoxSoundPref(next);
+      // Enabling is a user gesture — unlock the audio context now so later event-driven
+      // cues can play (browsers suspend audio until the first interaction).
+      if (next) {
+        try {
+          unlockBoxAudio();
+        } catch {
+          /* never surface audio errors */
+        }
+      }
       return next;
     });
+  }, []);
+
+  const testSound = useCallback(() => {
+    try {
+      playBoxTestSound();
+    } catch {
+      /* never surface audio errors */
+    }
   }, []);
 
   const notifyOpenSnapshot = useCallback((openIds: string[]) => {
@@ -74,5 +99,5 @@ export function useBoxSounds(): BoxSoundsApi {
     }
   }, []);
 
-  return { soundEnabled, toggleSound, notifyOpenSnapshot, notifyExit };
+  return { soundEnabled, toggleSound, notifyOpenSnapshot, notifyExit, testSound };
 }
