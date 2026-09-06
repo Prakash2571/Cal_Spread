@@ -721,7 +721,10 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         </div>
 
         <div className="toolbar">
-          <BoxHelp />
+          {/* The panel is given the live mode and config so it explains what this
+              server is ACTUALLY running — a help page quoting stale defaults is worse
+              than none, and its lead paragraph must not promise "paper" under live. */}
+          <BoxHelp mode={status?.execution_mode} cfg={cfg} />
           <BoxSoundToggle enabled={soundEnabled} onToggle={toggleSound} onTest={testSound} />
           <ThemeToggle />
           <span
