@@ -1,10 +1,23 @@
 /**
- * Box trade audio cues — two short, soft, Web-Audio-generated tones.
+ * Box trade audio cues — two short, clearly audible, Web-Audio-generated tones.
  *
- * Design goals (from the feature brief): a quiet professional trading-terminal
- * confirmation, not a game or alarm. Entry rises (420→560 Hz), exit falls
- * (500→380 Hz), so the two are instantly distinguishable; both are pure sine, very low
- * gain, under ~450 ms, with smooth ramps so there are no clicks.
+ * WHAT CHANGED, AND WHY
+ * These started as a deliberately near-silent confirmation: 0.05 gain around 420–560 Hz.
+ * In practice that was too easy to miss, which defeats the point — a trade opening or
+ * closing is exactly the moment you want to look at the screen. So the cue is now both
+ * LOUDER and PITCHED HIGHER, and the two changes compound:
+ *
+ *   • gain went 0.05 -> 0.18, about +11 dB;
+ *   • the tones moved up roughly an octave, into the 659–1175 Hz band where human
+ *     hearing is most sensitive. The equal-loudness curves are worth ~8–10 dB on their
+ *     own here, so the same gain simply carries further at 1 kHz than at 420 Hz.
+ *
+ * It is still a trading-terminal cue, not an alarm: pure sine, no harshness, well under
+ * half a second, and smooth ramps so there is never a click.
+ *
+ * Entry RISES and exit FALLS, and that is the load-bearing property — it is how the two
+ * are told apart without looking. They also start on different notes, so even the first
+ * instant of the cue identifies which one it is. Any change here must preserve both.
  *
  * NON-NEGOTIABLE: playback is completely side-effect-isolated. Every entry point is
  * wrapped so an audio failure — a suspended context, an unsupported browser, autoplay
@@ -15,8 +28,42 @@
  * construct one per event.
  */
 
-/** Master gain. Deliberately tiny — pleasant on headphones, never startling. */
-export const BOX_SOUND_VOLUME = 0.05;
+/**
+ * Master gain, per tone.
+ *
+ * Chosen to be unmistakable on laptop speakers while leaving plenty of headroom: the two
+ * tones of a cue overlap, so the instantaneous peak can approach 2x this value — 0.36,
+ * nowhere near clipping.
+ */
+export const BOX_SOUND_VOLUME = 0.18;
+
+/**
+ * The two cue melodies, as [first, second] Hz.
+ *
+ * Named constants rather than literals at the call sites because the TEST cue plays both
+ * pairs, and duplicating the numbers there is exactly how a "test" sound drifts away from
+ * the sound it is supposed to be testing.
+ *
+ * Musically clean perfect fifths, so the cue sounds intentional rather than like a beep:
+ * entry G5 -> D6 ascending, exit B5 -> E5 descending.
+ */
+export const BOX_ENTRY_TONES: readonly [number, number] = [784, 1175];
+export const BOX_EXIT_TONES: readonly [number, number] = [988, 659];
+
+/** Envelope shape, in seconds. Attack is short but non-zero, or the tone clicks. */
+const TONE_ATTACK_S = 0.015;
+/** Release end. A touch longer than the original 0.3 s, which adds presence. */
+const TONE_RELEASE_S = 0.36;
+const TONE_STOP_S = 0.4;
+/** Overlap between the two tones of one cue — connected, not two separate beeps. */
+const TONE_GAP_S = 0.08;
+/**
+ * Silence between the entry cue and the exit cue in the TEST sound.
+ *
+ * Short, but long enough that they read as two distinct cues rather than one four-note
+ * run — the point of the test is to hear the difference.
+ */
+const TEST_CUE_SEPARATION_S = 0.07;
 
 /** localStorage key for the on/off preference. */
 export const BOX_SOUND_STORAGE_KEY = "calspread:box:sound-enabled";
@@ -91,10 +138,10 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
- * One soft sine tone with a click-free envelope.
+ * One sine tone with a click-free envelope.
  *
  *   attack:  ~15 ms linear ramp from 0 (starting at a non-zero value clicks)
- *   release: exponential decay to near-zero by ~300 ms (musical, no ring-out)
+ *   release: exponential decay to near-zero by ~360 ms (musical, no ring-out)
  *
  * exponentialRamp cannot reach 0, so it targets a tiny floor and the node is stopped
  * shortly after.
@@ -107,12 +154,12 @@ function playTone(ctx: AudioContext, freq: number, startAt: number): void {
   osc.frequency.setValueAtTime(freq, startAt);
 
   gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.linearRampToValueAtTime(BOX_SOUND_VOLUME, startAt + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.3);
+  gain.gain.linearRampToValueAtTime(BOX_SOUND_VOLUME, startAt + TONE_ATTACK_S);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + TONE_RELEASE_S);
 
   osc.connect(gain).connect(ctx.destination);
   osc.start(startAt);
-  osc.stop(startAt + 0.34);
+  osc.stop(startAt + TONE_STOP_S);
 }
 
 /**
@@ -128,7 +175,7 @@ function playCue(freq1: number, freq2: number): void {
       const now = ctx.currentTime;
       playTone(ctx, freq1, now);
       // Second tone overlaps slightly for a connected two-note feel, not two beeps.
-      playTone(ctx, freq2, now + 0.08);
+      playTone(ctx, freq2, now + TONE_GAP_S);
     };
 
     if (ctx.state === "suspended") {
@@ -143,14 +190,14 @@ function playCue(freq1: number, freq2: number): void {
   }
 }
 
-/** A newly OPENED box: soft rising confirmation (420 → 560 Hz). */
+/** A newly OPENED box: bright RISING confirmation (784 → 1175 Hz). */
 export function playBoxEntrySound(): void {
-  playCue(420, 560);
+  playCue(BOX_ENTRY_TONES[0], BOX_ENTRY_TONES[1]);
 }
 
-/** A CLOSED box: soft resolving, warmer descending tone (500 → 380 Hz). */
+/** A CLOSED box: resolving DESCENDING tone (988 → 659 Hz). */
 export function playBoxExitSound(): void {
-  playCue(500, 380);
+  playCue(BOX_EXIT_TONES[0], BOX_EXIT_TONES[1]);
 }
 
 /**
@@ -186,11 +233,15 @@ export function playBoxTestSound(): void {
 
     const play = () => {
       const now = ctx.currentTime;
-      // Entry pair (rising), then the exit pair (falling) once it has resolved.
-      playTone(ctx, 420, now);
-      playTone(ctx, 560, now + 0.08);
-      playTone(ctx, 500, now + 0.5);
-      playTone(ctx, 380, now + 0.58);
+      // Entry pair (rising), then the exit pair (falling) once it has resolved. Driven by
+      // the SAME constants as the real cues, so what you hear when you press Test is
+      // exactly what a trade will sound like.
+      // The entry pair is finished at gap + stop; leave a beat, then play the exit pair.
+      const exitAt = now + TONE_GAP_S + TONE_STOP_S + TEST_CUE_SEPARATION_S;
+      playTone(ctx, BOX_ENTRY_TONES[0], now);
+      playTone(ctx, BOX_ENTRY_TONES[1], now + TONE_GAP_S);
+      playTone(ctx, BOX_EXIT_TONES[0], exitAt);
+      playTone(ctx, BOX_EXIT_TONES[1], exitAt + TONE_GAP_S);
     };
 
     if (ctx.state === "suspended") {
