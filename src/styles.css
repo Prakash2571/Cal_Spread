@@ -4557,6 +4557,66 @@ body {
   }
 }
 
+/* The lead paragraph turns from neutral to a warning tone under LIVE, because
+   "this is real money" must not look like the same reassuring box as "this is
+   all simulated". */
+.box-help-lead--live {
+  border-color: var(--danger, #f85149);
+  border-left-width: 3px;
+}
+.box-help-steps {
+  margin: 0.5rem 0;
+  padding-left: 1.35rem;
+}
+.box-help-steps li {
+  margin: 0.35rem 0;
+}
+.box-help-sub {
+  margin: 1.1rem 0 0.3rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+}
+/* Parameter tables carry a third column — the value this server is really
+   running — so the name and the live figure stay aligned down the list and a
+   changed setting is easy to spot. */
+.box-help-params {
+  margin: 0.35rem 0 0;
+}
+.box-help-prow {
+  display: grid;
+  grid-template-columns: 12rem 7rem 1fr;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.box-help-prow dt {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.box-help-prow dd {
+  margin: 0;
+}
+.box-help-pval {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.box-help-pmean {
+  color: var(--text-2);
+}
+@media (max-width: 620px) {
+  .box-help-prow {
+    grid-template-columns: 1fr auto;
+    gap: 0.15rem 0.6rem;
+  }
+  .box-help-pmean {
+    grid-column: 1 / -1;
+  }
+}
+
 
 /* ==========================================================================
    Broker identity + Box trade deletion
