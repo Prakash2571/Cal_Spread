@@ -532,6 +532,45 @@ export function BoxHelp({
                 )}
               </Section>
 
+              <Section title="Known limitations right now">
+                <p>
+                  These are current, verified shortcomings — not hypotheticals. They are listed here
+                  because a figure on this page can be misread without them.
+                </p>
+                <ul>
+                  <li>
+                    <strong>Two boxes can share an option and both be taken.</strong> Every duplicate
+                    guard in the engine is keyed on the whole strike pair
+                    (underlying + expiry + K1 + K2 + direction), so a box on 1300/1320 and a box on
+                    1320/1340 are treated as completely unrelated even though both trade the 1320
+                    strike. They can be entered in the same second, and each one assumes the
+                    <em> full</em> size it saw resting at that shared strike. Nothing reserves an
+                    individual contract yet.
+                  </li>
+                  <li>
+                    <strong>What that does to these numbers.</strong> In paper it can overstate what
+                    was really achievable, because the same resting lot is spent twice. The effect is
+                    largest in the faster paper modes, which allow several entry pipelines at once; a
+                    live run is far more serialised, because the live path admits one box at a time.
+                    If you see two boxes with a common strike opened at the same timestamp, treat the
+                    pair's combined fills with suspicion rather than as two independent results.
+                  </li>
+                  <li>
+                    <strong>One market-data connection is shared.</strong> Box options and the
+                    calendar-spread board are fed by a single upstream connection to the active
+                    broker, drawn from one token budget. A wide Box universe therefore competes for
+                    the same subscription capacity as the board, which is why the strike window is
+                    capped rather than unlimited.
+                  </li>
+                </ul>
+                <p className="box-help-note">
+                  Both of these are being worked on: per-contract execution reservation so overlapping
+                  boxes cannot consume the same leg, and a dedicated Box market-data connection
+                  separate from the futures one. Neither exists yet, so this panel does not describe
+                  them as if they do.
+                </p>
+              </Section>
+
               <Section title="What this does not prove">
                 <p>
                   {isLive ? (
