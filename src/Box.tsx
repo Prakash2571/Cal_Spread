@@ -8,12 +8,14 @@ import {
   fetchBoxExecutionAttempts,
   fetchBoxHistory,
   fetchBoxOpportunities,
+  fetchBoxExecutionControl,
   fetchBoxStatus,
   setBoxStrikeLevel,
   startBoxScanner,
   stopBoxScanner,
   type BoxChain,
   type BoxExecutionAttempt,
+  type BoxExecutionControl as BoxExecutionControlView,
   type BoxHistorySource,
   type BoxOpenPosition,
   type BoxOpportunity,
@@ -31,6 +33,9 @@ import { BoxExecutionHealth } from "./BoxExecutionHealth.tsx";
 import { BoxExecutionAttempts } from "./BoxExecutionAttempts.tsx";
 import { BoxDayPnlStrip } from "./BoxDayPnl.tsx";
 import { BoxGates } from "./BoxGates.tsx";
+import { BoxExecutionControl } from "./BoxExecutionControl.tsx";
+import { BoxRiskControl } from "./BoxRiskControl.tsx";
+import { BoxSessionControl } from "./BoxSessionControl.tsx";
 import { BoxHelp } from "./BoxHelp.tsx";
 import BoxSoundToggle from "./BoxSoundToggle.tsx";
 import { useBoxSounds } from "./useBoxSounds.ts";
@@ -40,6 +45,14 @@ interface Props {
   authenticated: boolean;
   /** True for either admin role — the box endpoints require one. */
   canTrade: boolean;
+  /**
+   * True only for the FULL admin role.
+   *
+   * Live arming, the paper-profile switch and session arming are full-admin only. This hides
+   * controls a trade-access user cannot use; the backend enforces the same split independently, so
+   * a forged value here changes nothing.
+   */
+  isFullAdmin?: boolean;
   onBack: () => void;
 }
 
@@ -162,7 +175,7 @@ function duration(fromIso: string, toIso: string | null): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-export default function Box({ authenticated, canTrade, onBack }: Props) {
+export default function Box({ authenticated, canTrade, isFullAdmin = false, onBack }: Props) {
   const { soundEnabled, toggleSound, notifyOpenSnapshot, notifyExit, testSound } = useBoxSounds();
   const [status, setStatus] = useState<BoxStatus | null>(null);
   const [opportunities, setOpportunities] = useState<BoxOpportunity[]>([]);
@@ -194,6 +207,9 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   /** Closed-history broker filter. Only rendered when both brokers appear. */
   const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>("all");
   const [live, setLive] = useState(false);
+  /** Execution mode / arming / session / risk. Its own state and its own error line. */
+  const [executionControl, setExecutionControl] = useState<BoxExecutionControlView | undefined>(undefined);
+  const [executionError, setExecutionError] = useState<string | null>(null);
   /** Closed-trade loading state, kept apart from the control surface's own error. */
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -221,6 +237,25 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load box status.");
+    }
+  }, []);
+
+  /**
+   * The execution control surface: mode, live capability, arming, session and risk limits.
+   *
+   * Fetched SEPARATELY from `status` and deliberately NOT folded into the SSE stream. It is a cold
+   * read on the server (it consults the reservation store and the session record), so polling it at
+   * the stream's rate would be wasteful; and it must never be the thing that makes the price view
+   * stall, so its failure is reported on its own line rather than clearing `status`.
+   */
+  const loadExecutionControl = useCallback(async () => {
+    try {
+      setExecutionControl(await fetchBoxExecutionControl());
+      setExecutionError(null);
+    } catch (err) {
+      setExecutionError(
+        err instanceof Error ? err.message : "Failed to load the execution control state.",
+      );
     }
   }, []);
 
@@ -326,6 +361,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
   useEffect(() => {
     if (!canTrade) return;
     void loadStatus();
+    void loadExecutionControl();
     // Two phases: today's closed trades first (memory/Redis, immediate), then the
     // full book in the background. The old single full-book fetch meant the tab
     // showed nothing until the slowest query on the page finished — or forever, if
@@ -339,7 +375,7 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
         setStatus(r.status);
       })
       .catch(() => {});
-  }, [canTrade, loadStatus, loadToday, loadHistory]);
+  }, [canTrade, loadStatus, loadExecutionControl, loadToday, loadHistory]);
 
   /* --------------------------------- stream ------------------------------- */
 
@@ -973,6 +1009,34 @@ export default function Box({ authenticated, canTrade, onBack }: Props) {
           </span>
         </div>
       </section>
+
+      {/* ── EXECUTION: what this deployment is doing, and what it is allowed to do ──
+          Placed above the thresholds because "are these real orders?" outranks every other
+          question on the page. The backend is the authority for every value shown. */}
+      <BoxExecutionControl
+        control={executionControl}
+        canTrade={canTrade}
+        isFullAdmin={isFullAdmin}
+        onChanged={() => {
+          void loadExecutionControl();
+          void loadStatus();
+        }}
+      />
+      {executionError && (
+        <div className="banner banner--warn">
+          {executionError} Prices and positions above are unaffected.
+        </div>
+      )}
+      <BoxSessionControl
+        control={executionControl}
+        canTrade={canTrade}
+        isFullAdmin={isFullAdmin}
+        onChanged={() => {
+          void loadExecutionControl();
+          void loadStatus();
+        }}
+      />
+      <BoxRiskControl control={executionControl} canTrade={canTrade} />
 
       {/* The two thresholds above that an admin can actually change at runtime. */}
       <BoxGates

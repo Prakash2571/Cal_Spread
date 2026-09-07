@@ -5065,3 +5065,475 @@ body {
   margin-bottom: 0.4rem;
   background: none;
 }
+
+
+/* ==========================================================================
+   BOX EXECUTION / RISK / SESSION PANELS
+   ==========================================================================
+
+   The one visual rule that matters here: LIVE must be unmissable. A paper run and
+   a real-money run must never be mistakable for one another at a glance, so the
+   live mode chip and the REAL ORDERS badge use the danger fill rather than a
+   subtle tint, and the badge is persistent rather than transient.
+   ========================================================================== */
+
+.box-exec {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.box-exec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* The mode chip. Paper is quiet; live is loud, deliberately. */
+.box-exec-mode {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.6rem;
+  border-radius: 6px;
+}
+.box-exec-mode--paper {
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.box-exec-mode--live {
+  color: var(--on-accent);
+  background: var(--danger-fill);
+  border: 1px solid var(--danger-fill);
+}
+
+.box-exec-badge {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.22rem 0.45rem;
+  border-radius: 5px;
+  color: var(--accent-text);
+  background: var(--accent-surface);
+  border: 1px solid var(--accent-border);
+  white-space: nowrap;
+}
+.box-exec-badge--danger {
+  color: var(--on-accent);
+  background: var(--neg);
+  border-color: var(--neg);
+}
+
+/* The status grid. Fixed columns so a value changing length never reflows the row. */
+.box-exec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.75rem;
+}
+.box-exec-cell dt {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+.box-exec-cell dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.box-exec-cell dd.ok {
+  color: var(--pos);
+}
+.box-exec-cell dd.warn {
+  color: var(--warn);
+}
+
+/* Mode selection. An unavailable option stays visible but is clearly inert: hiding
+   it would leave an operator wondering whether live exists at all. */
+.box-exec-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+.box-exec-mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.35rem 0.6rem;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.box-exec-mode-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+.box-exec-mode-btn.is-active {
+  color: var(--accent-text);
+  background: var(--accent-surface);
+  border-color: var(--accent-border);
+}
+.box-exec-mode-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.box-exec-mode-btn.is-unavailable {
+  border-style: dashed;
+  opacity: 0.5;
+}
+.box-exec-mode-btn-label {
+  white-space: nowrap;
+}
+.box-exec-mode-btn-note {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--warn);
+}
+
+.box-exec-arm,
+.box-exec-session {
+  margin-top: 0.75rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.box-exec-arm-h,
+.box-risk-h,
+.box-session-h {
+  margin: 0 0 0.3rem;
+  font-size: 0.7rem
+;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.box-exec-arm-note,
+.box-session-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--text-3);
+  max-width: 62rem;
+}
+.box-exec-arm-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.box-exec-arm-state {
+  font-size: 0.7rem;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.box-exec-arm-state em {
+  color: var(--warn);
+  font-style: normal;
+}
+
+/* The entry-arming confirmation. Framed in danger colours because it is the one
+   click in the UI that can start creating real exposure. */
+.box-exec-confirm {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--neg);
+  border-radius: 8px;
+  background: var(--neg-surface);
+}
+.box-exec-confirm h4 {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-1);
+}
+.box-exec-confirm > p {
+  margin: 0 0 0.6rem;
+  font-size: 0.74rem;
+  color: var(--text-2);
+}
+.box-exec-confirm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.7rem;
+}
+.box-exec-confirm-grid dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+.box-exec-confirm-grid dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.76rem;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.box-exec-confirm-grid dd small {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--text-3);
+}
+.box-exec-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.box-exec-blockers {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.7rem;
+  color: var(--text-2);
+}
+
+.box-exec-latency {
+  margin: 0.75rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--text-3);
+  max-width: 70rem;
+}
+
+.box-exec-msg,
+.box-session-msg {
+  margin: 0.5rem 0 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+.box-exec-msg code,
+.box-risk-env code,
+.box-risk-hint code {
+  padding: 0.05rem 0.25rem;
+  border-radius: 4px;
+  background: var(--surface-3);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.94em;
+}
+.box-exec-msg--error,
+.box-session-msg--error {
+  color: var(--neg);
+  background: var(--neg-surface);
+  border: 1px solid var(--neg);
+}
+.box-exec-msg--warn,
+.box-session-msg--warn {
+  color: var(--warn);
+  background: var(--warn-surface);
+  border: 1px solid var(--warn);
+}
+.box-exec-msg--ok,
+.box-session-msg--ok {
+  color: var(--pos);
+  background: var(--pos-surface);
+  border: 1px solid var(--pos);
+}
+.box-exec-msg--info,
+.box-session-msg--info {
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+/* ---------------------------- risk panel ---------------------------- */
+
+.box-risk,
+.box-session {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+.box-risk-item {
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.box-risk-item:first-of-type {
+  border-top: 0;
+}
+.box-risk-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.box-risk-k {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.box-risk-v {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.box-risk-v.is-on {
+  color: var(--accent-text);
+}
+.box-risk-v small {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.box-risk-hint,
+.box-risk-env,
+.box-risk-evidence {
+  margin: 0.25rem 0 0;
+  font-size: 0.69rem;
+  line-height: 1.5;
+  color: var(--text-3);
+  max-width: 66rem;
+}
+.box-risk-evidence {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.box-risk-evidence .ok {
+  color: var(--pos);
+}
+.box-risk-evidence .warn,
+.box-risk-hint .warn {
+  color: var(--warn);
+}
+.box-risk-hint .ok {
+  color: var(--pos);
+}
+.box-risk-env {
+  color: var(--text-3);
+  font-style: italic;
+}
+.box-risk-underlyings {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.71rem;
+  color: var(--text-2);
+}
+.box-risk-underlyings em {
+  color: var(--accent-text);
+  font-style: normal;
+}
+
+/* --------------------------- session panel -------------------------- */
+
+.box-session-state-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.box-session-state,
+.box-exec-session-state {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.22rem 0.5rem;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+/* Only the states that carry a warning or a terminal meaning get a colour. Colouring
+   every state would make none of them stand out. */
+.box-session-state--armed,
+.box-exec-session-state--armed {
+  color: var(--pos);
+  border-color: var(--pos);
+  background: var(--pos-surface);
+}
+.box-session-state--completed,
+.box-exec-session-state--completed {
+  color: var(--accent-text);
+  border-color: var(--accent-border);
+  background: var(--accent-surface);
+}
+.box-session-state--blocked,
+.box-exec-session-state--blocked {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--warn-surface);
+}
+.box-session-state--recovery,
+.box-exec-session-state--recovery {
+  color: var(--neg);
+  border-color: var(--neg);
+  background: var(--neg-surface);
+}
+.box-session-help {
+  font-size: 0.7rem;
+  color: var(--text-3);
+}
+.box-session-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.6rem;
+}
+.box-session-grid dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+.box-session-grid dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.box-session-grid dd small {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.box-session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.box-session-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.box-session-custom input {
+  width: 5rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-0);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.box-session-custom input[aria-invalid="true"] {
+  border-color: var(--neg);
+}

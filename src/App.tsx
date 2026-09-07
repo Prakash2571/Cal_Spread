@@ -809,6 +809,9 @@ export default function App() {
       <Box
         authenticated={authenticated}
         canTrade={adminAuthenticated}
+        // Live arming, the paper-profile switch and session arming are FULL-ADMIN only. Passed
+        // down so the UI can hide what it cannot do; the backend enforces it independently.
+        isFullAdmin={isFullAdmin}
         onBack={() => navigate("/")}
       />
     );

@@ -2067,6 +2067,297 @@ export async function deleteBoxTrade(
 }
 
 /* ============================================================================
+ *  Box EXECUTION CONTROL
+ *
+ *  The backend is the authority for every value here. Nothing in this section may
+ *  be treated as a source of truth by the UI: `deployment_live_capable` in
+ *  particular is a STARTUP fact on the server, so no click can change it, and the
+ *  UI's job is to report it honestly rather than to offer a control that cannot work.
+ * ========================================================================== */
+
+/** Which execution model is selected. `live` is not runtime-selectable. */
+export type BoxExecutionSelection =
+  | "paper_latency"
+  | "paper_legging"
+  | "paper_legging_live_parity"
+  | "live";
+
+/** One reason a mode transition or arming step is refused. */
+export interface BoxExecutionBlocker {
+  code: string;
+  detail: string;
+}
+
+/** The session lifecycle state, mirroring the backend's BoxSessionState. */
+export type BoxSessionState =
+  | "IDLE"
+  | "ARMED"
+  | "ENTRY_IN_PROGRESS"
+  | "POSITION_OPEN"
+  | "EXIT_IN_PROGRESS"
+  | "COMPLETED"
+  | "BLOCKED"
+  | "RECOVERY";
+
+export interface BoxSessionView {
+  /** False ⇒ the cycle budget is not being enforced (unlimited, or no durable persistence). */
+  enforcing: boolean;
+  /** True ⇒ a consumed cycle could not be persisted; entry is closed until it lands. */
+  write_failed: boolean;
+  state: BoxSessionState;
+  session_id: string | null;
+  armed: boolean;
+  armed_at: number | null;
+  /** An admin ROLE label ("full" / "trade"), never a token. */
+  armed_by: string | null;
+  /** 0 = unlimited. */
+  max_completed_trades: number;
+  completed_trades: number;
+  /** Cycles CONSUMED at establishment. This is what gates new entry. */
+  consumed_cycles: number;
+  /** null when unlimited. */
+  remaining_trades: number | null;
+  current_trade_id: string | null;
+  in_flight_trade_ids: string[];
+  aborted_attempts: number;
+  arm_count: number;
+  block_reason: string | null;
+  /** False when durable session state could not be READ. Entry fails closed. */
+  readable: boolean;
+}
+
+/** One underlying carrying (or possibly carrying) Box exposure. */
+export interface BoxActiveUnderlying {
+  underlying: string;
+  kinds: string[];
+}
+
+/**
+ * The Box execution control surface.
+ *
+ * Mirrors `GET /api/box/execution-control`. Every field is a report, never a
+ * request: the backend validates independently of anything the UI believes.
+ */
+export interface BoxExecutionControl {
+  execution_mode: "paper_touch" | "paper_latency" | "paper_legging" | "live";
+  paper_execution_profile: "standard" | "live_parity" | "stress";
+  broker: BrokerId;
+  /** IMMUTABLE for the server process. No UI action can make this true. */
+  deployment_live_capable: boolean;
+  live_capability_detail: string;
+  /** Live exposure MANAGEMENT is armed (exits, cancels, flatten). */
+  live_runtime_armed: boolean;
+  /** NEW ENTRY is permitted. Independent of the above, deliberately. */
+  entry_enabled: boolean;
+  emergency_flatten_enabled: boolean;
+
+  mode: {
+    selection: BoxExecutionSelection;
+    /** e.g. "LIVE · ZERODHA", "PAPER · LEGGING LIVE-PARITY". */
+    label: string;
+    runtime_selectable: BoxExecutionSelection[];
+    live_requires_restart: boolean;
+    transition_blockers: BoxExecutionBlocker[];
+  };
+
+  session: BoxSessionView;
+
+  risk: {
+    /** Per-Box GROSS ENTRY-ORDER NOTIONAL cap (₹). 0 = disabled. NOT broker margin. */
+    /** The ENFORCED per-Box cap (₹). 0 = disabled. Live-only; paper does not enforce it. */
+    max_box_capital_rupees: number;
+    max_box_capital_metric: string;
+    /** The paper mirror's configured value. Advisory: NOT enforced. */
+    paper_max_box_capital_rupees: number;
+    /** True only when a cap is both configured AND actually being enforced. */
+    max_box_capital_enforced: boolean;
+    capital: {
+      enabled: boolean;
+      configured_max_rupees: number;
+      last_calculated_rupees: number | null;
+      last_stage: string | null;
+      last_allowed: boolean | null;
+      last_at: number | null;
+    };
+    one_active_box_per_underlying: boolean;
+    active_underlyings: BoxActiveUnderlying[];
+    claimed_underlyings: string[];
+    max_open_boxes: number;
+    open_boxes: number;
+    residual_legs: number;
+    daily_loss_limit: number;
+    realised_pnl_today: number | null;
+  };
+
+  execution: {
+    live_entry_submit_concurrency: number;
+    max_concurrent_executions: number;
+    /** Poll/read pacing (ms). */
+    effective_broker_min_interval_ms: number;
+    /** ORDER-MUTATION pacing (ms). A real rate limit; never zero. */
+    effective_broker_order_min_interval_ms: number;
+    broker_order_interval_floor_ms: number;
+    broker_order_interval_source: string;
+    broker_pacing_rationale: string;
+    pacing_source_of_truth: "adapter" | "config_projection";
+    four_leg_burst_pacing_budget_ms: number;
+    entry_burst: {
+      configured_entry_submit_concurrency: number;
+      base_concurrency: number;
+      peak_entry_submissions_in_flight: number;
+      burst_slot_grants: number;
+      base_in_flight: number;
+      burst_in_flight: number;
+      entry_attempt_in_flight: string | null;
+    } | null;
+    queued: number;
+    in_flight: number;
+    circuit: string;
+    /** Always false. Reported as data so it can be verified from the UI. */
+    artificial_latency_applied_to_live: boolean;
+    paper_only_simulated_decision_ms: number;
+    paper_only_simulated_latency_ms: number;
+  };
+
+  arm: {
+    preconditions: Record<string, boolean | number>;
+    entry: { ok: boolean; blockers?: BoxExecutionBlocker[] };
+    exposure_management: { ok: boolean; blockers?: BoxExecutionBlocker[] };
+    emergency_flatten: { ok: boolean; blockers?: BoxExecutionBlocker[] };
+  };
+
+  block_reason: string | null;
+  block_detail: string | null;
+}
+
+/** The verdict of a requested execution-mode change, WITHOUT applying it. */
+export type BoxModeTransitionVerdict =
+  | { outcome: "allowed"; from: BoxExecutionSelection; to: BoxExecutionSelection }
+  | {
+      outcome: "restart_required";
+      from: BoxExecutionSelection;
+      to: BoxExecutionSelection;
+      detail: string;
+      envChanges: string[];
+      blockers: BoxExecutionBlocker[];
+    }
+  | {
+      outcome: "refused";
+      from: BoxExecutionSelection;
+      to: BoxExecutionSelection;
+      blockers: BoxExecutionBlocker[];
+    };
+
+export async function fetchBoxExecutionControl(): Promise<BoxExecutionControl> {
+  const res = await fetch(`${API_BASE_URL}/api/box/execution-control`, { headers: getHeaders() });
+  return readJson<BoxExecutionControl>(res, "Failed to load the box execution control state");
+}
+
+/**
+ * Ask what a mode change WOULD do, without doing it.
+ *
+ * Used to render an honest answer — including "restart required" and the exact
+ * environment variables involved — rather than offering a selector that fails.
+ */
+export async function previewBoxExecutionMode(
+  selection: BoxExecutionSelection,
+): Promise<BoxModeTransitionVerdict> {
+  const res = await fetch(`${API_BASE_URL}/api/box/execution-mode/preview`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ selection }),
+  });
+  return readJson<BoxModeTransitionVerdict>(res, "Failed to preview the execution mode change");
+}
+
+/**
+ * Change the PAPER execution profile. FULL ADMIN.
+ *
+ * Only paper profiles are runtime-selectable. LIVE is unreachable from here at any
+ * privilege level — `BOX_EXECUTION_MODE` is a startup-only construction boundary on
+ * the server, which is what guarantees a paper deployment holds no object able to
+ * place a real order.
+ */
+export async function setBoxPaperProfile(
+  profile: "standard" | "live_parity" | "stress",
+): Promise<BoxExecutionControl> {
+  const res = await fetch(`${API_BASE_URL}/api/box/execution-mode/paper-profile`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ profile }),
+  });
+  const body = await readJson<{ ok?: boolean; execution: BoxExecutionControl }>(
+    res,
+    "Failed to change the paper execution profile",
+  );
+  return body.execution;
+}
+
+/**
+ * ARM a trading session. FULL ADMIN.
+ *
+ * `maxCompletedTrades` is optional; omitted, the server's configured
+ * `BOX_SESSION_MAX_COMPLETED_TRADES` is used. The value is SNAPSHOTTED server-side,
+ * so a later config change cannot widen a session already armed. The server refuses
+ * (409) while any consumed cycle still has live exposure, and that message is
+ * surfaced as-is.
+ */
+export async function armBoxSession(
+  maxCompletedTrades?: number,
+): Promise<{ session: BoxSessionView; execution: BoxExecutionControl }> {
+  const res = await fetch(`${API_BASE_URL}/api/box/session/arm`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(
+      maxCompletedTrades === undefined ? {} : { max_completed_trades: maxCompletedTrades },
+    ),
+  });
+  return readJson<{ ok?: boolean; session: BoxSessionView; execution: BoxExecutionControl }>(
+    res,
+    "Failed to arm the box trading session",
+  );
+}
+
+/** DISARM the session. Counters are preserved server-side, never cleared. */
+export async function disarmBoxSession(): Promise<{
+  session: BoxSessionView;
+  execution: BoxExecutionControl;
+}> {
+  const res = await fetch(`${API_BASE_URL}/api/box/session/disarm`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  return readJson<{ ok?: boolean; session: BoxSessionView; execution: BoxExecutionControl }>(
+    res,
+    "Failed to disarm the box trading session",
+  );
+}
+
+/**
+ * Toggle one live control. FULL ADMIN.
+ *
+ * The three are INDEPENDENT on purpose: `box_entry_enabled` opens NEW exposure,
+ * `box_live_order_enabled` manages existing exposure, and `box_emergency_flatten`
+ * is the emergency brake. Enabling one never implies another, and the server
+ * enforces that regardless of what the UI sends.
+ */
+export async function setBoxLiveControl(
+  control: "box_entry_enabled" | "box_live_order_enabled" | "box_emergency_flatten",
+  enabled: boolean,
+): Promise<BoxStatus> {
+  const res = await fetch(`${API_BASE_URL}/api/box/controls/${control}`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ enabled }),
+  });
+  const body = await readJson<{ ok?: boolean; status: BoxStatus }>(
+    res,
+    `Failed to set ${control}`,
+  );
+  return body.status;
+}
+
+/* ============================================================================
  *  Broker management + Dhan authentication
  *
  *  Only AUTHENTICATION/SETUP is broker-specific. Every data call (board, quotes,
