@@ -819,7 +819,7 @@ export default function App() {
     );
   }
 
-  // Futures vs synthetic-futures (conversion/reversal) scanner. Detection only.
+  // Futures vs synthetic-futures (conversion/reversal) scanner + paper trading.
   if (route === "/synthetic") {
     return (
       <Synthetic
@@ -957,7 +957,7 @@ export default function App() {
                 event.preventDefault();
                 navigate("/synthetic");
               }}
-              title="Futures vs synthetic (K + CE − PE) arbitrage scanner: ATM ±1/2/3, detection only"
+              title="Futures vs synthetic (K + CE − PE) arbitrage: ATM ±1/2/3, automatic paper trading, one lot"
             >
               Synthetic
             </a>

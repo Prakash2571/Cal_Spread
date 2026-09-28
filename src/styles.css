@@ -5609,3 +5609,12 @@ body {
 .sf-legs-table .sf-left {
   text-align: left !important;
 }
+
+/* Why an ELIGIBLE row is not being paper-entered (under its status badge). */
+.sf-block {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  white-space: nowrap;
+}

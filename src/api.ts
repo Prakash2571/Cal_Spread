@@ -2628,7 +2628,19 @@ export interface BoxSnapshot {
 /** CONVERSION = buy future + sell synthetic; REVERSAL = sell future + buy synthetic. */
 export type SynthDirection = "CONVERSION" | "REVERSAL";
 export type SynthLegRole = "fut" | "ce" | "pe";
-export type SynthStatus = "ELIGIBLE" | "WATCHING" | "REJECTED" | "INDICATIVE";
+/** OPEN = this exact strike/direction is held as a paper position right now. */
+export type SynthStatus = "ELIGIBLE" | "OPEN" | "WATCHING" | "REJECTED" | "INDICATIVE";
+/** Why an ELIGIBLE row is not being paper-entered right now. */
+export type SynthEntryBlock =
+  | "paper_off"
+  | "no_db"
+  | "feed_stale"
+  | "position_open"
+  | "entering"
+  | "cooldown"
+  | "expiry_cutoff"
+  | "max_open"
+  | "confirming";
 export type SynthRejectReason =
   | "no_quote"
   | "stale_quote"
@@ -2695,6 +2707,10 @@ export interface SynthOpportunity {
   price_source: "touch" | "last_close";
   status: SynthStatus;
   reject: SynthRejectReason | null;
+  /** Set on ELIGIBLE rows the backend is not entering, with the reason. */
+  entry_blocked: SynthEntryBlock | null;
+  /** The open paper position on this exact row (status OPEN). */
+  position_id: string | null;
   legs: SynthLegEvaluation[];
   updated_at: number;
 }
@@ -2709,10 +2725,23 @@ export interface SynthConfigView {
   quote_max_age_ms: number;
   feed_max_age_ms: number;
   max_tokens: number;
+  share_box_budget: boolean;
+  lane_token_limit: number;
   max_underlyings: number;
+  max_published_opportunities: number;
   enable_conversion: boolean;
   enable_reversal: boolean;
   skip_expiry_day: boolean;
+  paper_trading: boolean;
+  max_open_positions: number;
+  signal_confirmations: number;
+  reentry_cooldown_ms: number;
+  convergence_floor: number;
+  convergence_pct: number;
+  min_exit_net_pnl: number;
+  profit_capture_pct: number;
+  min_captured_pct: number;
+  expiry_safety_minutes: number;
   option_rate_version: string;
   futures_rate_version: string;
   tunable: {
@@ -2727,12 +2756,30 @@ export interface SynthStatusView {
   authenticated: boolean;
   broker: BrokerId;
   detection_only: boolean;
+  execution_mode: "paper_touch";
+  /** Paper entries are actually possible (enabled AND storage connected). */
+  paper_trading: boolean;
+  /** `unsafe_index`: the one-open-per-underlying index could not be verified. */
+  paper_blocked_reason: "disabled" | "no_db" | "loading" | "unsafe_index" | null;
+  db_enabled: boolean;
   strike_level: 1 | 2 | 3;
   paired_underlyings: number;
   monitored_underlyings: number;
   skipped_for_budget: number;
+  unbuilt_windows: number;
   subscribed_tokens: number;
   ready_books: number;
+  /** Tokens this scanner may hold now (base + what it borrows from an idle Box). */
+  token_budget: number;
+  base_token_budget: number;
+  borrowed_from_box: number;
+  box_scanner_running: boolean | null;
+  box_lane_tokens: number | null;
+  open_count: number;
+  max_open_positions: number;
+  /** Open positions whose contracts are not resolved on the active broker yet. */
+  unlinked_positions: number;
+  day_pnl: SynthDayPnl;
   feed_age_ms: number | null;
   feed_healthy: boolean;
   universe_at: number | null;
@@ -2746,9 +2793,153 @@ export interface SynthStatusView {
   config: SynthConfigView;
 }
 
+/** The payload of a `snapshot` frame on the synthetic stream. */
 export interface SynthSnapshot {
   status: SynthStatusView;
   opportunities: SynthOpportunity[];
+  open_trades: SynthOpenPosition[];
+}
+
+export type SynthExitReason =
+  | "EDGE_CONVERGED"
+  | "PROFIT_CAPTURE"
+  | "EXPIRY_SAFETY"
+  /** Still open at expiry: settled at the parity lock. */
+  | "EXPIRED"
+  | "MANUAL";
+
+export interface SynthTradeLeg {
+  role: SynthLegRole;
+  /** The ENTRY side; the closing side is the opposite. */
+  side: BoxSide;
+  instrument_type: "FUT" | "CE" | "PE";
+  strike: number;
+  tradingsymbol: string;
+  token: number;
+  entry_price: number;
+  entry_bid: number;
+  entry_ask: number;
+  exit_price: number | null;
+  exit_bid: number | null;
+  exit_ask: number | null;
+}
+
+/** A paper trade, open or closed. */
+export interface SynthTrade {
+  id: string;
+  status: "open" | "closed";
+  key: string;
+  broker: BrokerId;
+  execution_mode: "paper_touch";
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  strike: number;
+  atm_strike: number;
+  atm_offset: number;
+  direction: SynthDirection;
+  lot_size: number;
+  quantity: number;
+  opened_at: string;
+  opened_day: string;
+  legs: SynthTradeLeg[];
+  entry_future_price: number;
+  entry_synthetic_price: number;
+  entry_lock_per_unit: number;
+  entry_carry_per_unit: number;
+  /** Lock × quantity: the gross if held to expiry. */
+  entry_edge: number;
+  entry_gross_edge: number;
+  entry_charges: number;
+  estimated_exit_charges: number;
+  entry_net_edge: number;
+  expected_net_profit: number;
+  min_expected_net_profit: number;
+  safety_buffer: number;
+  expected_slippage: number;
+  rf_pct: number;
+  option_rate_version: string;
+  futures_rate_version: string;
+  closed_at: string | null;
+  closed_day: string | null;
+  exit_reason: SynthExitReason | null;
+  /** Price move only, before charges. Open: if closed now at the touch. */
+  gross_pnl: number | null;
+  exit_charges: number | null;
+  /** Entry + exit charges. */
+  total_charges: number | null;
+  /** Gross − total charges ("after charges"). Open: if closed now. */
+  net_pnl: number | null;
+  exit_note: string | null;
+}
+
+/** One leg of an open position as it would be CLOSED now. */
+export interface SynthExitLeg {
+  role: SynthLegRole;
+  /** The closing side. */
+  side: BoxSide;
+  tradingsymbol: string;
+  token: number;
+  entry_price: number;
+  /** Closing touch: bid for a SELL, ask for a BUY. */
+  price: number | null;
+  qty_at_touch: number;
+  bid: number;
+  bid_qty: number;
+  ask: number;
+  ask_qty: number;
+  ltp: number | null;
+  age_ms: number | null;
+  fresh: boolean;
+  executable: boolean;
+}
+
+/** An open paper position with the backend's live marks and exit arithmetic. */
+export interface SynthOpenPosition extends SynthTrade {
+  linked: boolean;
+  closing: boolean;
+  exit_legs: SynthExitLeg[];
+  /** Open P&L marked to LTP, price move only (the broker-screen figure). */
+  mtm_ltp: number | null;
+  current_exit_charges: number | null;
+  remaining_edge: number | null;
+  captured_edge: number | null;
+  captured_pct: number | null;
+  convergence_threshold: number;
+  profit_capture_target: number;
+  min_exit_net_pnl: number;
+  expiry_safety: boolean;
+  exit_eligible: boolean;
+  exit_rule_reason: SynthExitReason | null;
+  exit_blocked_reason: "unpriced" | "net_below_floor" | "insufficient_exit_liquidity" | null;
+}
+
+/** The day's running P&L, computed by the backend. */
+export interface SynthDayPnl {
+  day: string;
+  open_count: number;
+  /** Σ open P&L at LTP, price move only. */
+  open_mtm_ltp: number;
+  open_unmarked_count: number;
+  /** Σ closing-now gross at the touch. */
+  open_running_gross_pnl: number;
+  /** Σ closing-now net after entry + exit charges. */
+  open_running_net_pnl: number;
+  open_unpriced_count: number;
+  closed_count: number;
+  closed_realised_gross_pnl: number;
+  closed_charges: number;
+  closed_realised_net_pnl: number;
+  /** Open running net + today's realised net. */
+  total_net_pnl: number;
+  total_gross_pnl: number;
+}
+
+export interface SynthHistoryResponse {
+  db_enabled: boolean;
+  scope: "today" | "all";
+  trades: SynthTrade[];
 }
 
 export async function fetchSynthStatus(): Promise<SynthStatusView> {
@@ -2756,9 +2947,53 @@ export async function fetchSynthStatus(): Promise<SynthStatusView> {
   return readJson<SynthStatusView>(res, "Failed to load synthetic scanner status");
 }
 
-export async function fetchSynthOpportunities(): Promise<SynthSnapshot> {
+export async function fetchSynthOpportunities(): Promise<{
+  status: SynthStatusView;
+  opportunities: SynthOpportunity[];
+}> {
   const res = await fetch(`${API_BASE_URL}/api/synthetic/opportunities`, { headers: getHeaders() });
-  return readJson<SynthSnapshot>(res, "Failed to load synthetic opportunities");
+  return readJson<{ status: SynthStatusView; opportunities: SynthOpportunity[] }>(
+    res,
+    "Failed to load synthetic opportunities",
+  );
+}
+
+/** Open paper positions with their live marks. */
+export async function fetchSynthOpenTrades(): Promise<SynthOpenPosition[]> {
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/trades/open`, { headers: getHeaders() });
+  const body = await readJson<{ db_enabled: boolean; open: SynthOpenPosition[] }>(
+    res,
+    "Failed to load open synthetic trades",
+  );
+  return body.open ?? [];
+}
+
+/** Closed paper trades, newest first. `today` is the fast in-memory path. */
+export async function fetchSynthHistory(
+  scope: "today" | "all" = "all",
+  limit = 500,
+): Promise<SynthHistoryResponse> {
+  const qs = scope === "today" ? "?scope=today" : `?scope=all&limit=${encodeURIComponent(limit)}`;
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/trades/history${qs}`, {
+    headers: getHeaders(),
+  });
+  return readJson<SynthHistoryResponse>(res, "Failed to load synthetic trade history");
+}
+
+/** Close one open paper position now, at the executable touch. */
+export async function closeSynthTrade(id: string): Promise<{
+  trade: SynthTrade;
+  open: SynthOpenPosition[];
+  status: SynthStatusView;
+}> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/synthetic/trades/${encodeURIComponent(id)}/close`,
+    { method: "POST", headers: getHeaders() },
+  );
+  return readJson<{ trade: SynthTrade; open: SynthOpenPosition[]; status: SynthStatusView }>(
+    res,
+    "Failed to close the synthetic position",
+  );
 }
 
 async function postSynth(path: string, what: string, body?: unknown): Promise<SynthStatusView> {
