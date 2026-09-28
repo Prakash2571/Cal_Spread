@@ -5537,3 +5537,75 @@ body {
 .box-session-custom input[aria-invalid="true"] {
   border-color: var(--neg);
 }
+
+
+/* ================ Futures vs synthetic (sf-) ================ */
+.sf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+
+.sf-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.sf-controls input {
+  width: 96px;
+  padding: 2px var(--sp-2);
+  font-family: var(--font-mono);
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.sf-spacer {
+  flex: 1;
+}
+
+.sf-row {
+  cursor: pointer;
+}
+
+.sf-muted {
+  color: var(--text-3);
+  font-size: var(--fs-1);
+}
+
+.sf-dir--conversion {
+  color: var(--pos);
+  background: var(--pos-surface);
+}
+
+.sf-dir--reversal {
+  color: var(--neg);
+  background: var(--neg-surface);
+}
+
+.sf-legs-row > td {
+  background: var(--surface-2);
+}
+
+.sf-legs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+
+.sf-formula {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+
+.sf-legs-table .sf-left {
+  text-align: left !important;
+}
