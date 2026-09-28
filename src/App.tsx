@@ -54,6 +54,7 @@ import AccessTokenModal from "./AccessTokenModal.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
 import Analytics from "./Analytics.tsx";
 import Box from "./Box.tsx";
+import Synthetic from "./Synthetic.tsx";
 import BrandMark from "./BrandMark.tsx";
 
 type TickMap = Record<number, Tick>;
@@ -319,6 +320,7 @@ export default function App() {
     let title = "Calspread";
     if (route === "/analytics") title = "Options Analytics | Calspread";
     if (route === "/box") title = "Box Arbitrage | Calspread";
+    if (route === "/synthetic") title = "Futures vs Synthetic | Calspread";
     if (route.startsWith("/admin/verify")) title = "Admin Verification | Calspread";
     if (route.startsWith("/admin/access")) title = "Trade Access | Calspread";
     if (route === "/dhan/verify") title = "Connecting Dhan | Calspread";
@@ -817,6 +819,17 @@ export default function App() {
     );
   }
 
+  // Futures vs synthetic-futures (conversion/reversal) scanner. Detection only.
+  if (route === "/synthetic") {
+    return (
+      <Synthetic
+        authenticated={authenticated}
+        canTrade={adminAuthenticated}
+        onBack={() => navigate("/")}
+      />
+    );
+  }
+
   // Stock detail page with price/OI history charts.
   if (route.startsWith("/stock/")) {
     const sym = decodeURIComponent(route.slice("/stock/".length));
@@ -934,6 +947,19 @@ export default function App() {
               title="Box arbitrage scanner (paper trading): ATM ±3, one lot, executable touch prices"
             >
               Box
+            </a>
+          )}
+          {adminAuthenticated && (
+            <a
+              className="btn"
+              href="/synthetic"
+              onClick={(event) => {
+                event.preventDefault();
+                navigate("/synthetic");
+              }}
+              title="Futures vs synthetic (K + CE − PE) arbitrage scanner: ATM ±1/2/3, detection only"
+            >
+              Synthetic
             </a>
           )}
           {adminAuthenticated && (

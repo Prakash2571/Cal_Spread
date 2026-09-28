@@ -2621,3 +2621,178 @@ export interface BoxSnapshot {
   opportunities: BoxOpportunity[];
   open_trades: BoxOpenPosition[];
 }
+
+
+// ---------------- Futures vs synthetic futures (conversion / reversal) ----------------
+
+/** CONVERSION = buy future + sell synthetic; REVERSAL = sell future + buy synthetic. */
+export type SynthDirection = "CONVERSION" | "REVERSAL";
+export type SynthLegRole = "fut" | "ce" | "pe";
+export type SynthStatus = "ELIGIBLE" | "WATCHING" | "REJECTED" | "INDICATIVE";
+export type SynthRejectReason =
+  | "no_quote"
+  | "stale_quote"
+  | "missing_bid"
+  | "missing_ask"
+  | "insufficient_qty"
+  | "below_expected_net_profit"
+  | "market_closed"
+  | "no_close";
+
+export interface SynthLegEvaluation {
+  role: SynthLegRole;
+  side: BoxSide;
+  token: number;
+  tradingsymbol: string;
+  strike: number;
+  instrument_type: "FUT" | "CE" | "PE";
+  price: number | null;
+  qty_at_touch: number;
+  bid: number;
+  bid_qty: number;
+  ask: number;
+  ask_qty: number;
+  last: number;
+  age_ms: number | null;
+  fresh: boolean;
+  executable: boolean;
+}
+
+export interface SynthOpportunity {
+  key: string;
+  underlying: string;
+  name: string;
+  is_index: boolean;
+  expiry: string;
+  days_to_expiry: number;
+  strike: number;
+  atm_strike: number;
+  /** Signed distance from ATM in listed strikes, −3..+3. */
+  atm_offset: number;
+  strike_step: number;
+  lot_size: number;
+  quantity: number;
+  direction: SynthDirection;
+  future_price: number | null;
+  /** K + CE − PE at the option prices used. */
+  synthetic_price: number | null;
+  /** F_mid − (K + CE_mid − PE_mid); context only. */
+  mid_basis: number | null;
+  mispricing_per_unit: number | null;
+  carry_per_unit: number;
+  gross_per_unit: number | null;
+  gross_edge: number | null;
+  entry_charges: number | null;
+  estimated_exit_charges: number | null;
+  expected_slippage: number;
+  safety_buffer: number;
+  expected_net_profit: number | null;
+  min_expected_net_profit: number;
+  rf_pct: number;
+  depth_ok: boolean;
+  liquidity_ok: boolean;
+  worst_age_ms: number | null;
+  price_source: "touch" | "last_close";
+  status: SynthStatus;
+  reject: SynthRejectReason | null;
+  legs: SynthLegEvaluation[];
+  updated_at: number;
+}
+
+export interface SynthConfigView {
+  strike_level: number;
+  min_expected_net_profit: number;
+  safety_buffer: number;
+  expected_slippage: number;
+  include_carry: boolean;
+  default_rf_pct: number;
+  quote_max_age_ms: number;
+  feed_max_age_ms: number;
+  max_tokens: number;
+  max_underlyings: number;
+  enable_conversion: boolean;
+  enable_reversal: boolean;
+  skip_expiry_day: boolean;
+  option_rate_version: string;
+  futures_rate_version: string;
+  tunable: {
+    min_expected_net_profit: { min: number; max: number };
+    safety_buffer: { min: number; max: number };
+  };
+}
+
+export interface SynthStatusView {
+  running: boolean;
+  market_open: boolean;
+  authenticated: boolean;
+  broker: BrokerId;
+  detection_only: boolean;
+  strike_level: 1 | 2 | 3;
+  paired_underlyings: number;
+  monitored_underlyings: number;
+  skipped_for_budget: number;
+  subscribed_tokens: number;
+  ready_books: number;
+  feed_age_ms: number | null;
+  feed_healthy: boolean;
+  universe_at: number | null;
+  evaluated_at: number | null;
+  close_session_day: string | null;
+  eligible_count: number;
+  opportunity_count: number;
+  rf_pct: number;
+  rf_source: "admin" | "default";
+  last_error: string | null;
+  config: SynthConfigView;
+}
+
+export interface SynthSnapshot {
+  status: SynthStatusView;
+  opportunities: SynthOpportunity[];
+}
+
+export async function fetchSynthStatus(): Promise<SynthStatusView> {
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/status`, { headers: getHeaders() });
+  return readJson<SynthStatusView>(res, "Failed to load synthetic scanner status");
+}
+
+export async function fetchSynthOpportunities(): Promise<SynthSnapshot> {
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/opportunities`, { headers: getHeaders() });
+  return readJson<SynthSnapshot>(res, "Failed to load synthetic opportunities");
+}
+
+async function postSynth(path: string, what: string, body?: unknown): Promise<SynthStatusView> {
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/${path}`, {
+    method: "POST",
+    headers: getHeaders(),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const out = await readJson<{ status: SynthStatusView }>(res, what);
+  return out.status;
+}
+
+export function startSynthScanner(): Promise<SynthStatusView> {
+  return postSynth("start", "Failed to start the synthetic scanner");
+}
+
+export function stopSynthScanner(): Promise<SynthStatusView> {
+  return postSynth("stop", "Failed to stop the synthetic scanner");
+}
+
+/** The synthetic is only built from ATM ± level strikes (1, 2 or 3). */
+export function setSynthStrikeLevel(level: 1 | 2 | 3): Promise<SynthStatusView> {
+  return postSynth("strike-level", "Failed to set the synthetic strike level", { level });
+}
+
+export function saveSynthSettings(settings: {
+  min_expected_net_profit?: number;
+  safety_buffer?: number;
+}): Promise<SynthStatusView> {
+  return postSynth("settings", "Failed to save synthetic settings", settings);
+}
+
+/** SSE URL for live scanner state (token in the query: EventSource cannot set headers). */
+export function synthStreamUrl(): string {
+  const url = `${API_BASE_URL}/api/synthetic/stream`;
+  return adminToken ? `${url}?x-admin-token=${encodeURIComponent(adminToken)}` : url;
+}
