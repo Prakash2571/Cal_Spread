@@ -225,14 +225,18 @@ function whyHeld(p: SynthOpenPosition): string {
   if (!p.linked) {
     return "Held: this position's contracts are not resolved on the active broker yet, so it cannot be priced. It re-links on the next universe refresh and still settles at expiry.";
   }
+  // Liquidity first: inside the expiry-safety window a LOSING position is being
+  // force-closed, so "waiting to converge" would be the wrong explanation.
+  if (p.exit_blocked_reason === "insufficient_exit_liquidity") {
+    return p.expiry_safety
+      ? "Held: expiry safety is closing this position whatever its P&L, but not every leg shows one lot at the touch. It closes as soon as they do."
+      : "Held: the exit rules are met, but not every leg shows one lot at the touch. It closes once they do.";
+  }
   if (p.net_pnl === null) {
     return "Held: a leg has no closing price (no book yet, or the market is shut), so the exit cannot be priced. No fill is invented.";
   }
   if (p.net_pnl <= 0) {
     return `Held: closing now would realise ${rupees(p.net_pnl)} after charges. The lock pays at expiry, so it waits for the basis to converge in profit.`;
-  }
-  if (p.exit_blocked_reason === "insufficient_exit_liquidity") {
-    return "Held: the exit rules are met, but not every leg shows one lot at the touch. It closes once they do.";
   }
   const converged = p.remaining_edge !== null && p.remaining_edge <= p.convergence_threshold;
   if (!converged && p.net_pnl < p.profit_capture_target) {

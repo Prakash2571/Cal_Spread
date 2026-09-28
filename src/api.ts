@@ -2759,7 +2759,8 @@ export interface SynthStatusView {
   execution_mode: "paper_touch";
   /** Paper entries are actually possible (enabled AND storage connected). */
   paper_trading: boolean;
-  paper_blocked_reason: "disabled" | "no_db" | "loading" | null;
+  /** `unsafe_index`: the one-open-per-underlying index could not be verified. */
+  paper_blocked_reason: "disabled" | "no_db" | "loading" | "unsafe_index" | null;
   db_enabled: boolean;
   strike_level: 1 | 2 | 3;
   paired_underlyings: number;

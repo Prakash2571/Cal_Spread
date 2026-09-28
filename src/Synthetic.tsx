@@ -400,6 +400,12 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
           <strong>Paper trading paused.</strong> Trade storage (MongoDB) is not connected on the
           server, so ELIGIBLE opportunities are shown but not traded.
         </div>
+      ) : status?.paper_blocked_reason === "unsafe_index" ? (
+        <div className="banner banner--warn">
+          <strong>Paper entries paused.</strong> The server could not verify the database index
+          that allows only one open position per underlying (see the server log), so nothing new
+          is opened. Open positions are still monitored and closed.
+        </div>
       ) : status?.paper_blocked_reason === "disabled" ? (
         <div className="banner banner--info">
           <strong>Detection only.</strong> Paper trading is switched off on the server
