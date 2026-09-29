@@ -5610,6 +5610,69 @@ body {
   text-align: left !important;
 }
 
+/* Limit-fill evidence: "at best" checks, the per-phase fills table, depth ladders. */
+.sf-check {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.sf-check--ok {
+  color: var(--pos);
+}
+
+.sf-check--bad {
+  color: var(--neg);
+}
+
+.sf-fills {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+
+.sf-fills > summary {
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.sf-fills-table {
+  margin-top: var(--sp-2);
+}
+
+.sf-ladders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+.sf-ladder {
+  flex: 1 1 200px;
+  min-width: 200px;
+}
+
+.sf-ladder-title {
+  margin-bottom: 2px;
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+}
+
+.sf-ladder-table {
+  min-width: 0;
+}
+
+.sf-reason {
+  display: block;
+  margin-top: 2px;
+}
+
+.sf-note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-2);
+}
+
 /* Why an ELIGIBLE row is not being paper-entered (under its status badge). */
 .sf-block {
   display: block;

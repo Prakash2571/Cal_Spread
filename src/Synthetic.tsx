@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ArrowLeftIcon } from "@phosphor-icons/react";
 import {
   closeSynthTrade,
+  deleteSynthTrade,
   fetchSynthHistory,
   fetchSynthOpenTrades,
   fetchSynthOpportunities,
@@ -10,6 +11,7 @@ import {
   startSynthScanner,
   stopSynthScanner,
   synthStreamUrl,
+  SynthTradeGoneError,
   type SynthDirection,
   type SynthEntryBlock,
   type SynthOpenPosition,
@@ -26,6 +28,7 @@ import {
   Freshness,
   SynthClosedHistory,
   SynthDayPnlStrip,
+  SynthDeleteModal,
   SynthDirectionBadge,
   SynthOpenCard,
   offsetLabel,
@@ -47,6 +50,11 @@ import {
 interface Props {
   authenticated: boolean;
   canTrade: boolean;
+  /**
+   * FULL admin only: deleting paper trades. Hides the Delete buttons from a
+   * trade-access user; the backend enforces the same split independently.
+   */
+  isFullAdmin?: boolean;
   onBack: () => void;
 }
 
@@ -67,6 +75,7 @@ const REJECT_LABEL: Record<SynthRejectReason, string> = {
   below_expected_net_profit: "below the net-profit gate",
   market_closed: "market closed — not executable",
   no_close: "a leg did not trade in the last session",
+  crossed_book: "a book is crossed (best bid ≥ best ask): not a real price",
 };
 
 /** Why an ELIGIBLE row is not being paper-entered right now. */
@@ -85,7 +94,7 @@ const ENTRY_BLOCK_LABEL: Record<SynthEntryBlock, string> = {
 type DirFilter = "all" | SynthDirection;
 type View = "opportunities" | "open" | "history";
 
-export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
+export default function Synthetic({ authenticated, canTrade, isFullAdmin = false, onBack }: Props) {
   const [status, setStatus] = useState<SynthStatusView | null>(null);
   const [opportunities, setOpportunities] = useState<SynthOpportunity[]>([]);
   const [open, setOpen] = useState<SynthOpenPosition[]>([]);
@@ -97,6 +106,11 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [closingId, setClosingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** The trade the delete confirmation is asking about, or null when closed. */
+  const [deleteTarget, setDeleteTarget] = useState<SynthTrade | null>(null);
+  /** The server's refusal for the open confirmation, shown inside it. */
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -107,6 +121,12 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
   const [minNetInput, setMinNetInput] = useState("");
   const [bufferInput, setBufferInput] = useState("");
   const pending = useRef<SynthSnapshot | null>(null);
+  /**
+   * Ids deleted during this page's life. Every merge filters them, so a history load
+   * that started before a delete, or a snapshot buffered before it, cannot bring a
+   * deleted trade back onto the page.
+   */
+  const deletedIds = useRef<Set<string>>(new Set());
 
   const running = status?.running === true;
   const marketOpen = status ? status.market_open : true;
@@ -126,7 +146,7 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
     if (incoming.length === 0) return;
     setHistory((prev) => {
       const byId = new Map(prev.map((t) => [t.id, t]));
-      for (const t of incoming) byId.set(t.id, t);
+      for (const t of incoming) if (!deletedIds.current.has(t.id)) byId.set(t.id, t);
       return [...byId.values()].sort((a, b) =>
         (b.closed_at ?? "").localeCompare(a.closed_at ?? ""),
       );
@@ -179,7 +199,7 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
       pending.current = null;
       adopt(snap.status);
       setOpportunities(snap.opportunities);
-      setOpen(snap.open_trades ?? []);
+      setOpen((snap.open_trades ?? []).filter((p) => !deletedIds.current.has(p.id)));
     }, 500);
     es.addEventListener("snapshot", (ev) => {
       try {
@@ -198,6 +218,20 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
         else void loadHistory("today");
       } catch {
         void loadHistory("today");
+      }
+    });
+    // Deleted elsewhere (another tab or admin): drop it here too. Open positions leave
+    // with the next snapshot; history is only ever fetched, so it is pruned here.
+    es.addEventListener("trade_deleted", (ev) => {
+      try {
+        const { id } = JSON.parse((ev as MessageEvent).data) as { id?: string };
+        if (id) {
+          deletedIds.current.add(id);
+          setHistory((prev) => prev.filter((t) => t.id !== id));
+          setOpen((prev) => prev.filter((p) => p.id !== id));
+        }
+      } catch {
+        /* ignore a malformed frame */
       }
     });
     es.onerror = () => setLive(false);
@@ -284,6 +318,88 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
       setClosingId(null);
     }
   }
+
+  /**
+   * Delete a PAPER trade and adopt the backend's corrected state at once: status (and
+   * with it the day P&L and margin), the open book and today's closed list. Nothing is
+   * re-derived here, so the page cannot disagree with the server.
+   */
+  /** Remove a trade from every list on this page, for good. */
+  function dropLocally(id: string) {
+    deletedIds.current.add(id);
+    setHistory((prev) => prev.filter((c) => c.id !== id));
+    setOpen((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function openDelete(t: SynthTrade) {
+    setDeleteError(null);
+    setDeleteTarget(t);
+  }
+
+  function closeDelete() {
+    setDeleteError(null);
+    setDeleteTarget(null);
+  }
+
+  async function handleDelete(t: SynthTrade, reason: string) {
+    setDeletingId(t.id);
+    setDeleteError(null);
+    setError(null);
+    setNotice(null);
+    try {
+      // The status the confirmation showed: a trade that changed state meanwhile is refused.
+      const r = await deleteSynthTrade(t.id, t.status, reason || undefined);
+      deletedIds.current.add(t.id);
+      adopt(r.status);
+      setOpen((r.open ?? []).filter((p) => !deletedIds.current.has(p.id)));
+      const correctedToday = (r.closed_today ?? []).filter((c) => !deletedIds.current.has(c.id));
+      const correctedIds = new Set(correctedToday.map((c) => c.id));
+      setHistory((prev) =>
+        [...correctedToday, ...prev.filter((c) => c.id !== t.id && !correctedIds.has(c.id))].sort(
+          (a, b) => (b.closed_at ?? "").localeCompare(a.closed_at ?? ""),
+        ),
+      );
+      closeDelete();
+      setNotice(
+        r.already_deleted
+          ? `That paper trade on ${t.underlying} had already been deleted; it is gone from this page too.`
+          : r.deleted_from === "open"
+            ? `Open paper trade on ${t.underlying} deleted: it is no longer monitored, and P&L and margin were recalculated.`
+            : `Closed paper trade on ${t.underlying} deleted from history; P&L and margin were recalculated.`,
+      );
+    } catch (err) {
+      if (err instanceof SynthTradeGoneError) {
+        // Not on the server at all: the row here was stale.
+        dropLocally(t.id);
+        closeDelete();
+        setNotice(`That trade on ${t.underlying} no longer exists on the server; removed from this page.`);
+        return;
+      }
+      // A 409 (closing right now, or it changed state meanwhile) is the meaningful case:
+      // shown inside the dialog, which stays open so the operator can read it.
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete the trade.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  /**
+   * Set when the trade under confirmation changed state while the dialog was open,
+   * e.g. an open position that just auto-exited. Delete is then disabled: what the
+   * dialog describes is no longer what would be deleted.
+   */
+  const deleteStale = useMemo(() => {
+    // While our own delete is in flight the server has already published the change;
+    // the reply closes the dialog, so no warning in between.
+    if (!deleteTarget || deletingId === deleteTarget.id) return null;
+    if (deleteTarget.status === "open" && !open.some((p) => p.id === deleteTarget.id)) {
+      return "This position is no longer open: it has just closed, or was deleted elsewhere. Nothing has been deleted. Close this dialog; to remove it, delete it from Closed trades.";
+    }
+    if (deleteTarget.status === "closed" && !history.some((t) => t.id === deleteTarget.id)) {
+      return "This trade is no longer in the closed list: it was deleted elsewhere.";
+    }
+    return null;
+  }, [deleteTarget, deletingId, open, history]);
 
   /* --------------------------------- views --------------------------------- */
 
@@ -769,7 +885,9 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
                   p={p}
                   freshLimit={freshLimit}
                   closing={closingId === p.id}
+                  deleting={deletingId === p.id}
                   onClose={() => void handleClose(p.id)}
+                  {...(isFullAdmin ? { onDelete: () => openDelete(p) } : {})}
                 />
               ))}
             </div>
@@ -784,15 +902,30 @@ export default function Synthetic({ authenticated, canTrade, onBack }: Props) {
           error={historyError}
           dbEnabled={historyDbEnabled}
           closedTodayCount={status?.day_pnl?.closed_count ?? 0}
+          deletingId={deletingId}
+          {...(isFullAdmin ? { onDelete: (t: SynthTrade) => openDelete(t) } : {})}
         />
       )}
 
       <p className="box-disclaimer">
-        <strong>Paper execution.</strong> Every position above is simulated. A paper fill assumes
-        all three one-lot legs were executable at once at the touch recorded in that snapshot. Real
-        trading can differ because of inter-leg latency, queue position, depth disappearing,
-        partial fills, rejections and legging risk. These are not exchange fills.
+        <strong>Paper execution.</strong> Every position above is simulated. Each leg is a LIMIT
+        order at the best ask (buy) or best bid (sell), placed only when a full lot rests at that
+        price, and a paper fill assumes all three legs filled at once at the touch recorded in that
+        snapshot. Real trading can differ because of inter-leg latency, queue position, depth
+        disappearing, partial fills, rejections and legging risk. These are not exchange fills.
       </p>
+
+      {/* Destructive confirmation. Rendered last so it overlays the whole page. */}
+      {deleteTarget && (
+        <SynthDeleteModal
+          trade={deleteTarget}
+          busy={deletingId === deleteTarget.id}
+          error={deleteError}
+          stale={deleteStale}
+          onConfirm={(reason) => void handleDelete(deleteTarget, reason)}
+          onCancel={closeDelete}
+        />
+      )}
     </div>
   );
 }
