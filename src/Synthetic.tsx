@@ -88,6 +88,7 @@ const ENTRY_BLOCK_LABEL: Record<SynthEntryBlock, string> = {
   cooldown: "re-entry cooldown",
   expiry_cutoff: "expiry-day cutoff",
   max_open: "max open reached",
+  token_budget: "token budget full",
   confirming: "confirming",
 };
 
@@ -120,6 +121,8 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
   const [dirFilter, setDirFilter] = useState<DirFilter>("all");
   const [minNetInput, setMinNetInput] = useState("");
   const [bufferInput, setBufferInput] = useState("");
+  /** Max open paper positions; "0" = no limit. */
+  const [maxOpenInput, setMaxOpenInput] = useState("");
   const pending = useRef<SynthSnapshot | null>(null);
   /**
    * Ids deleted during this page's life. Every merge filters them, so a history load
@@ -136,6 +139,7 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
     setStatus(s);
     setMinNetInput((v) => (v === "" ? String(s.config.min_expected_net_profit) : v));
     setBufferInput((v) => (v === "" ? String(s.config.safety_buffer) : v));
+    setMaxOpenInput((v) => (v === "" ? String(s.config.max_open_positions ?? 0) : v));
   }, []);
 
   /**
@@ -243,14 +247,18 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
 
   /* -------------------------------- actions -------------------------------- */
 
-  async function run<T>(fn: () => Promise<T>, ok: string, after?: (v: T) => void) {
+  async function run<T>(
+    fn: () => Promise<T>,
+    ok: string | ((v: T) => string),
+    after?: (v: T) => void,
+  ) {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const v = await fn();
       after?.(v);
-      setNotice(ok);
+      setNotice(typeof ok === "function" ? ok(v) : ok);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed.");
     } finally {
@@ -282,17 +290,34 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
   const handleSaveSettings = () => {
     const min = Number(minNetInput);
     const buf = Number(bufferInput);
+    const maxOpen = maxOpenInput.trim() === "" ? 0 : Number(maxOpenInput);
     if (!Number.isFinite(min) || !Number.isFinite(buf)) {
-      setError("Both thresholds must be numbers.");
+      setError("Min expected net and safety buffer must be numbers.");
+      return;
+    }
+    if (!Number.isInteger(maxOpen) || maxOpen < 0) {
+      setError("Max open trades must be a whole number, 0 or more (0 = no limit).");
       return;
     }
     void run(
-      () => saveSynthSettings({ min_expected_net_profit: min, safety_buffer: buf }),
-      "Thresholds updated (in memory on the server; reset on restart).",
-      (s) => {
+      () =>
+        saveSynthSettings({
+          min_expected_net_profit: min,
+          safety_buffer: buf,
+          max_open_positions: maxOpen,
+        }),
+      ({ status: s, persisted }) => {
+        const cap = s.config.max_open_positions ?? 0;
+        const capText = cap === 0 ? "no limit on open trades" : `at most ${cap} open trades`;
+        return persisted
+          ? `Settings saved (${capText}, one per underlying). They stay after a server restart.`
+          : "Settings applied, but NOT saved: trade storage is not connected, so they reset on a server restart. They are saved once storage connects.";
+      },
+      ({ status: s }) => {
         setStatus(s);
         setMinNetInput(String(s.config.min_expected_net_profit));
         setBufferInput(String(s.config.safety_buffer));
+        setMaxOpenInput(String(s.config.max_open_positions ?? 0));
       },
     );
   };
@@ -425,6 +450,11 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
   const closedNet = useMemo(() => history.reduce((s, t) => s + (t.net_pnl ?? 0), 0), [history]);
 
   const freshLimit = cfg?.quote_max_age_ms ?? 15_000;
+  /** The block reason as shown, with the configured cap for "max open reached". */
+  const blockLabel = (b: SynthEntryBlock): string =>
+    b === "max_open" && (cfg?.max_open_positions ?? 0) > 0
+      ? `${ENTRY_BLOCK_LABEL[b]} (${cfg?.max_open_positions})`
+      : ENTRY_BLOCK_LABEL[b];
   const strikeLevel = status?.strike_level ?? cfg?.strike_level ?? 3;
   const eligibleCount = status?.eligible_count ?? 0;
 
@@ -535,6 +565,13 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
           not hidden in it. Never real orders.
         </div>
       )}
+      {cfg && cfg.settings_persisted === false && (
+        <div className="banner banner--warn">
+          The last settings change is running but <strong>not saved</strong>: trade storage is not
+          connected, so it would reset on a server restart. It is saved automatically once storage
+          connects.
+        </div>
+      )}
       {status && status.unlinked_positions > 0 && (
         <div className="banner banner--warn">
           {status.unlinked_positions} open position(s) are not yet resolved on the active broker, so
@@ -601,8 +638,14 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
         />
         <Stat
           k="Open"
-          v={status ? `${status.open_count} / ${status.max_open_positions}` : "-"}
-          title="Open paper positions / maximum (never two on one underlying)"
+          v={
+            status
+              ? `${status.open_count} / ${
+                  status.max_open_positions > 0 ? status.max_open_positions : "no limit"
+                }`
+              : "-"
+          }
+          title="Open paper positions / maximum set on this page (0 = no limit). Never two on one underlying."
         />
         <Stat k="Eligible" v={status ? String(eligibleCount) : "-"} />
         <Stat
@@ -691,7 +734,29 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
               onChange={(e) => setBufferInput(e.target.value)}
             />
           </label>
-          <button className="btn btn--sm" disabled={busy} onClick={handleSaveSettings}>
+          <label
+            title={
+              "How many paper trades may be open at once. 0 = no limit. There is never more than " +
+              "one open trade per underlying, whatever this is. Lowering it never closes an open " +
+              "trade; it only stops new entries."
+            }
+          >
+            Max open trades (0 = no limit)
+            <input
+              type="number"
+              min={cfg.tunable.max_open_positions?.min ?? 0}
+              max={cfg.tunable.max_open_positions?.max ?? 10000}
+              step={1}
+              value={maxOpenInput}
+              onChange={(e) => setMaxOpenInput(e.target.value)}
+            />
+          </label>
+          <button
+            className="btn btn--sm"
+            disabled={busy}
+            onClick={handleSaveSettings}
+            title="Saved on the server: these settings stay after a restart"
+          >
             Save
           </button>
           <span className="sf-spacer" />
@@ -835,14 +900,14 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
                                   : o.reject
                                     ? REJECT_LABEL[o.reject]
                                     : o.entry_blocked
-                                      ? `Clears the gate, not entered: ${ENTRY_BLOCK_LABEL[o.entry_blocked]}`
+                                      ? `Clears the gate, not entered: ${blockLabel(o.entry_blocked)}`
                                       : "Clears the net-profit gate: being paper-entered"
                               }
                             >
                               {STATUS_LABEL[o.status]}
                             </span>
                             {o.status === "ELIGIBLE" && o.entry_blocked && (
-                              <span className="sf-block">{ENTRY_BLOCK_LABEL[o.entry_blocked]}</span>
+                              <span className="sf-block">{blockLabel(o.entry_blocked)}</span>
                             )}
                           </td>
                         </tr>
