@@ -2640,6 +2640,8 @@ export type SynthEntryBlock =
   | "cooldown"
   | "expiry_cutoff"
   | "max_open"
+  /** No room in the token budget for another position's three legs. */
+  | "token_budget"
   | "confirming";
 export type SynthRejectReason =
   | "no_quote"
@@ -2735,7 +2737,12 @@ export interface SynthConfigView {
   enable_reversal: boolean;
   skip_expiry_day: boolean;
   paper_trading: boolean;
+  /** Open paper positions at most; 0 = no limit (always one per underlying at most). */
   max_open_positions: number;
+  /** The server's env default that a saved value overrides. */
+  default_max_open_positions?: number;
+  /** False when a settings change could not be saved yet (storage unavailable). */
+  settings_persisted?: boolean;
   signal_confirmations: number;
   reentry_cooldown_ms: number;
   convergence_floor: number;
@@ -2749,6 +2756,7 @@ export interface SynthConfigView {
   tunable: {
     min_expected_net_profit: { min: number; max: number };
     safety_buffer: { min: number; max: number };
+    max_open_positions?: { min: number; max: number };
   };
 }
 
@@ -2778,6 +2786,7 @@ export interface SynthStatusView {
   box_scanner_running: boolean | null;
   box_lane_tokens: number | null;
   open_count: number;
+  /** 0 = no limit. */
   max_open_positions: number;
   /** Whether trades get a margin figure (a basket-margin calculator is wired). */
   margin_enabled?: boolean;
@@ -3113,11 +3122,26 @@ export function setSynthStrikeLevel(level: 1 | 2 | 3): Promise<SynthStatusView> 
   return postSynth("strike-level", "Failed to set the synthetic strike level", { level });
 }
 
-export function saveSynthSettings(settings: {
+/**
+ * Change the entry gate, safety buffer and/or max open positions (0 = no limit).
+ * Saved on the server, so they survive a restart; `persisted: false` means storage
+ * was unavailable and the change applies to the running server only for now.
+ */
+export async function saveSynthSettings(settings: {
   min_expected_net_profit?: number;
   safety_buffer?: number;
-}): Promise<SynthStatusView> {
-  return postSynth("settings", "Failed to save synthetic settings", settings);
+  max_open_positions?: number;
+}): Promise<{ status: SynthStatusView; persisted: boolean }> {
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/settings`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(settings),
+  });
+  const out = await readJson<{ status: SynthStatusView; persisted?: boolean }>(
+    res,
+    "Failed to save synthetic settings",
+  );
+  return { status: out.status, persisted: out.persisted !== false };
 }
 
 /** SSE URL for live scanner state (token in the query: EventSource cannot set headers). */
