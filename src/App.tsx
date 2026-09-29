@@ -825,6 +825,8 @@ export default function App() {
       <Synthetic
         authenticated={authenticated}
         canTrade={adminAuthenticated}
+        // Deleting paper trades is FULL-ADMIN only, as on Box; the backend enforces it too.
+        isFullAdmin={isFullAdmin}
         onBack={() => navigate("/")}
       />
     );

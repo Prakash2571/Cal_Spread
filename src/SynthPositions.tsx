@@ -1,23 +1,35 @@
 /**
  * Paper-trading views for the Futures vs Synthetic page: the day P&L strip, the
- * open-position cards and the closed-trade history.
+ * open-position cards, the closed-trade history and the delete confirmation.
  *
  * Every figure comes from the backend, which is the sole authority for marks, exit
- * decisions and P&L; this only renders them. Following trade-realism.md:
+ * decisions, margin and P&L; this only renders them. Following trade-realism.md:
  *   - open positions are marked to LTP (price move, before charges),
  *   - "if closed now" figures are priced at the executable touch,
  *   - charges are shown beside P&L, and every netted figure says "after charges".
  *
+ * Fills: every paper leg is a LIMIT order at the touch (best ask to buy, best bid
+ * to sell), sent only when a full lot rests there. Each leg also stores the top of
+ * the order book it was priced on. The "At best?" check compares the fill with that
+ * recorded book: it must equal the best level on the side it takes, at least one
+ * lot must rest there, and the book must not be crossed. A trade stored before the
+ * book was recorded shows "not recorded" rather than a check it cannot make.
+ *
  * Laid out with Box's classes so the two paper books read the same way.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { XIcon } from "@phosphor-icons/react";
 import type {
+  BoxSide,
   SynthDayPnl,
+  SynthDepth,
   SynthDirection,
   SynthExitReason,
+  SynthMarginSource,
   SynthOpenPosition,
   SynthTrade,
+  SynthTradeLeg,
 } from "./api.ts";
 import { fmt, formatExpiry } from "./format.ts";
 import { BrokerBadge } from "./BoxBroker.tsx";
@@ -87,6 +99,14 @@ const EXIT_REASON_LABEL: Record<SynthExitReason, string> = {
   MANUAL: "Manual",
 };
 
+const MARGIN_SOURCE_LABEL: Record<SynthMarginSource, string> = {
+  kite_basket: "Zerodha basket margin (hedge benefit included)",
+  dhan_multi: "Dhan multi-order margin (hedge benefit included)",
+  dhan_per_leg_fallback:
+    "Dhan per-leg sum: the multi-order calculator did not answer, so this OVERSTATES a hedged trade",
+  unavailable: "unavailable",
+};
+
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 function istDayKey(iso: string): string {
@@ -135,6 +155,11 @@ function duration(fromIso: string, toIso: string | null): string {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+function ageText(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return "-";
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
 function Metric({
   label,
   value,
@@ -151,6 +176,290 @@ function Metric({
       <span className="box-metric-k">{label}</span>
       <span className="box-metric-v">{value}</span>
     </div>
+  );
+}
+
+/* --------------------------------- margin --------------------------------- */
+
+/** The trade's margin as text: the figure, or why there is none yet. */
+function marginText(t: SynthTrade): string {
+  const m = t.margin ?? null;
+  if (m !== null) return rupees(m);
+  if (t.margin_error) return "unavailable";
+  return t.status === "open" ? "fetching…" : "n/a";
+}
+
+function marginTitle(t: SynthTrade): string {
+  const m = t.margin ?? null;
+  if (m === null) {
+    return t.margin_error
+      ? `The broker's margin calculator did not return a figure: ${t.margin_error}`
+      : "Asked from the broker's basket-margin calculator just after entry, for all three legs together.";
+  }
+  const parts = [
+    `Margin all three legs block together: ${rupees(m)}.`,
+    t.margin_source ? MARGIN_SOURCE_LABEL[t.margin_source] : "",
+    t.margin_hedge_benefit ? `Hedge benefit ${rupees(t.margin_hedge_benefit)}.` : "",
+    t.margin_at ? `Priced ${fmtDateTime(t.margin_at)}.` : "",
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+/** Return on margin in percent, or null when either side is unknown. */
+function returnPct(pnl: number | null | undefined, margin: number | null | undefined): number | null {
+  if (pnl === null || pnl === undefined || !margin || !(margin > 0)) return null;
+  return (pnl / margin) * 100;
+}
+
+function pctText(v: number | null, digits = 2): string {
+  return v === null || !Number.isFinite(v) ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
+}
+
+/** Days from `fromIso` to 15:30 IST on the expiry date. */
+function daysToExpiry(expiry: string, fromIso: string): number | null {
+  const settle = Date.parse(`${expiry}T10:00:00Z`);
+  const from = Date.parse(fromIso);
+  if (!Number.isFinite(settle) || !Number.isFinite(from)) return null;
+  const days = (settle - from) / 86_400_000;
+  return days > 0 ? days : null;
+}
+
+/* ------------------------------- fill evidence ---------------------------- */
+
+interface FillView {
+  role: SynthTradeLeg["role"];
+  name: string;
+  tradingsymbol: string;
+  side: BoxSide;
+  price: number | null;
+  bid: number | null;
+  bidQty: number | null;
+  ask: number | null;
+  askQty: number | null;
+  qtyAtTouch: number | null;
+  ageMs: number | null;
+  depth: SynthDepth | null;
+  /**
+   * Checked against the recorded book: the limit equals the best level on the side
+   * it takes, one lot or more rests there, and the book is not crossed. Null when
+   * no book was recorded for this fill.
+   */
+  atBest: boolean | null;
+}
+
+function legName(l: SynthTradeLeg): string {
+  return l.instrument_type === "FUT" ? "FUT" : `${l.strike} ${l.instrument_type}`;
+}
+
+function flip(side: BoxSide): BoxSide {
+  return side === "BUY" ? "SELL" : "BUY";
+}
+
+/** Whether a fill matches the recorded book: best level, ≥ one lot there, not crossed. */
+function checkAgainstBook(
+  price: number | null,
+  side: BoxSide,
+  depth: SynthDepth | null | undefined,
+  quantity: number,
+): boolean | null {
+  if (price === null || !depth || (depth.bids.length === 0 && depth.asks.length === 0)) return null;
+  const top = side === "BUY" ? depth.asks[0] : depth.bids[0];
+  const bestBid = depth.bids[0];
+  const bestAsk = depth.asks[0];
+  const crossed = bestBid !== undefined && bestAsk !== undefined && bestBid.price >= bestAsk.price;
+  return top !== undefined && Math.abs(price - top.price) < 1e-6 && top.qty >= quantity && !crossed;
+}
+
+/** One leg's order at entry or exit, checked against the book it was priced on. */
+function fillOf(l: SynthTradeLeg, phase: "entry" | "exit", quantity: number): FillView {
+  const entry = phase === "entry";
+  const side = entry ? l.side : flip(l.side);
+  const price = entry ? l.entry_price : l.exit_price;
+  const bid = entry ? l.entry_bid : l.exit_bid;
+  const ask = entry ? l.entry_ask : l.exit_ask;
+  const depth = (entry ? l.entry_depth : l.exit_depth) ?? null;
+  return {
+    role: l.role,
+    name: legName(l),
+    tradingsymbol: l.tradingsymbol,
+    side,
+    price,
+    bid: bid ?? null,
+    bidQty: (entry ? l.entry_bid_qty : l.exit_bid_qty) ?? null,
+    ask: ask ?? null,
+    askQty: (entry ? l.entry_ask_qty : l.exit_ask_qty) ?? null,
+    qtyAtTouch: (entry ? l.entry_qty_at_touch : l.exit_qty_at_touch) ?? null,
+    ageMs: (entry ? l.entry_age_ms : l.exit_age_ms) ?? null,
+    depth,
+    atBest: checkAgainstBook(price, side, depth, quantity),
+  };
+}
+
+/** true = every leg filled at the best price; false = one did not; null = not recorded. */
+function allAtBest(legs: SynthTradeLeg[], phase: "entry" | "exit", quantity: number): boolean | null {
+  const checks = legs.map((l) => fillOf(l, phase, quantity).atBest);
+  if (checks.some((c) => c === false)) return false;
+  if (checks.length === 0 || checks.some((c) => c === null)) return null;
+  return true;
+}
+
+function BestCheck({ ok }: { ok: boolean | null }) {
+  if (ok === null) {
+    return (
+      <span className="box-dim" title="No order book was recorded for this fill (trades before the book was stored)">
+        not recorded
+      </span>
+    );
+  }
+  return ok ? (
+    <span
+      className="sf-check sf-check--ok"
+      title="Checked against the recorded book: the limit equals the best level on its side, at least one lot rested there, and the book was not crossed"
+    >
+      ✓ at best
+    </span>
+  ) : (
+    <span
+      className="sf-check sf-check--bad"
+      title="The recorded book does not support this fill: not at the best level, under one lot there, or a crossed book"
+    >
+      ✗ not at best
+    </span>
+  );
+}
+
+/** The top five levels a side, with the level the limit order was filled at marked. */
+function DepthLadder({ fill }: { fill: FillView }) {
+  const d = fill.depth;
+  if (!d || (d.bids.length === 0 && d.asks.length === 0)) return null;
+  const rows = Math.max(d.bids.length, d.asks.length);
+  const hitBid = fill.side === "SELL";
+  return (
+    <div className="sf-ladder">
+      <div className="sf-ladder-title">
+        {fill.name} · {fill.side} LIMIT {fmt(fill.price)}
+      </div>
+      <table className="box-chain sf-ladder-table">
+        <thead>
+          <tr>
+            <th className="num">Bid qty</th>
+            <th className="num">Bid</th>
+            <th className="num">Ask</th>
+            <th className="num">Ask qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, i) => {
+            const b = d.bids[i];
+            const a = d.asks[i];
+            const bidHit = hitBid && i === 0 && b !== undefined && b.price === fill.price;
+            const askHit = !hitBid && i === 0 && a !== undefined && a.price === fill.price;
+            return (
+              <tr key={i}>
+                <td className="num">{b ? b.qty : "-"}</td>
+                <td className={`num${bidHit ? " box-marked" : ""}`}>{b ? fmt(b.price) : "-"}</td>
+                <td className={`num${askHit ? " box-marked" : ""}`}>{a ? fmt(a.price) : "-"}</td>
+                <td className="num">{a ? a.qty : "-"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * The three limit orders of one phase (entry or exit), checked against the book
+ * each was priced on. Collapsed to a one-line verdict by default.
+ */
+function FillsDetails({
+  legs,
+  phase,
+  quantity,
+  defaultOpen = false,
+}: {
+  legs: SynthTradeLeg[];
+  phase: "entry" | "exit";
+  quantity: number;
+  defaultOpen?: boolean;
+}) {
+  const fills = legs.map((l) => fillOf(l, phase, quantity));
+  const verdict = allAtBest(legs, phase, quantity);
+  const label = phase === "entry" ? "Entry" : "Exit";
+  return (
+    <details className="sf-fills" open={defaultOpen}>
+      <summary>
+        {label}: {fills.length} LIMIT orders at the touch ·{" "}
+        {verdict === true ? (
+          <span className="sf-check sf-check--ok">✓ all filled at the best bid/ask</span>
+        ) : verdict === false ? (
+          <span className="sf-check sf-check--bad">✗ a leg did not fill at the best price</span>
+        ) : (
+          <span className="box-dim">order book not recorded for this trade</span>
+        )}
+      </summary>
+      <table className="box-chain sf-legs-table sf-fills-table">
+        <thead>
+          <tr>
+            <th className="sf-left">Leg</th>
+            <th>Order</th>
+            <th className="num" title="Limit price = fill price: a marketable limit at the touch">
+              Limit = fill
+            </th>
+            <th className="num">Best bid (qty)</th>
+            <th className="num">Best ask (qty)</th>
+            <th className="num" title={`Quantity resting at the limit price; one lot is ${quantity}`}>
+              Qty at limit
+            </th>
+            <th className="num" title="How long the book had been unchanged when the order was priced">
+              Book age
+            </th>
+            <th>At best?</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fills.map((f) => (
+            <tr key={f.role}>
+              <td className="sf-left" title={f.tradingsymbol}>
+                {f.name}
+              </td>
+              <td>
+                <span className={`box-leg box-leg--${f.side === "BUY" ? "buy" : "sell"}`}>
+                  {f.side} LIMIT
+                </span>
+              </td>
+              <td className="num">{fmt(f.price)}</td>
+              <td className={`num${f.side === "SELL" ? " box-marked" : ""}`}>
+                {f.bid ? fmt(f.bid) : "-"}
+                {f.bidQty !== null && <span className="sf-muted"> ({f.bidQty})</span>}
+              </td>
+              <td className={`num${f.side === "BUY" ? " box-marked" : ""}`}>
+                {f.ask ? fmt(f.ask) : "-"}
+                {f.askQty !== null && <span className="sf-muted"> ({f.askQty})</span>}
+              </td>
+              <td className="num">
+                {f.qtyAtTouch === null ? "-" : f.qtyAtTouch}
+                {f.qtyAtTouch !== null && f.qtyAtTouch < quantity && (
+                  <span className="sf-check sf-check--bad"> &lt; 1 lot</span>
+                )}
+              </td>
+              <td className="num">{ageText(f.ageMs)}</td>
+              <td>
+                <BestCheck ok={f.atBest} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {fills.some((f) => f.depth) && (
+        <div className="sf-ladders">
+          {fills.map((f) => (
+            <DepthLadder key={f.role} fill={f} />
+          ))}
+        </div>
+      )}
+    </details>
   );
 }
 
@@ -182,6 +491,9 @@ function DayItem({
 /** "How is today going", from the backend's day summary. */
 export function SynthDayPnlStrip({ dayPnl }: { dayPnl: SynthDayPnl | undefined }) {
   if (!dayPnl) return null;
+  const openMargin = dayPnl.open_margin ?? 0;
+  const openUnknown = dayPnl.open_margin_unknown ?? 0;
+  const closedMargin = dayPnl.closed_margin ?? 0;
   return (
     <section className="box-daypnl" aria-label="Running day P&L">
       <DayItem
@@ -214,6 +526,25 @@ export function SynthDayPnlStrip({ dayPnl }: { dayPnl: SynthDayPnl | undefined }
         title="Open net if closed now + today's realised net"
         total
       />
+      {/* Margin is capital deployed, not profit: rendered without P&L colouring. */}
+      {dayPnl.open_margin !== undefined && (
+        <div
+          className="box-daypnl-item box-daypnl-item--neutral"
+          title={
+            "Margin the open positions block right now, from the broker's basket-margin " +
+            "calculator (each trade's three legs margined together). " +
+            (openUnknown > 0 ? `${openUnknown} open position(s) have no figure yet and are excluded. ` : "") +
+            `Today's closed trades blocked ${rupees(closedMargin)} in total (a day sum, not a peak).`
+          }
+        >
+          <span className="box-daypnl-k">Margin in use (open)</span>
+          <span className="box-daypnl-v">
+            {rupees(openMargin)}
+            {openUnknown > 0 && <span className="box-dim"> ({openUnknown} n/a)</span>}
+          </span>
+          <span className="box-daypnl-sub">{rupees(closedMargin)} on today's closes</span>
+        </div>
+      )}
     </section>
   );
 }
@@ -252,15 +583,24 @@ export function SynthOpenCard({
   p,
   freshLimit,
   closing,
+  deleting,
   onClose,
+  onDelete,
 }: {
   p: SynthOpenPosition;
   freshLimit: number;
   closing: boolean;
+  deleting: boolean;
   onClose: () => void;
+  /** Absent unless the viewer is a full admin (the backend enforces it too). */
+  onDelete?: () => void;
 }) {
   const exitByRole = new Map(p.exit_legs.map((l) => [l.role, l]));
-  const busy = closing || p.closing;
+  const busy = closing || deleting || p.closing;
+  const margin = p.margin ?? null;
+  const expectedRom = returnPct(p.expected_net_profit, margin);
+  const days = daysToExpiry(p.expiry, p.opened_at);
+  const expectedRomPa = expectedRom !== null && days !== null ? (expectedRom * 365) / days : null;
   return (
     <div className={`box-card${p.exit_eligible ? " box-card--exiting" : ""}`}>
       <div className="box-card-head">
@@ -286,33 +626,48 @@ export function SynthOpenCard({
             disabled={busy}
             title="Close now at the current executable touch (refused, never faked, if a leg has no book)"
           >
-            {busy ? "Closing…" : "Close now"}
+            {closing || p.closing ? "Closing…" : "Close now"}
           </button>
+          {onDelete && (
+            <button
+              className="btn btn--sm btn--danger"
+              onClick={onDelete}
+              disabled={busy}
+              title="Delete this PAPER trade: it stops being monitored and leaves every list, P&L and margin figure"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          )}
         </div>
       </div>
 
       <div className="box-legs">
         {p.legs.map((leg) => {
           const ex = exitByRole.get(leg.role);
+          const entryFill = fillOf(leg, "entry", p.quantity);
           return (
             <div className="box-leg-row" key={leg.role}>
               <span className={`leg-tag ${leg.side === "BUY" ? "tag-buy" : "tag-sell"}`}>
                 {leg.side}
               </span>
               <span className="box-leg-name" title={leg.tradingsymbol}>
-                {leg.instrument_type === "FUT" ? "FUT" : `${leg.strike} ${leg.instrument_type}`}
+                {legName(leg)}
               </span>
-              <span className="box-leg-cell">
-                @ {fmt(leg.entry_price)}
+              <span
+                className="box-leg-cell"
+                title={`Entry: LIMIT ${leg.side} at the best ${leg.side === "BUY" ? "ask" : "bid"}`}
+              >
+                LIMIT {fmt(leg.entry_price)}
                 <span className="box-leg-side">{leg.side === "BUY" ? "ask" : "bid"}</span>
               </span>
+              <BestCheck ok={entryFill.atBest} />
               <span className="box-leg-cell" title="Last traded price: what the open P&L is marked to">
                 LTP {ex?.ltp ? fmt(ex.ltp) : "-"}
               </span>
               <span className={`leg-tag ${ex?.side === "BUY" ? "tag-buy" : "tag-sell"}`}>
                 {ex?.side ?? "-"}
               </span>
-              <span className="box-leg-cell">
+              <span className="box-leg-cell" title="The closing limit price now: best bid to sell, best ask to buy back">
                 {ex?.price ? fmt(ex.price) : "-"}
                 <span className="box-leg-side">{ex?.side === "BUY" ? "ask" : "bid"}</span>
               </span>
@@ -320,15 +675,38 @@ export function SynthOpenCard({
                 {ex ? `${ex.side === "BUY" ? ex.ask_qty : ex.bid_qty} @ touch` : "-"}
               </span>
               <Freshness ageMs={ex?.age_ms ?? null} limit={freshLimit} />
-              {ex && ex.price !== null && !ex.executable && (
-                <span className="box-liq box-liq--bad">thin</span>
+              {ex?.reject === "crossed_book" ? (
+                <span className="box-liq box-liq--bad" title="Best bid ≥ best ask: not a real price">
+                  crossed
+                </span>
+              ) : (
+                ex && ex.price !== null && !ex.executable && (
+                  <span className="box-liq box-liq--bad">thin</span>
+                )
               )}
             </div>
           );
         })}
       </div>
 
+      <FillsDetails legs={p.legs} phase="entry" quantity={p.quantity} />
+
       <div className="box-card-grid">
+        <Metric
+          label="Margin (3 legs, basket)"
+          value={marginText(p)}
+          cls="box-metric--strong"
+          title={marginTitle(p)}
+        />
+        <Metric
+          label="Expected return on margin"
+          value={
+            expectedRom === null
+              ? "-"
+              : `${pctText(expectedRom)}${expectedRomPa !== null ? ` (${pctText(expectedRomPa, 1)} p.a.)` : ""}`
+          }
+          title="Expected net at entry (after charges) ÷ margin, and the same annualised over the days from entry to expiry"
+        />
         <Metric
           label="Locked at entry"
           value={rupees(p.entry_edge)}
@@ -382,6 +760,8 @@ export function SynthClosedHistory({
   error,
   dbEnabled,
   closedTodayCount,
+  deletingId,
+  onDelete,
 }: {
   trades: SynthTrade[];
   loading: boolean;
@@ -389,11 +769,15 @@ export function SynthClosedHistory({
   dbEnabled: boolean;
   /** What the day summary says was closed today, to catch a failed list load. */
   closedTodayCount: number;
+  deletingId: string | null;
+  /** Absent unless the viewer is a full admin (the backend enforces it too). */
+  onDelete?: (t: SynthTrade) => void;
 }) {
   const todayKey = istTodayKey();
   // Today stays expanded until the user toggles a day; tracked here because the
   // frequent snapshot re-renders would reset an uncontrolled <details>.
   const [dayOverrides, setDayOverrides] = useState<Record<string, boolean>>({});
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const isDayOpen = useCallback(
     (key: string) => dayOverrides[key] ?? key === todayKey,
     [dayOverrides, todayKey],
@@ -419,13 +803,18 @@ export function SynthClosedHistory({
         gross: list.reduce((sum, t) => sum + (t.gross_pnl ?? 0), 0),
         fees: list.reduce((sum, t) => sum + (t.total_charges ?? 0), 0),
         net: list.reduce((sum, t) => sum + (t.net_pnl ?? 0), 0),
+        margin: list.reduce((sum, t) => sum + (t.margin ?? 0), 0),
+        marginUnknown: list.filter((t) => (t.margin ?? null) === null).length,
       }));
   }, [trades]);
+
+  const columns = onDelete ? 18 : 17;
 
   return (
     <section className="box-section">
       <h2 className="box-section-title">
         Closed synthetic trades <span className="pill-count">{trades.length}</span>
+        <span className="box-chain-meta">Click a row for its limit orders and the books they filled on.</span>
         {loading && (
           <span className="box-chain-meta">
             <span className="spinner" /> loading earlier days…
@@ -467,6 +856,13 @@ export function SynthClosedHistory({
                   <span className="pill-count">
                     {day.trades.length} {day.trades.length === 1 ? "trade" : "trades"}
                   </span>
+                  <span
+                    className="box-dim"
+                    title="Margin these trades blocked, summed over the day: an upper bound on what was blocked at any one instant, not a peak"
+                  >
+                    Margin {rupees(day.margin)}
+                    {day.marginUnknown > 0 ? ` (${day.marginUnknown} n/a)` : ""}
+                  </span>
                   <span className="box-dim">Gross {rupees(day.gross)}</span>
                   <span className="box-dim">Fees {rupees(day.fees)}</span>
                   <span className={pnlClass(day.net)}>Net {rupees(day.net)}</span>
@@ -484,6 +880,9 @@ export function SynthClosedHistory({
                       <th>Closed</th>
                       <th className="num">Held</th>
                       <th>Broker</th>
+                      <th className="num" title="Margin the three legs blocked together (broker basket margin)">
+                        Margin
+                      </th>
                       <th className="num" title="Lock per unit × quantity at entry: the gross if held to expiry">
                         Locked at entry
                       </th>
@@ -492,42 +891,102 @@ export function SynthClosedHistory({
                       <th className="num">Total fees</th>
                       <th className="num">Gross P&amp;L</th>
                       <th className="num">Net P&amp;L</th>
-                      <th>Reason</th>
+                      <th className="num" title="Net P&L after charges ÷ margin">
+                        Net / margin
+                      </th>
+                      <th title="Were all six limit orders (3 entry + 3 exit) filled at the best bid/ask?">
+                        Fills
+                      </th>
+                      {onDelete && <th aria-label="Actions" />}
                     </tr>
                   </thead>
                   <tbody>
-                    {day.trades.map((t) => (
-                      <tr key={t.id}>
-                        <td>
-                          <span className="box-sym">{t.underlying}</span>
-                          {t.is_index && <span className="badge-index">INDEX</span>}
-                        </td>
-                        <td>
-                          <SynthDirectionBadge direction={t.direction} />
-                        </td>
-                        <td className="box-dim">{formatExpiry(t.expiry)}</td>
-                        <td className="num">
-                          {t.strike} <span className="sf-muted">{offsetLabel(t.atm_offset)}</span>
-                        </td>
-                        <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
-                        <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
-                        <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
-                        <td>
-                          <BrokerBadge broker={t.broker} />
-                        </td>
-                        <td className="num">{rupees(t.entry_edge)}</td>
-                        <td className="num box-dim">{rupees(t.entry_charges)}</td>
-                        <td className="num box-dim">{rupees(t.exit_charges)}</td>
-                        <td className="num box-dim">{rupees(t.total_charges)}</td>
-                        <td className={`num ${pnlClass(t.gross_pnl)}`}>{rupees(t.gross_pnl)}</td>
-                        <td className={`num box-net ${pnlClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
-                        <td>
-                          <span className="box-reason" title={t.exit_note ?? undefined}>
-                            {t.exit_reason ? EXIT_REASON_LABEL[t.exit_reason] : "-"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {day.trades.map((t) => {
+                      const open = expandedId === t.id;
+                      const entryOk = allAtBest(t.legs, "entry", t.quantity);
+                      // A trade settled at expiry had no closing orders to check.
+                      const exitOk =
+                        t.exit_reason === "EXPIRED" ? true : allAtBest(t.legs, "exit", t.quantity);
+                      const fillsOk =
+                        entryOk === false || exitOk === false
+                          ? false
+                          : entryOk === null || exitOk === null
+                            ? null
+                            : true;
+                      return (
+                        <FragmentRow
+                          key={t.id}
+                          open={open}
+                          columns={columns}
+                          onToggle={() => setExpandedId(open ? null : t.id)}
+                          detail={
+                            <div className="sf-legs">
+                              <FillsDetails legs={t.legs} phase="entry" quantity={t.quantity} defaultOpen />
+                              {t.exit_reason === "EXPIRED" ? (
+                                <p className="box-dim sf-note">{t.exit_note}</p>
+                              ) : (
+                                <FillsDetails legs={t.legs} phase="exit" quantity={t.quantity} defaultOpen />
+                              )}
+                            </div>
+                          }
+                        >
+                          <td>
+                            <span className="box-sym">{t.underlying}</span>
+                            {t.is_index && <span className="badge-index">INDEX</span>}
+                          </td>
+                          <td>
+                            <SynthDirectionBadge direction={t.direction} />
+                          </td>
+                          <td className="box-dim">{formatExpiry(t.expiry)}</td>
+                          <td className="num">
+                            {t.strike} <span className="sf-muted">{offsetLabel(t.atm_offset)}</span>
+                          </td>
+                          <td className="box-dim">{fmtDateTime(t.opened_at)}</td>
+                          <td className="box-dim">{t.closed_at ? fmtDateTime(t.closed_at) : "-"}</td>
+                          <td className="num box-dim">{duration(t.opened_at, t.closed_at)}</td>
+                          <td>
+                            <BrokerBadge broker={t.broker} />
+                          </td>
+                          <td className="num box-dim" title={marginTitle(t)}>
+                            {marginText(t)}
+                          </td>
+                          <td className="num">{rupees(t.entry_edge)}</td>
+                          <td className="num box-dim">{rupees(t.entry_charges)}</td>
+                          <td className="num box-dim">{rupees(t.exit_charges)}</td>
+                          <td className="num box-dim">{rupees(t.total_charges)}</td>
+                          <td className={`num ${pnlClass(t.gross_pnl)}`}>{rupees(t.gross_pnl)}</td>
+                          <td className={`num box-net ${pnlClass(t.net_pnl)}`}>{rupees(t.net_pnl)}</td>
+                          <td className={`num ${pnlClass(t.net_pnl)}`}>
+                            {pctText(returnPct(t.net_pnl, t.margin))}
+                          </td>
+                          <td>
+                            {fillsOk === null ? (
+                              <span className="box-dim">not recorded</span>
+                            ) : (
+                              <BestCheck ok={fillsOk} />
+                            )}
+                            <span className="box-reason sf-reason" title={t.exit_note ?? undefined}>
+                              {t.exit_reason ? EXIT_REASON_LABEL[t.exit_reason] : "-"}
+                            </span>
+                          </td>
+                          {onDelete && (
+                            <td>
+                              <button
+                                className="btn btn--sm btn--danger"
+                                disabled={deletingId === t.id}
+                                title="Delete this PAPER trade from history, P&L and margin figures"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDelete(t);
+                                }}
+                              >
+                                {deletingId === t.id ? "Deleting…" : "Delete"}
+                              </button>
+                            </td>
+                          )}
+                        </FragmentRow>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -536,5 +995,160 @@ export function SynthClosedHistory({
         </div>
       )}
     </section>
+  );
+}
+
+/** A clickable history row plus its expandable detail row. */
+function FragmentRow({
+  open,
+  columns,
+  onToggle,
+  detail,
+  children,
+}: {
+  open: boolean;
+  columns: number;
+  onToggle: () => void;
+  detail: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <tr className="sf-row" onClick={onToggle} title="Click for the limit orders and books">
+        {children}
+      </tr>
+      {open && (
+        <tr className="sf-legs-row">
+          <td colSpan={columns}>{detail}</td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/* --------------------------------- delete --------------------------------- */
+
+/**
+ * Destructive confirmation for deleting a synthetic PAPER trade.
+ *
+ * Built like BoxDeleteModal: it names the exact trade, says what changes, focuses
+ * Cancel (so a stray Enter is safe) and closes on Escape.
+ */
+export function SynthDeleteModal({
+  trade,
+  busy,
+  error,
+  stale,
+  onConfirm,
+  onCancel,
+}: {
+  trade: SynthTrade;
+  busy: boolean;
+  /** The server's refusal, shown here rather than behind the overlay. */
+  error?: string | null;
+  /** Set when the trade changed state while this dialog was open: Delete is disabled. */
+  stale?: string | null;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onCancel]);
+
+  const isOpen = trade.status === "open";
+  return (
+    <div className="modal-overlay" onClick={busy ? undefined : onCancel}>
+      <div
+        className="modal modal--sm"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="synth-delete-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="modal-head">
+          <div>
+            <h2 id="synth-delete-title">
+              Delete {trade.underlying} {trade.direction}?
+            </h2>
+            <p className="modal-sub">
+              K {trade.strike} · {formatExpiry(trade.expiry)} · {isOpen ? "open" : "closed"} ·{" "}
+              <BrokerBadge broker={trade.broker} />
+            </p>
+          </div>
+          <button
+            type="button"
+            className="modal-x"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Close"
+          >
+            <XIcon size={18} weight="regular" aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="modal-body confirm-modal-body">
+          {stale && <div className="banner banner--warn">{stale}</div>}
+          {error && <div className="banner banner--error">{error}</div>}
+          <p className="box-delete-warning">
+            This removes this <strong>PAPER</strong> trade from the synthetic book: every list,
+            count, P&amp;L and margin figure.
+          </p>
+          <ul className="box-delete-effects">
+            {isOpen ? (
+              <>
+                <li>It stops being monitored and will never auto-exit. Its tokens are released.</li>
+                <li>
+                  It is not closed first, so no exit P&amp;L is recorded. Use <em>Close now</em>{" "}
+                  instead to book the exit.
+                </li>
+                <li>Its underlying waits out the re-entry cooldown before the scanner can open it again.</li>
+              </>
+            ) : (
+              <li>Its realised P&amp;L and charges leave the closed-trade totals and the day P&amp;L.</li>
+            )}
+            <li>
+              The server keeps the row as a deleted audit record (admin role, time and reason);
+              it is never shown again.
+            </li>
+          </ul>
+
+          <label className="box-delete-reason">
+            <span className="metric-label">Reason (optional, kept in the audit record)</span>
+            <input
+              type="text"
+              value={reason}
+              maxLength={500}
+              disabled={busy}
+              placeholder="e.g. entered on a bad feed tick"
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </label>
+
+          <div className="modal-actions">
+            <button className="btn modal-action" ref={cancelRef} onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+            <button
+              className="btn btn--danger modal-action"
+              onClick={() => onConfirm(reason.trim())}
+              disabled={busy || !!stale}
+            >
+              {busy ? "Deleting…" : "Delete trade"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

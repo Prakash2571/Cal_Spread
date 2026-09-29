@@ -2649,7 +2649,9 @@ export type SynthRejectReason =
   | "insufficient_qty"
   | "below_expected_net_profit"
   | "market_closed"
-  | "no_close";
+  | "no_close"
+  /** Best bid ≥ best ask: an inconsistent snapshot, so its touch is not really available. */
+  | "crossed_book";
 
 export interface SynthLegEvaluation {
   role: SynthLegRole;
@@ -2777,6 +2779,8 @@ export interface SynthStatusView {
   box_lane_tokens: number | null;
   open_count: number;
   max_open_positions: number;
+  /** Whether trades get a margin figure (a basket-margin calculator is wired). */
+  margin_enabled?: boolean;
   /** Open positions whose contracts are not resolved on the active broker yet. */
   unlinked_positions: number;
   day_pnl: SynthDayPnl;
@@ -2808,6 +2812,18 @@ export type SynthExitReason =
   | "EXPIRED"
   | "MANUAL";
 
+/** The top of a book at a fill: up to five levels a side, best first. */
+export interface SynthDepth {
+  bids: { price: number; qty: number }[];
+  asks: { price: number; qty: number }[];
+}
+
+/**
+ * One leg of a paper trade. Every leg is a LIMIT order at the touch (best ask to
+ * buy, best bid to sell), sent only when a full lot rests there, so it fills at its
+ * limit. The bid/ask, quantities, age and depth are the book it was priced on.
+ * The optional fields are absent on trades stored before they were recorded.
+ */
 export interface SynthTradeLeg {
   role: SynthLegRole;
   /** The ENTRY side; the closing side is the opposite. */
@@ -2816,13 +2832,35 @@ export interface SynthTradeLeg {
   strike: number;
   tradingsymbol: string;
   token: number;
+  /** Entry fill = the limit price: best ask for a BUY, best bid for a SELL. */
   entry_price: number;
   entry_bid: number;
   entry_ask: number;
+  entry_bid_qty?: number | null;
+  entry_ask_qty?: number | null;
+  /** Quantity resting at the entry limit price. */
+  entry_qty_at_touch?: number | null;
+  /** How long the book had been unchanged when the order was priced (ms). */
+  entry_age_ms?: number | null;
+  entry_depth?: SynthDepth | null;
+  /** Exit fill = the closing limit: best bid to sell, best ask to buy back. */
   exit_price: number | null;
   exit_bid: number | null;
   exit_ask: number | null;
+  exit_bid_qty?: number | null;
+  exit_ask_qty?: number | null;
+  exit_qty_at_touch?: number | null;
+  exit_age_ms?: number | null;
+  exit_depth?: SynthDepth | null;
 }
+
+/** Which calculator produced a margin figure. */
+export type SynthMarginSource =
+  | "kite_basket"
+  | "dhan_multi"
+  /** Dhan legs summed one by one: an UPPER bound that ignores the hedge. */
+  | "dhan_per_leg_fallback"
+  | "unavailable";
 
 /** A paper trade, open or closed. */
 export interface SynthTrade {
@@ -2831,6 +2869,8 @@ export interface SynthTrade {
   key: string;
   broker: BrokerId;
   execution_mode: "paper_touch";
+  /** Every leg is a limit order at the touch. Absent on older rows. */
+  order_type?: "LIMIT";
   underlying: string;
   name: string;
   is_index: boolean;
@@ -2872,6 +2912,16 @@ export interface SynthTrade {
   /** Gross − total charges ("after charges"). Open: if closed now. */
   net_pnl: number | null;
   exit_note: string | null;
+  /**
+   * Margin the three legs block together (₹), from the broker's basket-margin
+   * calculator (hedge benefit included). Null until the broker answers, or when it
+   * could not be obtained (see `margin_error`). Optional: absent on older rows.
+   */
+  margin?: number | null;
+  margin_source?: SynthMarginSource | null;
+  margin_hedge_benefit?: number | null;
+  margin_at?: string | null;
+  margin_error?: string | null;
 }
 
 /** One leg of an open position as it would be CLOSED now. */
@@ -2893,6 +2943,8 @@ export interface SynthExitLeg {
   age_ms: number | null;
   fresh: boolean;
   executable: boolean;
+  /** Why this leg cannot be closed at the touch right now, or null. */
+  reject?: SynthRejectReason | null;
 }
 
 /** An open paper position with the backend's live marks and exit arithmetic. */
@@ -2934,6 +2986,12 @@ export interface SynthDayPnl {
   /** Open running net + today's realised net. */
   total_net_pnl: number;
   total_gross_pnl: number;
+  /** Σ margin the open positions block now (₹); those without a figure are excluded. */
+  open_margin?: number;
+  open_margin_unknown?: number;
+  /** Σ margin of today's closed trades (₹): a day SUM, not a concurrent peak. */
+  closed_margin?: number;
+  closed_margin_unknown?: number;
 }
 
 export interface SynthHistoryResponse {
@@ -2995,6 +3053,42 @@ export async function closeSynthTrade(id: string): Promise<{
     "Failed to close the synthetic position",
   );
 }
+
+export interface SynthDeleteResult {
+  ok: boolean;
+  deleted_id: string;
+  deleted_from: "open" | "closed";
+  /** It had already been deleted (an earlier attempt, or another admin): nothing changed. */
+  already_deleted?: boolean;
+  status: SynthStatusView;
+  open: SynthOpenPosition[];
+  closed_today: SynthTrade[];
+}
+
+/**
+ * FULL ADMIN: delete a PAPER trade, open or closed, from every list and P&L figure.
+ * The backend keeps it as a soft-deleted audit row with the reason.
+ *
+ * `expectedStatus` is the status the confirmation showed. If the trade changed state
+ * meanwhile (an open position that just closed), the backend refuses with 409
+ * instead of deleting it together with the P&L it booked. Safe to retry.
+ */
+export async function deleteSynthTrade(
+  id: string,
+  expectedStatus: "open" | "closed",
+  reason?: string,
+): Promise<SynthDeleteResult> {
+  const res = await fetch(`${API_BASE_URL}/api/synthetic/trades/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+    body: JSON.stringify(reason ? { reason, expected_status: expectedStatus } : { expected_status: expectedStatus }),
+  });
+  if (res.status === 404) throw new SynthTradeGoneError("That trade no longer exists on the server.");
+  return readJson<SynthDeleteResult>(res, "Failed to delete the synthetic trade");
+}
+
+/** The trade is not on the server at all, so any row showing it is stale. */
+export class SynthTradeGoneError extends Error {}
 
 async function postSynth(path: string, what: string, body?: unknown): Promise<SynthStatusView> {
   const res = await fetch(`${API_BASE_URL}/api/synthetic/${path}`, {
