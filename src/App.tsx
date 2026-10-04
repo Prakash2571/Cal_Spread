@@ -56,6 +56,7 @@ import Analytics from "./Analytics.tsx";
 import Box from "./Box.tsx";
 import Synthetic from "./Synthetic.tsx";
 import BrandMark from "./BrandMark.tsx";
+import FairValue from "./fairValue/FairValue.tsx";
 
 type TickMap = Record<number, Tick>;
 
@@ -321,6 +322,7 @@ export default function App() {
     if (route === "/analytics") title = "Options Analytics | Calspread";
     if (route === "/box") title = "Box Arbitrage | Calspread";
     if (route === "/synthetic") title = "Futures vs Synthetic | Calspread";
+    if (route === "/fair-value") title = "Fair Value | Calspread";
     if (route.startsWith("/admin/verify")) title = "Admin Verification | Calspread";
     if (route.startsWith("/admin/access")) title = "Trade Access | Calspread";
     if (route === "/dhan/verify") title = "Connecting Dhan | Calspread";
@@ -800,6 +802,11 @@ export default function App() {
     );
   }
 
+  // Full-admin option valuation page; backend guards every related API.
+  if (route === "/fair-value") {
+    return <FairValue isFullAdmin={isFullAdmin} onBack={() => navigate("/")} />;
+  }
+
   // Public NIFTY options analytics page.
   if (route === "/analytics") {
     return <Analytics authenticated={authenticated} onBack={() => navigate("/")} />;
@@ -962,6 +969,14 @@ export default function App() {
               title="Futures vs synthetic (K + CE − PE) arbitrage: ATM ±1/2/3, automatic paper trading, one lot"
             >
               Synthetic
+            </a>
+          )}
+          {isFullAdmin && (
+            <a className="btn" href="/fair-value" onClick={(event) => {
+              event.preventDefault();
+              navigate("/fair-value");
+            }} title="Market-consistent option theoretical values, IV smiles and model diagnostics">
+              Fair Value
             </a>
           )}
           {adminAuthenticated && (

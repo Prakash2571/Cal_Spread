@@ -2,6 +2,20 @@
 
 ## Overview
 
+### Fair Value
+
+`Fair Value` is a dedicated **full-admin-only** page at `/fair-value`. Trade-access
+and public users cannot open its data component. The backend independently guards
+every `/api/fair-value` endpoint, historical snapshot, export and stream; async
+responses and SSE emissions recheck role validity. Private valuation snapshots
+are not stored in browser localStorage. The page clears its private state when
+authorization is revoked.
+
+Analytics is independently disabled by default. Before using date-only contracts,
+configure a verified expiry-time policy and a discount curve/explicit flat-rate
+assumption. See [`../Cal_Spread_Backend/docs/FAIR_VALUE.md`](../Cal_Spread_Backend/docs/FAIR_VALUE.md)
+for formulas, units, configuration and limitations. This page has no trading action.
+
 This application now has two views:
 - **Public View**: Shows the F&O stock list without prices (accessible at `/`)
 - **Admin View**: Full access to Zerodha integration, live prices, and all features (requires admin authentication)

@@ -1,0 +1,56 @@
+.fv-page { min-height: 100vh; }
+.fv-page .card-title span { color: var(--text-2); font-size: var(--fs-3); }
+.fv-main { display: grid; gap: var(--sp-4); padding: var(--sp-4); max-width: 1800px; margin: 0 auto; }
+.fv-purpose { color: var(--text-2); margin: 0; font-size: var(--fs-4); line-height: 1.7; }
+.fv-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-4); min-width: 0; }
+.fv-card h2 { font-size: var(--fs-5); margin: 0 0 var(--sp-3); }
+.fv-card h3 { font-size: var(--fs-4); margin: var(--sp-4) 0 var(--sp-2); }
+.fv-card p, .fv-card li { color: var(--text-2); font-size: var(--fs-3); line-height: 1.7; overflow-wrap: anywhere; }
+.fv-card code { font-size: var(--fs-2); }
+.fv-card pre { overflow: auto; color: var(--text-2); font-size: var(--fs-3); }
+.fv-controls { display: flex; align-items: end; flex-wrap: wrap; gap: var(--sp-3); }
+.fv-page label { display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-3); color: var(--text-2); }
+.fv-page select, .fv-page input, .fv-config-json { border: 1px solid var(--border-strong); background: var(--surface-0); color: var(--text-1); border-radius: var(--r-sm); padding: var(--sp-2); min-height: 36px; font-size: var(--fs-3); }
+.fv-controls select { max-width: 340px; }
+.fv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.fv-status, .fv-stats { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.fv-stat { display: grid; align-content: start; gap: var(--sp-1); flex: 1 0 130px; }
+.fv-stat span { color: var(--text-3); font-size: var(--fs-2); }
+.fv-stat strong { color: var(--text-1); font-size: var(--fs-3); font-family: var(--font-mono); font-weight: 500; overflow-wrap: anywhere; }
+.fv-warning { color: var(--warn) !important; }
+.fv-notice { padding: var(--sp-3); background: var(--accent-surface); color: var(--accent-text); border: 1px solid var(--accent-border); border-radius: var(--r-sm); font-size: var(--fs-3); }
+.fv-config-json { display: block; width: 100%; min-height: 350px; font-family: var(--font-mono); margin: var(--sp-3) 0; resize: vertical; }
+.fv-section-header { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
+.fv-section-header input { min-width: 280px; }
+.fv-table-scroll { overflow-x: auto; max-height: 660px; border: 1px solid var(--border); }
+.fv-table { border-collapse: collapse; width: 100%; min-width: 1780px; font-family: var(--font-mono); font-size: var(--fs-2); }
+.fv-table th, .fv-table td { padding: var(--sp-3) var(--sp-2); text-align: right; border-bottom: 1px solid var(--border); vertical-align: top; }
+.fv-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); color: var(--text-2); white-space: nowrap; font-family: var(--font-ui); }
+.fv-table th:first-child, .fv-table td:first-child { position: sticky; left: 0; background: var(--surface-1); }
+.fv-table th:first-child { z-index: 2; background: var(--surface-2); }
+.fv-table small { display: block; margin-top: var(--sp-1); color: var(--text-3); font-family: var(--font-ui); font-size: var(--fs-1); max-width: 140px; }
+.fv-table tr:hover td { background: var(--surface-2); }
+.fv-link { background: none; border: 0; color: var(--accent-text); cursor: pointer; font: inherit; text-align: inherit; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+.fv-quality { display: inline-block; border-radius: var(--r-sm); padding: 3px 6px; font-size: var(--fs-2); background: var(--surface-3); color: var(--text-2); }
+.fv-quality--supported { background: var(--pos-surface); color: var(--pos); }
+.fv-quality--limited, .fv-quality--research { background: var(--warn-surface); color: var(--warn); }
+.fv-quality--invalid { background: var(--neg-surface); color: var(--neg); }
+.fv-chart { width: 100%; height: auto; overflow: visible; display: block; }
+.fv-chart text { fill: var(--text-3); font: 10px var(--font-mono); }
+.fv-chart-legend { display: flex; flex-wrap: wrap; gap: var(--sp-4); font-size: var(--fs-2); color: var(--text-2); }
+.fv-chart-legend span { display: flex; gap: 6px; align-items: center; }
+.fv-chart-legend i { width: 9px; height: 9px; border-radius: 50%; }
+.fv-chart-readout { min-height: 26px; color: var(--text-2); font: var(--fs-2) var(--font-mono); padding-top: var(--sp-2); }
+.fv-calculator { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.fv-calculator .fv-checkbox { grid-column: 1 / -1; display: flex; flex-direction: row; align-items: center; }
+.fv-checkbox input { min-height: auto; }
+.fv-calculation { margin-top: var(--sp-4); padding-top: var(--sp-2); border-top: 1px solid var(--border); }
+.fv-history { max-height: 220px; overflow: auto; }
+.fv-drawer-backdrop { position: fixed; inset: 0; z-index: 100; background: var(--scrim); display: flex; justify-content: flex-end; }
+.fv-drawer { width: min(640px, 100vw); height: 100%; overflow-y: auto; background: var(--surface-1); padding: var(--sp-5); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-overlay); }
+.fv-drawer h2 { font-size: var(--fs-5); overflow-wrap: anywhere; }
+.fv-drawer h3, .fv-drawer p { font-size: var(--fs-3); line-height: 1.7; }
+.fv-drawer p { color: var(--text-2); }
+.fv-page details summary { cursor: pointer; font-size: var(--fs-3); color: var(--accent-text); }
+@media (max-width: 900px) { .fv-grid { grid-template-columns: 1fr; } .fv-controls select { max-width: 100%; } }
+@media (max-width: 560px) { .fv-main { padding: var(--sp-2); gap: var(--sp-3); } .fv-card { padding: var(--sp-3); } .fv-calculator { grid-template-columns: 1fr; } .fv-section-header input { min-width: 0; width: 100%; } .fv-controls label { width: 100%; } .fv-controls select { width: 100%; } .fv-page .topbar { flex-wrap: wrap; } }
