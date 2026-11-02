@@ -1,9 +1,9 @@
 # CalSpread frontend Go migration integration status
 
-State: Waiting
+State: Done
 Updated: 2026-11-02
-Blockers: paired backend final-review/publication stage is active; frontend implementation/integration checks are complete
-Next action: After final backend checks, commit the verified Box removal, real-Go HTTP/browser runners and local/auth/CI documentation, then push frontend main and verify its CI.
+Blockers: none
+Next action: None. Verified frontend integration and main publication are complete; local usage/verification instructions are in README.md.
 
 ## Completed
 
@@ -15,9 +15,17 @@ Next action: After final backend checks, commit the verified Box removal, real-G
   packages green with `REQUIRE_DB_TESTS=1` and `-race`. Backend audit accounts for 332 retained cases (250 already covered,
   78 completed/strengthened, 4 explained N/A). This was the pre-integration milestone; the integration stage is now verified below.
 
-## Remaining
+## Publication — 2026-11-02
 
-- Final cross-repository review, intended commit/main push and remote CI verification.
+- Runtime/frontend feature [`08f4707`](https://github.com/Prakash2571/Cal_Spread/commit/08f47070d0c7f93ecf72d406a4046bb9356f3823)
+  committed and pushed to main after paired backend runtime `0217698`.
+- `git push origin main && git status --short --branch && git rev-parse HEAD`: exit 0; clean, matched origin/main.
+- `gh run watch 41418509911 --interval 10 --exit-status` and
+  `gh run view 41418509911 --json headSha,status,conclusion,url,jobs`: exit 0;
+  [CI 41418509911](https://github.com/Prakash2571/Cal_Spread/actions/runs/41418509911) completed **success**.
+  Locked build/unit and actual Go/PostgreSQL integration passed against the published backend main.
+- Backend [CI 41418473148](https://github.com/Prakash2571/Cal_Spread_Backend/actions/runs/41418473148) also succeeded.
+  Completion/receipt updates are documentation-only; verified runtime source stays unchanged.
 
 ## Current checks (2026-11-02 final migration continuation)
 - `../Cal_Spread_Backend/scratch/go-migration/check.sh npm run build && ../Cal_Spread_Backend/scratch/go-migration/check.sh npm test && git diff --check`: exit 0; final bundle 356.20 kB, 37 tests, zero skipped and clean whitespace.

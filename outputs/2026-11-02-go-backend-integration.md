@@ -34,4 +34,9 @@ Firefox navigation-cancellation message is recorded separately in the browser re
 
 The complete migration/reference/local-process review is recorded in the paired
 backend's `outputs/2026-11-02-go-postgres-migration.md` and task STATUS.
-Final main commit/push and remote CI receipts are pending publication.
+Published frontend feature [`08f4707`](https://github.com/Prakash2571/Cal_Spread/commit/08f47070d0c7f93ecf72d406a4046bb9356f3823)
+on main after backend runtime `0217698`. Both push commands exited 0 and both worktrees
+matched origin/main. [Frontend CI 41418509911](https://github.com/Prakash2571/Cal_Spread/actions/runs/41418509911)
+passed locked build/unit and real-Go/PostgreSQL integration; paired
+[backend CI 41418473148](https://github.com/Prakash2571/Cal_Spread_Backend/actions/runs/41418473148) also passed.
+Final receipt commits change documentation/completion state only; verified runtime source is unchanged.
