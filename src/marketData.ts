@@ -30,7 +30,7 @@ import type { BoardItem } from "./api";
  * HTTP/1.1 connections per origin, and an SSE connection is long-lived, so chunking too
  * finely is its own outage: at 100 tokens an 816-token board needs 9 streams, three of
  * which would never open while the rest starved every other request to the origin —
- * including the Box stream. At 250 the same board needs 4 streams, each URL ~2.8 KB,
+ * including strategy/analytics streams. At 250 the same board needs 4 streams, each URL ~2.8 KB,
  * comfortably inside the 8 KB limit.
  *
  * The primary path uses a server-side session and needs no chunking at all.

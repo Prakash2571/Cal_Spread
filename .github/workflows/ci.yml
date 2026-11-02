@@ -5,8 +5,7 @@ on:
     branches: [main]
   pull_request:
 
-# Read-only token, and no secrets: the build is a pure typecheck + bundle. It
-# never contacts Zerodha, MongoDB, Redis or the market.
+# Verification uses generated loopback prices and an isolated test PostgreSQL.
 permissions:
   contents: read
 
@@ -16,15 +15,55 @@ concurrency:
 
 jobs:
   build:
-    name: Typecheck + build
+    name: Frontend build, unit and real-Go HTTP checks
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Cal_Spread
+    services:
+      postgres:
+        image: postgres:18.0
+        env:
+          POSTGRES_USER: calspread
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: calspread_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U calspread -d calspread_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://calspread:local-ci-only@127.0.0.1:5432/calspread_test?sslmode=disable
+      GOTOOLCHAIN: local
+      GOTELEMETRY: 'off'
+      TZ: Asia/Kolkata
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: Cal_Spread
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Prakash2571/Cal_Spread_Backend
+          ref: main
+          path: Cal_Spread_Backend
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: Cal_Spread/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: Cal_Spread_Backend/go.sum
+
+      - name: Locked backend dependencies
+        working-directory: Cal_Spread_Backend
+        run: go mod download
 
       - name: Install (locked)
         run: npm ci
@@ -39,3 +78,6 @@ jobs:
       # test-only TypeScript loader. No bundler or jsdom needed.
       - name: Test
         run: npm test
+
+      - name: Real-Go HTTP and PostgreSQL integration
+        run: npm run test:go

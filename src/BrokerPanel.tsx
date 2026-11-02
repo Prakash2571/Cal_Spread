@@ -10,7 +10,7 @@
  *
  * WHAT IT REFUSES TO DO
  * It never switches optimistically. The backend owns the decision and answers 409 with
- * the full list of blockers when Box exposure or in-flight work exists; this panel
+ * the full list of configuration blockers; this panel
  * renders that list verbatim rather than retrying or hiding it. The displayed broker
  * always comes from the server's own status, so it cannot drift from reality.
  */
@@ -30,7 +30,7 @@ import {
   type BrokerSwitchBlocker,
   type DhanStatus,
 } from "./api.ts";
-import { BrokerBadge } from "./BoxBroker.tsx";
+import { BrokerBadge } from "./BrokerBadge.tsx";
 
 /**
  * Operator-facing feed labels.
@@ -214,9 +214,9 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
               </span>
             </div>
             <div className="metric-row">
-              <span className="metric-label">Trading</span>
-              <span className={`metric-value ${health?.trading_ready ? "pos" : "neg"}`}>
-                {health?.trading_ready ? "Ready" : "Blocked"}
+              <span className="metric-label">Data ready</span>
+              <span className={`metric-value ${health?.data_ready ? "pos" : "neg"}`}>
+                {health?.data_ready ? "Ready" : "Blocked"}
               </span>
             </div>
           </div>
@@ -395,10 +395,10 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
                 {blockers.length > 0 ? (
                   blockers.map((b) => <li key={b.reason}>{b.detail}</li>)
                 ) : (
-                  <li>Box exposure or in-flight work is preventing the switch.</li>
+                  <li>The server refused this broker selection.</li>
                 )}
               </ul>
-              Clear these from the Box page, then try again.
+              Resolve the reported configuration problem, then try again.
             </div>
           )}
 

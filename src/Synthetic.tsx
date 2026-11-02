@@ -23,7 +23,7 @@ import {
 } from "./api.ts";
 import { fmt, formatExpiry } from "./format.ts";
 import ThemeToggle from "./ThemeToggle.tsx";
-import { BrokerBadge } from "./BoxBroker.tsx";
+import { BrokerBadge } from "./BrokerBadge.tsx";
 import {
   Freshness,
   SynthClosedHistory,
@@ -543,7 +543,7 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
       {status?.last_error && <div className="banner banner--warn">{status.last_error}</div>}
       {status?.paper_blocked_reason === "no_db" ? (
         <div className="banner banner--warn">
-          <strong>Paper trading paused.</strong> Trade storage (MongoDB) is not connected on the
+          <strong>Paper trading paused.</strong> Trade storage (PostgreSQL) is not connected on the
           server, so ELIGIBLE opportunities are shown but not traded.
         </div>
       ) : status?.paper_blocked_reason === "unsafe_index" ? (
@@ -618,23 +618,17 @@ export default function Synthetic({ authenticated, canTrade, isFullAdmin = false
             status
               ? `Subscribed / budget. Books received: ${status.ready_books}. Budget = ${status.base_token_budget} base` +
                 (status.borrowed_from_box > 0
-                  ? ` + ${status.borrowed_from_box} borrowed from the stopped Box scanner (handed back the moment Box starts).`
+                  ? ` + ${status.borrowed_from_box} extra capacity from the dedicated options feed.`
                   : ".")
               : undefined
           }
         />
         <Stat
-          k="Box lane"
+          k="Extra capacity"
           v={
-            !status || status.box_scanner_running === null
-              ? "-"
-              : status.box_scanner_running
-                ? "Box running"
-                : status.borrowed_from_box > 0
-                  ? `+${status.borrowed_from_box} borrowed`
-                  : "Box idle"
+            status ? `+${status.borrowed_from_box} tokens` : "-"
           }
-          title="While the Box scanner is stopped, this scanner uses the part of Box's token budget Box is not holding. Box always gets it back first."
+          title="Additional token capacity available to Synthetic on the dedicated options feed."
         />
         <Stat
           k="Open"

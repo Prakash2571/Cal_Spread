@@ -17,7 +17,7 @@
  * ONE connection, not several. A browser allows only ~6 concurrent HTTP/1.1 connections
  * per origin and an SSE connection is long-lived, so splitting the board into 9 chunked
  * streams would leave three permanently unopened and starve every other request to the
- * origin — including the Box stream. Chunking survives only as a FALLBACK for a browser
+ * origin — including the Synthetic stream. Chunking survives only as a FALLBACK for a browser
  * talking to a backend that predates the session endpoint, where a partly-working board
  * beats a blank one.
  *

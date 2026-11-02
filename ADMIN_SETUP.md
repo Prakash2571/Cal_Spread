@@ -1,134 +1,103 @@
-# Admin Authentication Setup
+# Admin and broker setup
 
-## Overview
+The frontend uses the paired Go/Chi/PostgreSQL backend. Start it and the local
+PostgreSQL cluster using the backend README; set the browser/backend origins as
+described in this repository's README.
 
-### Fair Value
+## Local configuration
 
-`Fair Value` is a dedicated **full-admin-only** page at `/fair-value`. Trade-access
-and public users cannot open its data component. The backend independently guards
-every `/api/fair-value` endpoint, historical snapshot, export and stream; async
-responses and SSE emissions recheck role validity. Private valuation snapshots
-are not stored in browser localStorage. The page clears its private state when
-authorization is revoked.
+Backend `.env`:
 
-Analytics is independently disabled by default. Before using date-only contracts,
-configure a verified expiry-time policy and a discount curve/explicit flat-rate
-assumption. See [`../Cal_Spread_Backend/docs/FAIR_VALUE.md`](../Cal_Spread_Backend/docs/FAIR_VALUE.md)
-for formulas, units, configuration and limitations. This page has no trading action.
-
-This application now has two views:
-- **Public View**: Shows the F&O stock list without prices (accessible at `/`)
-- **Admin View**: Full access to Zerodha integration, live prices, and all features (requires admin authentication)
-
-## Setup Instructions
-
-### 1. Backend Configuration
-
-Add the `ADMIN_SECRET` to your backend `.env` file:
-
-```bash
-# In Cal_Spread_Backend/.env
-ADMIN_SECRET=your_secure_secret_key_here
-```
-
-**Important**: Choose a strong, random secret key. Anyone with this key can access admin features.
-
-### 2. How It Works
-
-#### Public Access (Default)
-- Visit `https://calspread.online` or your deployed URL
-- Users see the list of F&O stocks but no prices
-- No Zerodha connection or sensitive data is shown
-
-#### Admin Access
-1. Navigate to `https://calspread.online/admin/verify` (or `/admin/verify` on localhost)
-2. Enter the admin secret from your `.env` file
-3. Upon successful verification:
-   - Admin token is stored in browser localStorage
-   - User is redirected to home page with full admin features
-   - Can now:
-     - Connect to Zerodha
-     - View live prices
-     - See premium/discount calculations
-     - Adjust risk-free rate
-     - Stream real-time market data
-
-#### Admin Token Management
-- Admin tokens are valid for 24 hours
-- Tokens are stored in browser localStorage
-- Logging out clears both the admin token and Zerodha session
-- Backend maintains admin session validation
-
-### 3. Protected Endpoints
-
-The following backend endpoints require admin authentication:
-- `GET /login` - Zerodha login redirect
-- `POST /api/session` - Zerodha session creation
-- `GET /api/quotes` - Price snapshots
-- `GET /api/stream` - Live price streaming
-
-### 4. Security Notes
-
-- The public URL shows NO sensitive data by default
-- Admin secret should never be shared or committed to git
-- Admin token is transmitted via `x-admin-token` header
-- For streaming (SSE), token is passed as query parameter (as SSE doesn't support custom headers)
-- Consider using environment-specific secrets for production
-
-### 5. Environment Variables
-
-#### Backend (.env)
 ```env
-KITE_API_KEY=your_api_key_here
-KITE_API_SECRET=your_api_secret_here
+HOST=127.0.0.1
 PORT=3001
-FRONTEND_URL=https://calspread.online
-ADMIN_SECRET=your_secure_secret_key_here
+FRONTEND_URL=http://127.0.0.1:5173
+DATABASE_URL=postgres://calspread@127.0.0.1:55472/calspread?sslmode=disable
+KITE_API_KEY=<your Kite app key>
+KITE_API_SECRET=<your Kite app secret>
+ADMIN_SECRET=<your full-admin login secret>
+ACCESS_SECRET=<your trade-access login secret>
 ```
 
-#### Frontend (.env) - Optional
+Frontend `.env`:
+
 ```env
-VITE_API_BASE_URL=https://your-backend-url.com
+VITE_API_BASE_URL=http://127.0.0.1:3001
 ```
 
-### 6. Deployment Checklist
+Only the backend origin belongs in `VITE_API_BASE_URL`; secrets remain on the
+server. Optional Dhan credentials and redirect settings are in the backend
+`.env.example` and configuration guide.
 
-- [ ] Set `ADMIN_SECRET` in production backend environment
-- [ ] Set `FRONTEND_URL` to your actual public domain
-- [ ] Set `VITE_API_BASE_URL` to your backend URL (if different from localhost)
-- [ ] Test admin login flow in production
-- [ ] Verify public view shows no sensitive data
-- [ ] Confirm admin features work after authentication
+## Role and broker sessions are separate
 
-### 7. Usage Flow
+| Session | How to obtain | Capabilities |
+|---|---|---|
+| Full admin | `/admin/verify` → `POST /api/admin/verify` with `ADMIN_SECRET` | Broker connection/switch, risk-free rate, raw-token controls, Calendar and Synthetic, private Fair Value |
+| Trade access | `/admin/access` → `POST /api/access/verify` with `ACCESS_SECRET` | Calendar trade management, Synthetic controls/paper close/history; no broker switch/token controls/Fair Value |
+| Broker | Full admin connects Zerodha or Dhan | Active broker's market data; separate from the UI role |
 
-```
-Public User Journey:
-├─ Visit calspread.online
-├─ See F&O stock list (no prices)
-└─ See "Admin login required" message
+Opaque admin/trade tokens contain 32 cryptographic random bytes (base64url), are
+valid for 24 hours and are validated by the backend. PostgreSQL persists them for
+restart restoration. The browser stores its role token under
+`cal_spread_admin_token`; it does not store private valuation snapshots.
+Synthetic deletion additionally requires the full role. Calendar endpoints keep
+their existing admin/trade permissions and only delete closed records.
 
-Admin User Journey:
-├─ Visit calspread.online/admin/verify
-├─ Enter admin secret
-├─ Redirected to home with admin features
-├─ Connect to Zerodha (optional)
-├─ View live prices and data
-└─ Logout when done
-```
+## Connect and switch brokers
+
+1. Browse **http://127.0.0.1:5173/admin/verify** and sign in.
+2. Use the Broker panel to select a configured broker and connect it.
+3. Kite redirects to `/zerodha/verify`; the frontend forwards its request token
+   to full-admin `POST /api/session`. Dhan redirects to `/dhan/verify` and uses
+   full-admin `POST /api/dhan/session`.
+4. Check the active broker, session, data-ready and feed state in the Broker panel.
+
+Exactly one broker is active. Trade access inherits that broker. Switching resets
+the market-data universe/generation and subscriptions while preserving historical
+records and their original broker badges. Synthetic is paper-only. The Box feature
+and all real order-placement transports have been removed.
+
+Logout removes the browser's admin token and disconnects the active broker through
+its normal logout API. Clearing browser storage alone does not revoke a persisted
+role token; backend validation/expiry remains authoritative.
+
+## Endpoint behavior
+
+- Broker login/switch/logout, risk-free-rate writes and raw broker-token controls
+  require full admin. Passcode/internal-token reads are separately configured
+  and remain disabled when their secrets are blank.
+- Calendar records and Synthetic operations require an admin/trade role;
+  Synthetic deletion requires full admin.
+- Read-only board/quotes/market-data SSE keep their existing backend contracts.
+  They depend on an active broker session where applicable; frontend hiding of
+  prices is not a new backend authorization guard.
+- Browser tick SSE uses `POST /api/stream/session` and a short session-ID URL.
+  Synthetic/Fair Value EventSource URLs carry the role token as a query parameter.
+
+## Fair Value
+
+`/fair-value` is full-admin-only. The UI guard mounts before its data component,
+so public/trade browsers make zero valuation requests. Every backend
+`/api/fair-value/*` route—including config, history, export and stream—also checks
+full admin. Asynchronous responses/SSE revalidate access, and revocation clears
+private rendered data.
+
+Analytics is independently disabled by default. Configure a verified expiry-time
+policy and a versioned discount curve/explicit flat-rate assumption before valuing
+date-only contracts. See the backend [Fair Value guide](../Cal_Spread_Backend/docs/FAIR_VALUE.md).
 
 ## Troubleshooting
 
-### "Admin authentication required" error
-- Verify `ADMIN_SECRET` is set in backend `.env`
-- Check browser localStorage for `cal_spread_admin_token`
-- Try logging out and logging in again
+- **Admin authentication required:** check the configured server secret, sign in
+  at the correct full/trade route, and check token expiry.
+- **No prices after signing in:** connect the active broker separately and inspect
+  its data-ready/feed state. A connected socket with no subscriptions is not LIVE.
+- **Wrong backend or CORS error:** match `VITE_API_BASE_URL` and `FRONTEND_URL`
+  to the actual origins; use 127.0.0.1 consistently for the local OAuth flow.
+- **Storage unavailable:** start local PostgreSQL and set `DATABASE_URL` before
+  restarting the Go service. Persistence-dependent features show their existing
+  unavailable state when no usable pool exists.
 
-### Can't see prices after admin login
-- Ensure you've also connected to Zerodha (separate step)
-- Check browser console for errors
-- Verify Zerodha session is active
-
-### Admin token expired
-- Tokens expire after 24 hours
-- Simply log in again at `/admin/verify`
+For generated local verification, run `npm run test:go` and `npm run test:browser`
+with the separate local test database as described in README.

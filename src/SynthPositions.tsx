@@ -15,13 +15,13 @@
  * lot must rest there, and the book must not be crossed. A trade stored before the
  * book was recorded shows "not recorded" rather than a check it cannot make.
  *
- * Laid out with Box's classes so the two paper books read the same way.
+ * Uses the shared paper-strategy presentation styles.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { XIcon } from "@phosphor-icons/react";
 import type {
-  BoxSide,
+  OrderSide,
   SynthDayPnl,
   SynthDepth,
   SynthDirection,
@@ -32,7 +32,7 @@ import type {
   SynthTradeLeg,
 } from "./api.ts";
 import { fmt, formatExpiry } from "./format.ts";
-import { BrokerBadge } from "./BoxBroker.tsx";
+import { BrokerBadge } from "./BrokerBadge.tsx";
 
 /* --------------------------------- helpers -------------------------------- */
 
@@ -230,7 +230,7 @@ interface FillView {
   role: SynthTradeLeg["role"];
   name: string;
   tradingsymbol: string;
-  side: BoxSide;
+  side: OrderSide;
   price: number | null;
   bid: number | null;
   bidQty: number | null;
@@ -251,14 +251,14 @@ function legName(l: SynthTradeLeg): string {
   return l.instrument_type === "FUT" ? "FUT" : `${l.strike} ${l.instrument_type}`;
 }
 
-function flip(side: BoxSide): BoxSide {
+function flip(side: OrderSide): OrderSide {
   return side === "BUY" ? "SELL" : "BUY";
 }
 
 /** Whether a fill matches the recorded book: best level, ≥ one lot there, not crossed. */
 function checkAgainstBook(
   price: number | null,
-  side: BoxSide,
+  side: OrderSide,
   depth: SynthDepth | null | undefined,
   quantity: number,
 ): boolean | null {
@@ -824,7 +824,7 @@ export function SynthClosedHistory({
       {error && <div className="banner banner--warn">{error}</div>}
       {!dbEnabled && (
         <div className="banner banner--warn">
-          Paper-trade storage (MongoDB) is not connected on the server, so the closed-trade log
+          Paper-trade storage (PostgreSQL) is not connected on the server, so the closed-trade log
           cannot be read. Trades closed in this session may still be listed from memory.
         </div>
       )}
@@ -1031,7 +1031,7 @@ function FragmentRow({
 /**
  * Destructive confirmation for deleting a synthetic PAPER trade.
  *
- * Built like BoxDeleteModal: it names the exact trade, says what changes, focuses
+ * Names the exact trade, says what changes, focuses
  * Cancel (so a stray Enter is safe) and closes on Escape.
  */
 export function SynthDeleteModal({

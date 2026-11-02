@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "node --import ./tests/register.mjs --test \"tests/*.test.mjs\"",
+    "test:go": "node scripts/go_backend_http_test.mjs",
+    "test:browser": "node scripts/fair_value_browser_test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

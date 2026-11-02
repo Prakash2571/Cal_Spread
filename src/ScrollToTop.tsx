@@ -6,7 +6,7 @@ type ScrollWindow = typeof window & {
   scrollTo(options: { top: number; behavior: "auto" | "smooth" }): void;
 };
 
-/** Global document navigation for long Calendar, Analytics and Box pages. */
+/** Global document navigation for long Calendar, Analytics and Synthetic pages. */
 export default function ScrollToTop() {
   const viewport = window as ScrollWindow;
   const [visible, setVisible] = useState(() => viewport.scrollY > SHOW_AFTER_PX);

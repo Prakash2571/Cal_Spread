@@ -216,7 +216,7 @@ const isServerBaselineFresh = (
   );
 };
 
-/** What each chart timeframe covers, mirroring the server's Redis retention. */
+/** What each chart timeframe covers, mirroring the server's PostgreSQL cache retention. */
 const FRAME_TITLE: Record<OiFrame, string> = {
   "1m": "1-minute buckets, last 1 day",
   "5m": "5-minute buckets, last 3 days",

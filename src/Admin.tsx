@@ -32,7 +32,7 @@ const BROKERS: { id: BrokerId; label: string; hint: string }[] = [
   {
     id: "zerodha",
     label: "Zerodha",
-    hint: "Kite market data, orders and charges",
+    hint: "Kite market data and basket margins",
   },
   {
     id: "dhan",
@@ -120,8 +120,8 @@ export default function Admin({
                 ))}
               </div>
               <p className="admin-broker-note">
-                Only one broker is active at a time. Switching is refused while any Box
-                position, working order or unresolved reconciliation exists.
+                Only one broker is active at a time. Select a configured broker;
+                switching reloads the market-data universe and preserves trade history.
               </p>
             </fieldset>
           )}
@@ -148,10 +148,10 @@ export default function Admin({
                 {blockers.length > 0 ? (
                   blockers.map((b) => <li key={b.reason}>{b.detail}</li>)
                 ) : (
-                  <li>Box exposure or in-flight work is preventing the switch.</li>
+                  <li>The server refused this broker selection.</li>
                 )}
               </ul>
-              Clear these, then change broker from the Box page.
+              Resolve the reported configuration problem, then use the Broker panel to select the broker.
             </div>
           )}
 

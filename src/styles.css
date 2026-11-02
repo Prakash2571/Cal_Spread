@@ -370,15 +370,11 @@ body {
   min-width: 0;
 }
 
-.theme-toggle,
-.box-sound-toggle,
-.box-sound-test {
+.theme-toggle {
   gap: var(--sp-2);
 }
 
-.theme-toggle svg,
-.box-sound-toggle svg,
-.box-sound-test svg {
+.theme-toggle svg {
   flex: none;
 }
 
@@ -436,15 +432,11 @@ body {
     display: none;
   }
 
-  .theme-toggle span,
-  .box-sound-toggle span,
-  .box-sound-test span {
+  .theme-toggle span {
     display: none;
   }
 
-  .theme-toggle,
-  .box-sound-toggle,
-  .box-sound-test {
+  .theme-toggle {
     width: 32px;
     padding: 0;
   }
@@ -648,7 +640,7 @@ body {
   border-color: var(--accent-fill-hover);
 }
 
-/* Global shortcut for long Calendar, Analytics, Stock and Box pages. */
+/* Global shortcut for long Calendar, Analytics, Stock and Synthetic pages. */
 .scroll-top {
   position: fixed;
   right: max(var(--sp-5), env(safe-area-inset-right));
