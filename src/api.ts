@@ -1281,6 +1281,19 @@ export interface DhanStatus {
   feed_age_ms: number | null;
   problems: string[];
   instruments: number;
+  source?: "BROKER_LOGIN" | "MANUAL";
+  persisted?: boolean;
+  broker_login?: {
+    configured: boolean;
+    auto_login_time: string;
+    fetching: boolean;
+    last_attempt_at: number | null;
+    last_fetched_at: number | null;
+    next_attempt_at: number | null;
+    last_error: string;
+    stopped: boolean;
+    paused: boolean;
+  };
   session: {
     client_id: string;
     client_name: string;
@@ -1298,43 +1311,35 @@ export async function fetchDhanStatus(): Promise<DhanStatus> {
   return readJson<DhanStatus>(res, "Failed to load the Dhan status");
 }
 
-/**
- * STEP 1 of the Dhan login: ask the backend for the browser login URL.
- *
- * The consent is generated server-side because it needs the API secret, which must
- * never reach the browser. The caller then navigates to `login_url`.
- */
-export async function beginDhanLogin(): Promise<{ login_url: string; consent_app_id: string }> {
-  const res = await fetch(`${API_BASE_URL}/api/dhan/login`, {
-    method: "POST",
-    headers: getHeaders(),
-  });
-  return readJson<{ login_url: string; consent_app_id: string }>(
-    res,
-    "Failed to start the Dhan login",
-  );
-}
-
-/**
- * STEP 3: hand the redirect's `tokenId` to the backend, which exchanges it for a
- * session and keeps the token server-side.
- *
- * The tokenId is SINGLE-USE, so the caller must guard against React StrictMode's
- * double effect invocation — exactly as the Zerodha flow does.
- */
-export async function createDhanSession(tokenId: string): Promise<{
+export interface DhanTokenResult {
   authenticated: boolean;
   broker: BrokerId;
   client_id: string | null;
   client_name: string | null;
   token_expires_at: number | null;
-}> {
-  const res = await fetch(`${API_BASE_URL}/api/dhan/session`, {
+  persisted: boolean;
+}
+
+/** Request the current token from the shared login service, through the backend. */
+export async function fetchDhanToken(): Promise<DhanTokenResult> {
+  const res = await fetch(`${API_BASE_URL}/api/dhan/login/broker`, {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({ tokenId }),
+    body: JSON.stringify({}),
+    signal: AbortSignal.timeout(80_000),
   });
-  return readJson(res, "Failed to complete the Dhan login");
+  return readJson(res, "Failed to fetch the Dhan access token");
+}
+
+/** Full-admin recovery: validate and save a pasted token without browser storage. */
+export async function pasteDhanToken(accessToken: string): Promise<DhanTokenResult> {
+  const res = await fetch(`${API_BASE_URL}/api/dhan/token`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ accessToken }),
+    signal: AbortSignal.timeout(35_000),
+  });
+  return readJson(res, "Failed to validate the pasted Dhan access token");
 }
 
 /**

@@ -26,7 +26,7 @@ VITE_API_BASE_URL=http://127.0.0.1:3001
 ```
 
 Only the backend origin belongs in `VITE_API_BASE_URL`; secrets remain on the
-server. Optional Dhan credentials and redirect settings are in the backend
+server. Optional Dhan account and shared token-service settings are in the backend
 `.env.example` and configuration guide.
 
 ## Role and broker sessions are separate
@@ -35,7 +35,7 @@ server. Optional Dhan credentials and redirect settings are in the backend
 |---|---|---|
 | Full admin | `/admin/verify` → `POST /api/admin/verify` with `ADMIN_SECRET` | Broker connection/switch, risk-free rate, raw-token controls, Calendar and Synthetic, private Fair Value |
 | Trade access | `/admin/access` → `POST /api/access/verify` with `ACCESS_SECRET` | Calendar trade management, Synthetic controls/paper close/history; no broker switch/token controls/Fair Value |
-| Broker | Full admin connects Zerodha or Dhan | Active broker's market data; separate from the UI role |
+| Broker | Zerodha browser login; Dhan token fetched automatically or pasted by full admin | Active broker's market data; separate from the UI role |
 
 Opaque admin/trade tokens contain 32 cryptographic random bytes (base64url), are
 valid for 24 hours and are validated by the backend. PostgreSQL persists them for
@@ -47,10 +47,13 @@ their existing admin/trade permissions and only delete closed records.
 ## Connect and switch brokers
 
 1. Browse **http://127.0.0.1:5173/admin/verify** and sign in.
-2. Use the Broker panel to select a configured broker and connect it.
+2. Use the Broker panel to select a configured broker.
 3. Kite redirects to `/zerodha/verify`; the frontend forwards its request token
-   to full-admin `POST /api/session`. Dhan redirects to `/dhan/verify` and uses
-   full-admin `POST /api/dhan/session`.
+   to full-admin `POST /api/session`. Dhan tokens are fetched and saved by the backend
+   from env_home after `AUTO_LOGIN_TIME` (08:30 IST by default), without a browser login.
+   Its panel shows the token source, expiry, storage and automatic fetch response.
+   Use **Fetch token now** to retry or **Paste access token → Use token** if the service
+   fails. Pasting validates the configured account before changing its saved session.
 4. Check the active broker, session, data-ready and feed state in the Broker panel.
 
 Exactly one broker is active. Trade access inherits that broker. Switching resets
@@ -61,6 +64,8 @@ and all real order-placement transports have been removed.
 Logout removes the browser's admin token and disconnects the active broker through
 its normal logout API. Clearing browser storage alone does not revoke a persisted
 role token; backend validation/expiry remains authoritative.
+Clearing the Dhan token pauses automatic fetching for that IST day. A successful
+manual paste is retained until expiry; an explicit fetch can replace it.
 
 ## Endpoint behavior
 
@@ -92,7 +97,10 @@ date-only contracts. See the backend [Fair Value guide](../Cal_Spread_Backend/do
 - **Admin authentication required:** check the configured server secret, sign in
   at the correct full/trade route, and check token expiry.
 - **No prices after signing in:** connect the active broker separately and inspect
-  its data-ready/feed state. A connected socket with no subscriptions is not LIVE.
+   its data-ready/feed state. A connected socket with no subscriptions is not LIVE.
+- **Dhan token fetch failed:** check the Broker panel's service response and backend
+  settings. Correct permanent-refusal settings and retry; use the paste-token fallback
+  when the shared service is unavailable.
 - **Wrong backend or CORS error:** match `VITE_API_BASE_URL` and `FRONTEND_URL`
   to the actual origins; use 127.0.0.1 consistently for the local OAuth flow.
 - **Storage unavailable:** start local PostgreSQL and set `DATABASE_URL` before

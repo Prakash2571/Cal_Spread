@@ -37,7 +37,7 @@ const BROKERS: { id: BrokerId; label: string; hint: string }[] = [
   {
     id: "dhan",
     label: "Dhan",
-    hint: "DhanHQ v2 — requires a separate Dhan login",
+    hint: "DhanHQ v2 — automatic token from the shared login service",
   },
 ];
 

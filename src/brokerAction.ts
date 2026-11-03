@@ -20,8 +20,8 @@ import type { BrokerId } from "./api";
 export type PrimaryAuthAction =
   /** A session exists on the active broker: offer to disconnect + sign out. */
   | { kind: "logout"; broker: BrokerId; label: "Logout" }
-  /** Dhan connects through the broker panel (an app-consent flow, not a redirect). */
-  | { kind: "connect-dhan"; broker: "dhan"; label: "Connect to Dhan" }
+  /** Dhan uses automatic token fetching, with recovery controls in the panel. */
+  | { kind: "dhan-token"; broker: "dhan"; label: "Dhan token" }
   /** Zerodha connects by redirecting to Kite's login. */
   | { kind: "connect-zerodha"; broker: "zerodha"; label: "Connect to Zerodha" };
 
@@ -40,7 +40,7 @@ export function primaryAuthAction(
     return { kind: "logout", broker: activeBroker ?? "zerodha", label: "Logout" };
   }
   if (activeBroker === "dhan") {
-    return { kind: "connect-dhan", broker: "dhan", label: "Connect to Dhan" };
+    return { kind: "dhan-token", broker: "dhan", label: "Dhan token" };
   }
   // Unknown/absent broker falls back to Zerodha, matching the backend's own default.
   return { kind: "connect-zerodha", broker: "zerodha", label: "Connect to Zerodha" };

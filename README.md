@@ -30,11 +30,17 @@ npm run dev -- --host 127.0.0.1
 Browse **http://127.0.0.1:5173**. `VITE_API_BASE_URL` is the backend origin
 (`http://127.0.0.1:3001`), with no `/api` suffix. The backend's `FRONTEND_URL` must
 match the browser origin for CORS/login redirects. Configure Kite's redirect to
-`http://127.0.0.1:5173/zerodha/verify`; Dhan uses `/dhan/verify`.
+`http://127.0.0.1:5173/zerodha/verify`. Dhan access tokens are fetched automatically
+by the backend from the shared env_home service; no Dhan browser redirect is needed.
 The backend applies embedded SQL migrations at startup. No MongoDB/Redis data import is needed.
 
 Sign in at `/admin/verify` for full access or `/admin/access` for trade access,
-then connect the selected broker. Roles, endpoint privileges and session behavior
+then use the selected broker. In **Broker → Dhan**, automatic token status is shown
+alongside **Fetch token now** and **Paste access token → Use token** for recovery.
+The paste form is masked, clears after submission and never saves the access token
+in browser storage. Configure the shared service in the backend `.env` as described
+in its [configuration guide](../Cal_Spread_Backend/docs/CONFIGURATION.md#dhan-automatic-token-flow).
+Roles, endpoint privileges and session behavior
 are documented in [`ADMIN_SETUP.md`](ADMIN_SETUP.md). Fair Value is independently
 disabled until its expiry policy/discount assumptions are configured; see the
 backend [`Fair Value guide`](../Cal_Spread_Backend/docs/FAIR_VALUE.md).

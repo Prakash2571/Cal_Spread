@@ -4936,6 +4936,32 @@ body {
   color: color-mix(in srgb, var(--fg) 62%, transparent);
 }
 
+.broker-token-note { margin-top: 0.6rem; }
+.broker-token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+}
+.broker-token-form input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+}
+.broker-token-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.broker-token-form button { align-self: flex-start; }
+.broker-row .admin-error { overflow-wrap: anywhere; }
+
 /*
  * A refused switch. Styled as a warning rather than an error: nothing broke, the
  * operator simply has exposure to clear first.

@@ -27,9 +27,9 @@ test("a connected session logs out of the ACTIVE broker", () => {
 });
 
 test("a DISCONNECTED broker offers the right connect flow", () => {
-  // Dhan is an app-consent flow through the panel; Zerodha is a redirect.
-  assert.equal(primaryAuthAction("dhan", false).kind, "connect-dhan");
-  assert.equal(primaryAuthAction("dhan", false).label, "Connect to Dhan");
+  // Dhan opens token-recovery controls; Zerodha is a redirect.
+  assert.equal(primaryAuthAction("dhan", false).kind, "dhan-token");
+  assert.equal(primaryAuthAction("dhan", false).label, "Dhan token");
   assert.equal(primaryAuthAction("zerodha", false).kind, "connect-zerodha");
   assert.equal(primaryAuthAction("zerodha", false).label, "Connect to Zerodha");
 });

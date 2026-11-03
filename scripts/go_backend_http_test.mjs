@@ -40,6 +40,24 @@ try {
   await go.request('POST', '/api/synthetic/settings', { max_open_positions: 2 }, go.full);
   assert.equal((await go.request('GET', '/api/synthetic/status', undefined, go.full)).config.max_open_positions, 2);
   checks.push('PostgreSQL Calendar charges and Synthetic records/settings');
+  for (const token of [undefined, go.trade]) {
+    await go.request('POST', '/api/dhan/login/broker', {}, token, 403);
+    await go.request('POST', '/api/dhan/token', { accessToken: 'loopback-pasted-dhan-token' }, token, 403);
+  }
+  await go.request('POST', '/api/dhan/login/broker', {}, go.full, 503);
+  const pasted = await go.request('POST', '/api/dhan/token', { accessToken: 'loopback-pasted-dhan-token' }, go.full);
+  assert.equal(pasted.authenticated, true);
+  assert.equal(pasted.persisted, true);
+  const fallback = await go.request('GET', '/api/dhan/status', undefined, go.full);
+  assert.equal(fallback.source, 'MANUAL');
+  assert.equal(fallback.session.client_id, '1100001');
+  assert.ok(!JSON.stringify(fallback).includes('loopback-pasted-dhan-token'));
+  await go.request('POST', '/api/dhan/token', { accessToken: 'loopback-rejected-dhan-token' }, go.full, 400);
+  assert.equal((await go.request('GET', '/api/dhan/status', undefined, go.full)).source, 'MANUAL');
+  await go.request('POST', '/__fixture/token-service', { available: true });
+  await go.request('POST', '/api/dhan/login/broker', {}, go.full);
+  assert.equal((await go.request('GET', '/api/dhan/status', undefined, go.full)).source, 'BROKER_LOGIN');
+  checks.push('Dhan service failure, validated/persisted paste fallback, authorization and service recovery');
   const preflight = await fetch(`${go.origin}/api/fair-value/config`, { method: 'OPTIONS',
     headers: { Origin: 'http://127.0.0.1:5175', 'Access-Control-Request-Method': 'PATCH', 'Access-Control-Request-Headers': 'content-type,x-admin-token' } });
   assert.equal(preflight.status, 204);

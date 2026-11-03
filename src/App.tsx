@@ -17,7 +17,6 @@ import {
   logoutAdmin,
   verifyAdminSecret,
   verifyAccessSecret,
-  createDhanSession,
   type BrokerId,
   createTrade,
   listTrades,
@@ -230,14 +229,6 @@ export default function App() {
 
   const tickBuffer = useRef<TickMap>({});
   const verifyGuard = useRef(false);
-  /**
-   * Separate guard for the Dhan tokenId.
-   *
-   * Its OWN ref, not shared with the Zerodha one: the two redirects can never occur in
-   * the same page load, but sharing a guard would mean whichever flow ran first
-   * silently disarmed the other.
-   */
-  const dhanVerifyGuard = useRef(false);
   const [activeBroker, setActiveBroker] = useState<BrokerId | null>(null);
   const [brokerPanelOpen, setBrokerPanelOpen] = useState(false);
 
@@ -291,7 +282,6 @@ export default function App() {
     if (route === "/fair-value") title = "Fair Value | Calspread";
     if (route.startsWith("/admin/verify")) title = "Admin Verification | Calspread";
     if (route.startsWith("/admin/access")) title = "Trade Access | Calspread";
-    if (route === "/dhan/verify") title = "Connecting Dhan | Calspread";
     if (route.startsWith("/stock/")) {
       title = `${decodeURIComponent(route.slice("/stock/".length))} | Calspread`;
     }
@@ -344,41 +334,6 @@ export default function App() {
       .catch((err: unknown) => {
         setAuthenticated(false);
         setError(err instanceof Error ? err.message : "Login failed.");
-        window.history.replaceState({}, "", "/");
-      })
-      .finally(() => setVerifying(false));
-  }, []);
-
-  // Handle the Dhan redirect at /dhan/verify?tokenId=...
-  useEffect(() => {
-    if (window.location.pathname !== "/dhan/verify") return;
-    // A tokenId is SINGLE-USE, exactly like Zerodha's request_token. Without this
-    // guard React StrictMode's double effect invocation consumes it twice and the
-    // second attempt fails, which looks like a broken login.
-    if (dhanVerifyGuard.current) return;
-    dhanVerifyGuard.current = true;
-
-    const params = new URLSearchParams(window.location.search);
-    const tokenId = params.get("tokenId");
-
-    if (!tokenId) {
-      setError("Dhan login was cancelled or rejected. Please try again.");
-      window.history.replaceState({}, "", "/");
-      return;
-    }
-
-    setVerifying(true);
-    createDhanSession(tokenId)
-      .then((session) => {
-        // The Dhan SESSION is now live. Note this does not by itself switch the
-        // active broker — that is a separate, guarded step, so connecting Dhan can
-        // never silently move the system off Zerodha while exposure is open.
-        setActiveBroker(session.broker);
-        setError(null);
-        window.history.replaceState({}, "", "/");
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Dhan login failed.");
         window.history.replaceState({}, "", "/");
       })
       .finally(() => setVerifying(false));
@@ -458,6 +413,12 @@ export default function App() {
     }, 7000);
     return () => clearInterval(id);
   }, [refreshRuntime]);
+
+  // Automatic login can complete after the initial board request found no session.
+  // Recover the board on that transition without requiring a browser reload.
+  useEffect(() => {
+    if (authenticated && board.length === 0) void loadBoard();
+  }, [authenticated]);
 
   // Live market data for the whole board, for ANY visitor once the active broker has a
   // session (not just the admin who logged in).
@@ -1018,7 +979,7 @@ export default function App() {
                       <span className="btn-badge">{openTradeSymbols.size}</span>
                     )}
                   </button>
-                  {isFullAdmin && authenticated && (
+                  {isFullAdmin && authenticated && activeBroker === "zerodha" && (
                     <button
                       className="btn"
                       onClick={() => setTokenModalOpen(true)}
@@ -1055,7 +1016,7 @@ export default function App() {
               >
                 {authAction.label}
               </button>
-            ) : authAction.kind === "connect-dhan" ? (
+            ) : authAction.kind === "dhan-token" ? (
               <button className="btn btn--primary" onClick={() => setBrokerPanelOpen(true)}>
                 {authAction.label}
               </button>
@@ -1081,9 +1042,9 @@ export default function App() {
           {activeBroker === "dhan" ? (
             <>
               <button className="link link--button" onClick={() => setBrokerPanelOpen(true)}>
-                Connect Dhan
+                Dhan token controls
               </button>{" "}
-              to stream live prices &amp; premium/discount.
+              let you retry automatic token fetching or paste a fallback token to restore live prices.
               {runtime?.problems && runtime.problems.length > 0 && (
                 // Every reason, never collapsed into one vague line.
                 <ul className="banner-reasons">

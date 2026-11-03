@@ -17,12 +17,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  beginDhanLogin,
+  fetchDhanToken,
   fetchBrokerStatus,
   fetchDhanStatus,
   loginUrl,
   logout as logoutZerodha,
   logoutDhan,
+  pasteDhanToken,
   selectBroker,
   verifyDhanIp,
   type BrokerId,
@@ -60,6 +61,10 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blockers, setBlockers] = useState<BrokerSwitchBlocker[] | null>(null);
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [accessToken, setAccessToken] = useState("");
+  const operationBusy = useRef(false);
+  const refreshVersion = useRef(0);
 
   /**
    * Held in a ref so `refresh` has a STABLE identity.
@@ -77,14 +82,20 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
   }, [onBrokerChanged]);
 
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
     try {
-      const next = await fetchBrokerStatus();
+      const [next, nextDhan] = await Promise.all([
+        fetchBrokerStatus(),
+        fetchDhanStatus().catch(() => null),
+      ]);
+      if (version !== refreshVersion.current) return;
       setStatus(next);
       onBrokerChangedRef.current?.(next.broker);
       // Dhan detail is best-effort: a Zerodha-only deployment has none, and that must
       // not surface as an error on this panel.
-      setDhan(await fetchDhanStatus().catch(() => null));
+      setDhan(nextDhan);
     } catch (err) {
+      if (version !== refreshVersion.current) return;
       setError(err instanceof Error ? err.message : "Failed to load the broker status.");
     }
     // No dependency on the prop — see onBrokerChangedRef above. This must stay [] so the
@@ -93,9 +104,19 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
 
   useEffect(() => {
     void refresh();
+    const timer = window.setInterval(() => {
+      if (!operationBusy.current) void refresh();
+    }, 5000);
+    return () => {
+      window.clearInterval(timer);
+      refreshVersion.current++;
+    };
   }, [refresh]);
 
   async function handleSelect(broker: BrokerId) {
+    if (operationBusy.current) return;
+    operationBusy.current = true;
+    refreshVersion.current++;
     setBusy(`select:${broker}`);
     setError(null);
     setBlockers(null);
@@ -114,25 +135,54 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
       if (withBlockers.blockers) setBlockers(withBlockers.blockers);
       setError(withBlockers.message);
     } finally {
+      operationBusy.current = false;
       setBusy(null);
     }
   }
 
-  async function handleConnectDhan() {
-    setBusy("connect:dhan");
+  async function handleFetchDhanToken() {
+    if (operationBusy.current) return;
+    operationBusy.current = true;
+    refreshVersion.current++;
+    setBusy("fetch:dhan");
     setError(null);
     try {
-      // The consent is generated server-side (it needs the API secret), and the
-      // browser then completes Dhan's own login.
-      const { login_url } = await beginDhanLogin();
-      window.location.href = login_url;
+      await fetchDhanToken();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start the Dhan login.");
+      setError(err instanceof Error ? err.message : "Failed to fetch the Dhan access token.");
+      setShowTokenInput(true);
+    } finally {
+      await refresh();
+      operationBusy.current = false;
+      setBusy(null);
+    }
+  }
+
+  async function handlePasteDhanToken(event: React.FormEvent) {
+    event.preventDefault();
+    if (operationBusy.current || !accessToken.trim()) return;
+    const token = accessToken.trim();
+    setAccessToken("");
+    operationBusy.current = true;
+    refreshVersion.current++;
+    setBusy("paste:dhan");
+    setError(null);
+    try {
+      await pasteDhanToken(token);
+      setShowTokenInput(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to use the pasted access token.");
+    } finally {
+      await refresh();
+      operationBusy.current = false;
       setBusy(null);
     }
   }
 
   async function handleVerifyIp() {
+    if (operationBusy.current) return;
+    operationBusy.current = true;
+    refreshVersion.current++;
     setBusy("verify:ip");
     setError(null);
     try {
@@ -144,11 +194,15 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify the static IP.");
     } finally {
+      operationBusy.current = false;
       setBusy(null);
     }
   }
 
   async function handleDisconnect(broker: BrokerId) {
+    if (operationBusy.current) return;
+    operationBusy.current = true;
+    refreshVersion.current++;
     setBusy(`disconnect:${broker}`);
     setError(null);
     try {
@@ -158,6 +212,7 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to disconnect.");
     } finally {
+      operationBusy.current = false;
       setBusy(null);
     }
   }
@@ -273,8 +328,7 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
 
                   {!configured && (
                     <p className="broker-row-note">
-                      Not configured on the server — set DHAN_CLIENT_ID, DHAN_API_KEY and
-                      DHAN_API_SECRET.
+                      Set DHAN_CLIENT_ID on the server to fetch or paste this account's token.
                     </p>
                   )}
 
@@ -294,8 +348,7 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
                       </button>
                     )}
 
-                    {/* Connect is broker-specific: Zerodha is a redirect to Kite,
-                        Dhan needs a server-side consent first. */}
+                    {/* Dhan tokens are fetched server-side; no browser login is needed. */}
                     {broker === "zerodha" ? (
                       <a
                         className="btn btn--sm"
@@ -305,17 +358,30 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
                         {isConnected ? "Reconnect Zerodha" : "Connect Zerodha"}
                       </a>
                     ) : (
-                      <button
-                        className="btn btn--sm"
-                        disabled={!isFullAdmin || !configured || busy !== null}
-                        onClick={() => void handleConnectDhan()}
-                      >
-                        {busy === "connect:dhan"
-                          ? "Opening Dhan…"
-                          : isConnected
-                            ? "Reconnect Dhan"
-                            : "Connect Dhan"}
-                      </button>
+                      <>
+                        <button
+                          className="btn btn--sm"
+                          disabled={!isFullAdmin || !dhan?.broker_login?.configured || busy !== null || dhan.broker_login.fetching}
+                          onClick={() => void handleFetchDhanToken()}
+                        >
+                          {busy === "fetch:dhan" || dhan?.broker_login?.fetching ? "Fetching token…" : "Fetch token now"}
+                        </button>
+                        {isFullAdmin && (
+                          <button
+                            type="button"
+                            className="btn btn--sm"
+                            disabled={!configured || busy !== null || dhan?.broker_login?.fetching}
+                            aria-expanded={showTokenInput}
+                            aria-controls="dhan-token-form"
+                            onClick={() => {
+                              setAccessToken("");
+                              setShowTokenInput((open) => !open);
+                            }}
+                          >
+                            {showTokenInput ? "Hide token input" : "Paste access token"}
+                          </button>
+                        )}
+                      </>
                     )}
 
                     {isConnected && (
@@ -325,10 +391,63 @@ export default function BrokerPanel({ isFullAdmin, onClose, onBrokerChanged }: P
                         title={`Drop the ${broker} session`}
                         onClick={() => void handleDisconnect(broker)}
                       >
-                        {busy === `disconnect:${broker}` ? "…" : "Disconnect"}
+                        {busy === `disconnect:${broker}` ? "…" : broker === "dhan" ? "Clear token" : "Disconnect"}
                       </button>
                     )}
                   </div>
+                  {broker === "dhan" && (
+                    <>
+                      <p className="broker-row-note broker-token-note">
+                        {dhan?.broker_login?.configured
+                          ? `Tokens are fetched and saved automatically from ${dhan.broker_login.auto_login_time} IST.`
+                          : "Automatic token fetching is not configured. You can paste a token below."}
+                        {dhan?.broker_login?.paused && " Automatic fetching is paused for today after clearing the token."}
+                        {dhan?.broker_login?.stopped && " Automatic fetching stopped; check the reported error and retry or paste a token."}
+                      </p>
+                      {dhan?.session && (
+                        <dl className="broker-feed-grid">
+                          <dt>Account</dt>
+                          <dd>{dhan.session.client_id}</dd>
+                          <dt>Token source</dt>
+                          <dd>{dhan.source === "MANUAL" ? "Pasted fallback" : dhan.source === "BROKER_LOGIN" ? "Shared login service" : "Saved session"}</dd>
+                          <dt>Expires</dt>
+                          <dd>{dhan.token_expires_at ? new Date(dhan.token_expires_at).toLocaleString() : "Not supplied by Dhan"}</dd>
+                          {dhan.persisted !== undefined && (
+                            <><dt>Storage</dt><dd>{dhan.persisted ? "Saved · survives restarts" : "Memory only · PostgreSQL unavailable"}</dd></>
+                          )}
+                        </dl>
+                      )}
+                      {dhan?.broker_login?.last_fetched_at && (
+                        <p className="broker-row-note">Last fetched: {new Date(dhan.broker_login.last_fetched_at).toLocaleString()}</p>
+                      )}
+                      {dhan?.broker_login?.next_attempt_at && !dhan.authenticated && !dhan.broker_login.stopped && (
+                        <p className="broker-row-note">Next automatic check: {new Date(dhan.broker_login.next_attempt_at).toLocaleString()}</p>
+                      )}
+                      {dhan?.broker_login?.last_error && (
+                        <p className="admin-error" role="status">{dhan.broker_login.last_error}</p>
+                      )}
+                      {isFullAdmin && showTokenInput && (
+                        <form id="dhan-token-form" className="broker-token-form" autoComplete="off" onSubmit={(event) => void handlePasteDhanToken(event)}>
+                          <label htmlFor="dhan-access-token">Dhan access token</label>
+                          <input
+                            id="dhan-access-token"
+                            type="password"
+                            value={accessToken}
+                            onChange={(event) => setAccessToken(event.target.value)}
+                            placeholder="Paste your access token"
+                            autoComplete="off"
+                            spellCheck={false}
+                            disabled={busy !== null || dhan?.broker_login?.fetching}
+                            required
+                          />
+                          <p className="broker-row-note">Validated for the server's DHAN_CLIENT_ID before saving. A valid pasted fallback is kept until expiry.</p>
+                          <button type="submit" className="btn btn--sm btn--primary" disabled={!accessToken.trim() || busy !== null || dhan?.broker_login?.fetching}>
+                            {busy === "paste:dhan" ? "Validating token…" : "Use token"}
+                          </button>
+                        </form>
+                      )}
+                    </>
+                  )}
                 </div>
               );
             })}
