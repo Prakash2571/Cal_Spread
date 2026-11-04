@@ -7,4 +7,4 @@ The backend independently enforces authorization. Verify integration with `npm r
 against local PostgreSQL and `npm run test:browser` with locally installed Firefox/geckodriver.
 Do not deploy or arm trading.
 
-Cross-repository task record: `../Cal_Spread_Backend/tasks/2026-11-03-broker-login-token/`.
+Cross-repository task record: `../Cal_Spread_Backend/tasks/2026-11-04-spike-paper-straddles/`.

@@ -5699,3 +5699,41 @@ body {
   color: var(--text-3);
   white-space: nowrap;
 }
+/* Spike: fixed-rule NIFTY/SENSEX paper monitor. */
+.spike-page { max-width: 1500px; margin: 0 auto; padding: 24px; }
+.spike-header, .spike-header-actions, .spike-controls, .spike-frame-buttons, .spike-pnl-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.spike-header { margin-bottom: 22px; }
+.spike-header h1 { margin: 0; font-size: 26px; }
+.spike-header p { margin: 5px 0 0; color: var(--text-2); font-size: 13px; }
+.spike-header-actions { margin-left: auto; }
+.spike-paper-label { border: 1px solid #eab30880; color: #eab308; padding: 5px 10px; border-radius: 999px; font-size: 12px; }
+.spike-muted { color: var(--text-2); font-size: 12px; }
+.spike-controls { margin-bottom: 20px; }
+.spike-selected { background: #2563eb !important; color: #fff !important; }
+.spike-pnl-summary { margin-left: auto; font-size: 12px; }
+.spike-pnl-summary strong { display: block; margin-top: 4px; font-size: 18px; }
+.spike-index-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.spike-index, .spike-trades, .spike-rules, .spike-notice { border: 1px solid var(--border); background: var(--surface-1); border-radius: 12px; padding: 18px; min-width: 0; }
+.spike-index header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.spike-index h2, .spike-trades h2 { margin: 0 0 7px; font-size: 17px; }
+.spike-metrics { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-2); }
+.spike-metrics strong { display: block; color: var(--text-1); margin-top: 4px; font: 15px var(--font-mono, monospace); }
+.spike-index-note { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--text-2); font-size: 12px; margin: 14px 0; }
+.spike-chart-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.spike-chart-grid article { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.spike-chart-grid h3 { margin: 0 0 10px; font-size: 13px; display: flex; justify-content: space-between; }
+.spike-chart-grid h3 span { color: var(--text-2); font-weight: 400; }
+.spike-index footer { margin-top: 12px; }
+.spike-last-signal { font-size: 12px; margin-bottom: 0; }
+.spike-trades, .spike-rules { margin-top: 18px; }
+.spike-table-scroll { overflow-x: auto; }
+.spike-trades table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.spike-trades th, .spike-trades td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.spike-trades small { display: block; color: var(--text-2); font-size: 11px; margin-top: 5px; line-height: 1.6; }
+.spike-positive { color: #22c55e; }
+.spike-negative { color: #ef4444; }
+.spike-error { border: 1px solid #ef444480; background: #ef444415; color: #ef4444; padding: 12px; border-radius: 8px; margin-bottom: 14px; }
+.spike-rules summary { cursor: pointer; font-weight: 600; }
+.spike-rules li { margin-top: 10px; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+@media (max-width: 900px) { .spike-index-grid { grid-template-columns: minmax(0, 1fr); } .spike-header-actions, .spike-pnl-summary { margin-left: 0; } }
+@media (max-width: 480px) { .spike-page { padding: 12px; } .spike-index, .spike-trades { padding: 12px; } .spike-header h1 { font-size: 22px; } }

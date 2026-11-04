@@ -1,0 +1,111 @@
+{
+  "task": "2026-11-04-spike-paper-straddles",
+  "date": "2026-11-04",
+  "purpose": "Jev-assisted visual and entry-rule wording review during the Spike build",
+  "data_scope": "Generated loopback Dhan fixture screenshots and focused UI rule descriptions. No production sessions, credentials, personal data or real positions.",
+  "transport": "Live-documented HTTP API from TypeScript; official SDK unavailable in the existing installation",
+  "model_requested": "jev-latest",
+  "model_returned": "jev-1.14.0",
+  "thresholds": { "no": 0.3, "yes": 0.7, "unsettled": "Manual inspection; no automatic all-clear" },
+  "questions": {
+    "desktop_time_labels_clipped": "Is a chart's rightmost time label cut off horizontally in `screenshots.desktop`?",
+    "mobile_time_labels_clipped": "Is a NIFTY chart's rightmost time label cut off horizontally in `screenshots.mobile_top`?",
+    "mobile_paper_only_visible": "Does `screenshots.mobile_top` visibly label the monitor as paper only?",
+    "desktop_premium_vwap_separate": "Are the minimum-straddle premium and VWAP shown in separate plots in `screenshots.desktop`?",
+    "upward_exact_crossover": "Does `entry_rule_text.upward` require the 5% move to already qualify at the VWAP crossover?",
+    "downward_rolling_window": "Does `entry_rule_text.downward` explicitly limit the earlier comparison value to the preceding thirty minutes?",
+    "negative_delayed_exact_crossover": "Does `entry_rule_text.delayed_negative` require the 5% move to already qualify at the VWAP crossover?"
+  },
+  "negative_case": "After an upward VWAP crossover, wait until the premium becomes 5% higher, then enter the call spread.",
+  "expected": {
+    "desktop_time_labels_clipped": false,
+    "mobile_time_labels_clipped": false,
+    "mobile_paper_only_visible": true,
+    "desktop_premium_vwap_separate": true,
+    "upward_exact_crossover": true,
+    "downward_rolling_window": true,
+    "negative_delayed_exact_crossover": false
+  },
+  "paths_relative_to": "Cal_Spread repository root",
+  "calls": [
+    {
+      "case": "baseline",
+      "http_status": 200,
+      "exact_request": "scratch/jev-spike-review/baseline/request.json",
+      "request_sha256": "a301727a6d13f77d726e37df621c46a0b3e1e6249161b722e06767466ebcfa0a",
+      "complete_result": "scratch/jev-spike-review/baseline/result.json",
+      "image_manifest": "scratch/jev-spike-review/baseline/images.json",
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "desktop_time_labels_clipped": { "type": "noul", "noul": 0.8 },
+          "mobile_time_labels_clipped": { "type": "noul", "noul": 0.51 },
+          "mobile_paper_only_visible": { "type": "noul", "noul": 0.98 },
+          "desktop_premium_vwap_separate": { "type": "noul", "noul": 1 },
+          "upward_exact_crossover": { "type": "noul", "noul": 0.94 },
+          "downward_rolling_window": { "type": "noul", "noul": 0.13 },
+          "negative_delayed_exact_crossover": { "type": "noul", "noul": 0.09 }
+        },
+        "usage": { "input_tokens": 8142, "output_tokens": 153 }
+      },
+      "estimated_spend_usd": 0.000341964,
+      "retries": 0
+    },
+    {
+      "case": "revised",
+      "http_status": 200,
+      "exact_request": "scratch/jev-spike-review/revised/request.json",
+      "request_sha256": "bd0799b61d5903f10773a9ac47ec4492b2a6f174554a5af3217827d0009b9b15",
+      "complete_result": "scratch/jev-spike-review/revised/result.json",
+      "image_manifest": "scratch/jev-spike-review/revised/images.json",
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "desktop_time_labels_clipped": { "type": "noul", "noul": 0.08 },
+          "mobile_time_labels_clipped": { "type": "noul", "noul": 0.11 },
+          "mobile_paper_only_visible": { "type": "noul", "noul": 0.99 },
+          "desktop_premium_vwap_separate": { "type": "noul", "noul": 1 },
+          "upward_exact_crossover": { "type": "noul", "noul": 0.95 },
+          "downward_rolling_window": { "type": "noul", "noul": 0.99 },
+          "negative_delayed_exact_crossover": { "type": "noul", "noul": 0.08 }
+        },
+        "usage": { "input_tokens": 8153, "output_tokens": 153 }
+      },
+      "estimated_spend_usd": 0.000342426,
+      "retries": 0
+    }
+  ],
+  "total": {
+    "requests": 2,
+    "judgments": 14,
+    "input_tokens": 16295,
+    "free_output_tokens": 306,
+    "price_usd_per_million_input_tokens": 0.042,
+    "estimated_spend_usd": 0.00068439,
+    "allowance_usd": 0.01,
+    "remaining_usd": 0.00931561,
+    "retries": 0,
+    "unknown_usage_reserve_usd": 0
+  },
+  "actions": [
+    "Browser geometry reproduced clipped rightmost time labels on all four desktop charts; fitted endpoint labels now anchor inside the canvas.",
+    "The downward entry description now explicitly names price-driven VWAP crossover timing and the preceding thirty-minute comparison window.",
+    "Initial mobile clipping was unsettled; measured SVG bounds, rather than probability alone, resolved it.",
+    "Same questions, criteria and thresholds rechecked the revised page; every expected proposition settled. Strategy arithmetic and trade decisions remain deterministic code."
+  ],
+  "browser_confirmation": {
+    "browser": "Firefox 157.0",
+    "evidence": "scratch/go-integration/spike-browser-L4L9a0/report.json",
+    "passed_workflows": 6,
+    "desktop_labels_within_svg": 20,
+    "mobile_labels_within_svg": 12,
+    "mobile_width": 390,
+    "mobile_scroll_width": 378
+  },
+  "reproduction": {
+    "question_module": "scratch/jev-spike-review/review.ts",
+    "image_preparation": "scratch/jev-spike-review/prepare.py",
+    "budget_ledger": "scratch/jev-spike-review/budget.json",
+    "notes": "Exact requests include PNG bytes and criteria and are retained locally in ignored scratch; no cleanup performed. This receipt publishes the actual returned judgments and usage without credentials."
+  }
+}

@@ -371,7 +371,8 @@ export default function LineChart({
         )}
 
         {Array.from(xLabelIdx).map((i) => (
-          <text key={i} x={xAt(i)} y={H - 10} className="chart-xlabel">
+          <text key={i} x={xAt(i)} y={H - 10} className="chart-xlabel"
+            style={fit && n > 1 && i === n - 1 ? { textAnchor: "end" } : undefined}>
             {formatX(allDates[i]!)}
           </text>
         ))}

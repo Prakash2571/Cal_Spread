@@ -58,6 +58,42 @@ try {
   await go.request('POST', '/api/dhan/login/broker', {}, go.full);
   assert.equal((await go.request('GET', '/api/dhan/status', undefined, go.full)).source, 'BROKER_LOGIN');
   checks.push('Dhan service failure, validated/persisted paste fallback, authorization and service recovery');
+  await go.request('GET', '/api/spike/status', undefined, undefined, 403);
+  await go.request('POST', '/api/broker/select', { broker: 'dhan' }, go.full);
+  for (const symbol of ['NIFTY', 'SENSEX']) {
+    for (const frame of ['1m', '5m', '30m', '1h']) {
+      const history = await go.request('GET', `/api/spike/series?symbol=${symbol}&frame=${frame}`, undefined, go.trade);
+      assert.ok(history.points.length > 0);
+    }
+  }
+  await delay(600);
+  await go.request('POST', '/__fixture/spike', { stage: 1 });
+  await delay(600);
+  await go.request('POST', '/__fixture/spike', { stage: 2 });
+  let spike;
+  for (let n = 0; n < 40; n++) {
+    spike = await go.request('GET', '/api/spike/status', undefined, go.trade);
+    if (spike.open.length === 2) break;
+    await delay(150);
+  }
+  assert.equal(spike.open.length, 2);
+  const niftySpread = spike.open.find((trade) => trade.symbol === 'NIFTY');
+  assert.equal(niftySpread.direction, 'CALL_CREDIT');
+  assert.equal(niftySpread.quantity, 75);
+  assert.equal(niftySpread.hedge.strike - niftySpread.short.strike, 200);
+  const sensexSpread = spike.open.find((trade) => trade.symbol === 'SENSEX');
+  assert.equal(sensexSpread.direction, 'PUT_CREDIT');
+  assert.equal(sensexSpread.quantity, 20);
+  assert.equal(sensexSpread.short.strike - sensexSpread.hedge.strike, 400);
+  await go.request('POST', '/__fixture/spike', { stage: 3 });
+  await delay(600);
+  const spikeExit = await go.request('POST', `/api/spike/trades/${niftySpread.id}/close`, {}, go.trade);
+  assert.equal(spikeExit.pnl, -75);
+  await go.request('POST', `/api/spike/trades/${sensexSpread.id}/close`, {}, go.trade);
+  await go.request('POST', '/api/spike/paper', { enabled: false }, go.trade);
+  assert.equal((await go.request('GET', '/api/spike/status', undefined, go.full)).paper_enabled, false);
+  await go.request('POST', '/api/broker/select', { broker: 'zerodha' }, go.full);
+  checks.push('Spike real Dhan binary WebSocket, both-index fourth-OTM one-lot entries, history, manual P&L and persisted paper control');
   const preflight = await fetch(`${go.origin}/api/fair-value/config`, { method: 'OPTIONS',
     headers: { Origin: 'http://127.0.0.1:5175', 'Access-Control-Request-Method': 'PATCH', 'Access-Control-Request-Headers': 'content-type,x-admin-token' } });
   assert.equal(preflight.status, 204);

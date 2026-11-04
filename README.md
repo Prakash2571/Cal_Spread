@@ -5,6 +5,11 @@ in [`../Cal_Spread_Backend`](../Cal_Spread_Backend/). Calendar spreads, broker
 controls, stock/history charts, option analytics, Synthetic paper trading and
 full-admin Fair Value are retained. The Box page, tab, controls and API calls are removed.
 
+**Spike** at `/spike` adds continuous NIFTY/SENSEX minimum-straddle and VWAP
+monitoring, separate 1m/5m/30m/1h plots, primary fourth-OTM one-lot paper spreads
+and manual exit P&L. It requires no new environment variables. Rules and formulas
+are documented in [the paired Spike guide](../Cal_Spread_Backend/docs/SPIKE.md).
+
 ## Fresh local setup
 
 Use Node 22/npm for the frontend, Go 1.25.x and PostgreSQL 18 for the backend.
@@ -86,6 +91,14 @@ are retained under ignored `scratch/go-integration/`.
 
 GitHub CI builds/tests locked frontend dependencies and runs real-Go HTTP verification
 with the paired backend main and a PostgreSQL 18.0 service. Browser verification is local.
+
+`npm run test:spike:browser` runs Spike's separate fresh-fixture browser workflow:
+both index charts/timeframes, persisted paper control, real Dhan binary-feed signal
+entries, manual exit P&L, mobile containment and public-page authorization. It uses
+the same existing Firefox/geckodriver setup documented above.
+
+The [Jev-assisted build review receipt](outputs/2026-11-04-spike-jev-review.json)
+records the actual typed screenshot/rule judgments, confirmed fixes and token usage.
 
 ## Source and handoff
 
