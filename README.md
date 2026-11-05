@@ -99,6 +99,8 @@ the same existing Firefox/geckodriver setup documented above.
 
 The [Jev-assisted build review receipt](outputs/2026-11-04-spike-jev-review.json)
 records the actual typed screenshot/rule judgments, confirmed fixes and token usage.
+The [Spike publication receipt](outputs/2026-11-05-spike-publication.md) links both
+verified feature commits, matching CI and the operator rollout action.
 
 ## Source and handoff
 
