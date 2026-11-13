@@ -108,10 +108,10 @@ try {
     await browser.wait("document.querySelectorAll('.spike-straddle-plot > svg').length === 2");
   }
   checks.push('all four chart timeframes');
-  await browser.button('Pause paper entries');
-  await browser.wait("[...document.querySelectorAll('button')].some((button) => button.textContent === 'Resume paper entries')");
+  await browser.button('Pause');
+  await browser.wait("[...document.querySelectorAll('button')].some((button) => button.textContent === 'Run')");
   assert.equal((await go.request('GET', '/api/spike/status', undefined, go.trade)).paper_enabled, false);
-  await browser.button('Resume paper entries');
+  await browser.button('Run');
   await delay(600);
   await go.request('POST', '/__fixture/spike', { stage: 1 });
   await delay(600);

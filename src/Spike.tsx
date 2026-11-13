@@ -128,7 +128,7 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
   return <main className="spike-page">
     <header className="spike-header">
       <button className="btn" type="button" onClick={onBack}>← Board</button>
-      <div><h1>Spike</h1><p>NIFTY & SENSEX · minimum straddle · one-lot paper spreads</p></div>
+      <div className="spike-header-title"><h1>Spike</h1><p>NIFTY & SENSEX · minimum straddle · one-lot paper spreads</p></div>
       <div className="spike-header-actions"><ThemeToggle />
         <span className={`status status--${live && snapshot?.connected ? "live" : "idle"}`}>{live && snapshot?.connected ? "Dhan WebSocket live" : "Waiting for Dhan"}</span>
         <span className="spike-paper-label">Paper only</span>
@@ -138,8 +138,8 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
       {(error || snapshot?.error || chartError) && <div className="spike-error" role="alert">{error || snapshot?.error || chartError}</div>}
       <section className="spike-controls">
         <div className="spike-frame-buttons" aria-label="Chart timeframe">{FRAMES.map((value) => <button type="button" key={value} className={`btn ${frame === value ? "spike-selected" : ""}`} aria-pressed={frame === value} onClick={() => setFrame(value)}>{value}</button>)}</div>
-        <button type="button" className="btn" disabled={busy !== null || !snapshot?.database} onClick={() => void togglePaper()}>{snapshot?.paper_enabled ? "Pause paper entries" : "Resume paper entries"}</button>
-        <span className="spike-muted">Monitoring continues while paper entries are paused.</span>
+        <button type="button" className={`spike-run-btn${snapshot?.paper_enabled ? " spike-run-btn--running" : " spike-run-btn--paused"}`} disabled={busy !== null || !snapshot?.database} aria-pressed={snapshot?.paper_enabled ?? false} onClick={() => void togglePaper()}>{snapshot?.paper_enabled ? "Pause" : "Run"}</button>
+        <span className={`spike-run-status${snapshot?.paper_enabled ? " spike-run-status--running" : " spike-run-status--paused"}`}>{snapshot?.paper_enabled ? "Running" : "Paused — monitoring continues"}</span>
         <div className="spike-pnl-summary"><span>Open gross P&L <strong className={openPNL >= 0 ? "spike-positive" : "spike-negative"}>₹{price(openPNL)}</strong></span><span>Closed today <strong className={closedPNL >= 0 ? "spike-positive" : "spike-negative"}>₹{price(closedPNL)}</strong></span></div>
       </section>
       {!snapshot?.database && <p className="spike-notice">Charts can monitor in memory. Durable paper entries use the existing PostgreSQL configuration.</p>}

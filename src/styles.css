@@ -5702,41 +5702,68 @@ body {
 /* Spike: fixed-rule NIFTY/SENSEX paper monitor. */
 .spike-page { max-width: 1500px; margin: 0 auto; padding: 24px; }
 .spike-header, .spike-header-actions, .spike-controls, .spike-frame-buttons, .spike-pnl-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.spike-header { margin-bottom: 22px; }
-.spike-header h1 { margin: 0; font-size: 26px; }
-.spike-header p { margin: 5px 0 0; color: var(--text-2); font-size: 13px; }
+.spike-header { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.spike-header h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.01em; }
+.spike-header p { margin: 4px 0 0; color: var(--text-2); font-size: 12px; }
 .spike-header-actions { margin-left: auto; }
-.spike-paper-label { border: 1px solid #eab30880; color: #eab308; padding: 5px 10px; border-radius: 999px; font-size: 12px; }
+.spike-header .btn, .spike-header .status, .spike-paper-label { border-radius: 0; }
+.spike-paper-label { border: 1px solid #eab30880; color: #eab308; padding: 5px 10px; font-size: 12px; font-weight: 500; }
 .spike-muted { color: var(--text-2); font-size: 12px; }
-.spike-controls { margin-bottom: 20px; }
-.spike-selected { background: #2563eb !important; color: #fff !important; }
-.spike-pnl-summary { margin-left: auto; font-size: 12px; }
-.spike-pnl-summary strong { display: block; margin-top: 4px; font-size: 18px; }
-.spike-index-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.spike-index, .spike-trades, .spike-rules, .spike-notice { border: 1px solid var(--border); background: var(--surface-1); border-radius: 12px; padding: 18px; min-width: 0; }
-.spike-index header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.spike-index h2, .spike-trades h2 { margin: 0 0 7px; font-size: 17px; }
-.spike-metrics { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-2); }
-.spike-metrics strong { display: block; color: var(--text-1); margin-top: 4px; font: 15px var(--font-mono, monospace); }
-.spike-index-note { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--text-2); font-size: 12px; margin: 14px 0; }
+.spike-controls { margin-bottom: 18px; padding: 10px 12px; border: 1px solid var(--border); background: var(--surface-1); border-radius: 0; gap: 10px; }
+.spike-frame-buttons { gap: 0; }
+.spike-frame-buttons .btn { border-radius: 0; }
+.spike-frame-buttons .btn + .btn { border-left: 0; }
+.spike-selected { background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; }
+.spike-run-btn { appearance: none; display: inline-flex; align-items: center; justify-content: center; min-height: 32px; min-width: 76px; padding: 0 18px; border: 1px solid var(--border); border-radius: 0; background: var(--surface-2); color: var(--text-1); font: inherit; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.spike-run-btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); }
+.spike-run-btn:disabled { opacity: 0.45; cursor: default; }
+.spike-run-btn--paused { background: #22c55e; border-color: #22c55e; color: #04120a; }
+.spike-run-btn--paused:hover:not(:disabled) { background: #1eb356; border-color: #1eb356; }
+.spike-run-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.spike-run-status::before { content: ""; width: 8px; height: 8px; flex: none; }
+.spike-run-status--running::before { background: #22c55e; }
+.spike-run-status--paused::before { background: #eab308; }
+.spike-pnl-summary { margin-left: auto; font-size: 11px; color: var(--text-2); gap: 0; }
+.spike-pnl-summary span { padding: 0 14px; }
+.spike-pnl-summary span + span { border-left: 1px solid var(--border); }
+.spike-pnl-summary span:first-child { padding-left: 0; }
+.spike-pnl-summary span:last-child { padding-right: 0; }
+.spike-pnl-summary strong { display: block; margin-top: 3px; font: 600 17px var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+.spike-index-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.spike-index, .spike-trades, .spike-rules, .spike-notice { border: 1px solid var(--border); background: var(--surface-1); border-radius: 0; padding: 16px 18px; min-width: 0; }
+.spike-index header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); }
+.spike-index h2, .spike-trades h2 { margin: 0 0 6px; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+.spike-metrics { display: flex; flex-wrap: wrap; font-size: 11px; color: var(--text-2); }
+.spike-metrics span { padding: 0 14px; }
+.spike-metrics span + span { border-left: 1px solid var(--border-subtle); }
+.spike-metrics span:first-child { padding-left: 0; }
+.spike-metrics span:last-child { padding-right: 0; }
+.spike-metrics strong { display: block; color: var(--text-1); margin-top: 4px; font: 600 15px var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+.spike-index-note { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; color: var(--text-2); font-size: 12px; margin: 12px 0; }
 .spike-chart-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
-.spike-chart-grid article { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.spike-chart-grid article { min-width: 0; border: 1px solid var(--border); border-radius: 0; padding: 10px; }
 .spike-chart-grid h3 { margin: 0 0 10px; font-size: 13px; display: flex; justify-content: space-between; }
 .spike-chart-grid h3 span { color: var(--text-2); font-weight: 400; }
 .spike-index footer { margin-top: 12px; }
-.spike-last-signal { font-size: 12px; margin-bottom: 0; }
-.spike-trades, .spike-rules { margin-top: 18px; }
+.spike-last-signal { font-size: 12px; margin: 12px 0 0; padding: 9px 12px; border-left: 2px solid #eab308; background: var(--surface-2); color: var(--text-1); }
+.spike-trades, .spike-rules { margin-top: 16px; }
+.spike-trades h2 { padding-bottom: 10px; border-bottom: 1px solid var(--border-subtle); }
 .spike-table-scroll { overflow-x: auto; }
 .spike-trades table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.spike-trades th, .spike-trades td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.spike-trades small { display: block; color: var(--text-2); font-size: 11px; margin-top: 5px; line-height: 1.6; }
+.spike-trades th, .spike-trades td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; }
+.spike-trades thead th { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); padding: 10px 10px 8px; border-bottom: 1px solid var(--border); }
+.spike-trades tbody tr:hover { background: var(--surface-2); }
+.spike-trades tbody tr:last-child td { border-bottom: 0; }
+.spike-trades td { font-variant-numeric: tabular-nums; }
+.spike-trades small { display: block; color: var(--text-2); font-size: 11px; margin-top: 4px; line-height: 1.6; }
+.spike-trades .btn { border-radius: 0; }
 .spike-positive { color: #22c55e; }
 .spike-negative { color: #ef4444; }
-.spike-error { border: 1px solid #ef444480; background: #ef444415; color: #ef4444; padding: 12px; border-radius: 8px; margin-bottom: 14px; }
-.spike-rules summary { cursor: pointer; font-weight: 600; }
-.spike-rules li { margin-top: 10px; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.spike-error { border: 1px solid #ef444480; background: #ef444415; color: #ef4444; padding: 12px; border-radius: 0; margin-bottom: 14px; }
+.spike-rules summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.spike-rules li { margin-top: 8px; color: var(--text-2); font-size: 12.5px; line-height: 1.6; }
 @media (max-width: 900px) { .spike-index-grid { grid-template-columns: minmax(0, 1fr); } .spike-header-actions, .spike-pnl-summary { margin-left: 0; } }
-@media (max-width: 480px) { .spike-page { padding: 12px; } .spike-index, .spike-trades { padding: 12px; } .spike-header h1 { font-size: 22px; } }
+@media (max-width: 480px) { .spike-page { padding: 12px; } .spike-index, .spike-trades { padding: 12px; } .spike-header h1 { font-size: 22px; } .spike-metrics span, .spike-pnl-summary span { padding: 0 8px; } }
 
 /* Live Index Algo F straddle chart, scoped to Spike and mapped to Cal surfaces. */
 .spike-straddle-card { min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: 0; padding: 12px; box-shadow: none; color: var(--text-1); font-family: var(--font-mono); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; font-synthesis: none; letter-spacing: 0; line-height: 1.55; -webkit-font-smoothing: auto; }
