@@ -44,6 +44,8 @@ export interface SpikeTrade {
   mark_hedge?: number;
   mark_at?: number;
   pnl?: number;
+  peak_pnl?: number;
+  peak_at?: number;
   mark_stale: boolean;
 }
 export interface SpikeIndex {
