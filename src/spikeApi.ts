@@ -94,6 +94,7 @@ async function request<T>(path: string, method = "GET", data?: unknown): Promise
 export const fetchSpikeStatus = () => request<SpikeSnapshot>("/api/spike/status");
 export const setSpikePaper = (enabled: boolean) => request<SpikeSnapshot>("/api/spike/paper", "POST", { enabled });
 export const closeSpikeTrade = (id: string) => request<SpikeTrade>(`/api/spike/trades/${encodeURIComponent(id)}/close`, "POST");
+export const deleteSpikeTrade = (id: string) => request<SpikeTrade>(`/api/spike/trades/${encodeURIComponent(id)}/delete`, "POST");
 export const fetchSpikeSeries = (symbol: string, frame: SpikeFrame) =>
   request<{ symbol: string; frame: SpikeFrame; points: SpikeSample[] }>(`/api/spike/series?${new URLSearchParams({ symbol, frame })}`);
 export function spikeStreamUrl(): string {

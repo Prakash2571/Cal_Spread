@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import LineChart, { type ChartSeries } from "./LineChart.tsx";
+import { useEffect, useMemo, useRef, useState } from "react";
+import SpikeStraddleChart from "./SpikeStraddleChart.tsx";
 import ThemeToggle from "./ThemeToggle.tsx";
-import { closeSpikeTrade, fetchSpikeSeries, fetchSpikeStatus, setSpikePaper, spikeStreamUrl,
+import { closeSpikeTrade, deleteSpikeTrade, fetchSpikeSeries, fetchSpikeStatus, setSpikePaper, spikeStreamUrl,
   type SpikeFrame, type SpikeSample, type SpikeSnapshot, type SpikeTrade } from "./spikeApi.ts";
 
 const INDEXES = ["NIFTY", "SENSEX"] as const;
@@ -19,8 +19,44 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
   const [series, setSeries] = useState<Record<string, SpikeSample[]>>({ NIFTY: [], SENSEX: [] });
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [armedDelete, setArmedDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [expandedSymbol, setExpandedSymbol] = useState<typeof INDEXES[number] | null>(null);
+  const charts = useRef<HTMLDivElement>(null);
+
+  // Match Live Index Algo F's expanded chart keyboard, focus and scroll handling.
+  useEffect(() => {
+    if (!expandedSymbol) return;
+    const previous = document.body.style.overflow;
+    const dialog = charts.current?.querySelector<HTMLElement>(".spike-straddle-card--expanded");
+    const opener = dialog?.querySelector<HTMLElement>(".spike-straddle-expand-button");
+    document.body.style.overflow = "hidden";
+    opener?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setExpandedSymbol(null);
+      } else if (event.key === "Tab" && dialog) {
+        const buttons = Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled)"));
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (!dialog.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) {
+          event.preventDefault();
+          const target = event.shiftKey ? last : first;
+          target?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+      if (opener && document.contains(opener)) opener.focus();
+    };
+  }, [expandedSymbol]);
 
   useEffect(() => {
     if (!canTrade) return;
@@ -73,6 +109,18 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
     catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Paper close failed."); }
     finally { setBusy(null); }
   }
+  async function deleteTrade(trade: SpikeTrade) {
+    if (busy !== null) return;
+    if (armedDelete !== trade.id) { setArmedDelete(trade.id); return; }
+    setArmedDelete(null);
+    setBusy(`delete:${trade.id}`); setError(null);
+    try { await deleteSpikeTrade(trade.id); setSnapshot(await fetchSpikeStatus()); }
+    catch (cause: unknown) { setError(cause instanceof Error ? cause.message : "Paper delete failed."); }
+    finally { setBusy(null); }
+  }
+
+  const deleteButton = (trade: SpikeTrade) => <button type="button" className="btn" disabled={busy !== null}
+    onClick={() => void deleteTrade(trade)}>{busy === `delete:${trade.id}` ? "Deleting…" : armedDelete === trade.id ? "Delete this trade?" : "Delete"}</button>;
 
   return <main className="spike-page">
     <header className="spike-header">
@@ -92,27 +140,24 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
         <div className="spike-pnl-summary"><span>Open gross P&L <strong className={openPNL >= 0 ? "spike-positive" : "spike-negative"}>₹{price(openPNL)}</strong></span><span>Closed today <strong className={closedPNL >= 0 ? "spike-positive" : "spike-negative"}>₹{price(closedPNL)}</strong></span></div>
       </section>
       {!snapshot?.database && <p className="spike-notice">Charts can monitor in memory. Durable paper entries use the existing PostgreSQL configuration.</p>}
-      <div className="spike-index-grid">{INDEXES.map((symbol) => {
+      <div className="spike-index-grid" ref={charts}>{INDEXES.map((symbol) => {
         const index = snapshot?.indexes.find((value) => value.symbol === symbol);
         const data = series[symbol] ?? [];
-        const chartSeries: ChartSeries[] = [
-          { label: "Minimum CE + PE premium", color: "#22c55e", points: data.filter((point) => point.premium > 0).map((point) => ({ date: new Date(point.t).toISOString(), value: point.premium })) },
-          { label: "CE VWAP + PE VWAP", color: "#eab308", dashed: true, points: data.filter((point) => point.vwap > 0).map((point) => ({ date: new Date(point.t).toISOString(), value: point.vwap })) },
-        ];
         return <section className="spike-index" key={symbol}>
           <header><div><h2>{symbol}</h2><span className="spike-muted">Expiry {index?.expiry || "—"} · {index?.pairs ?? 0} paired strikes · {index?.lot_size ?? "—"} qty / lot</span></div><div className="spike-metrics"><span>Min strike <strong>{price(index?.current?.strike)}</strong></span><span>Straddle <strong>{price(index?.current?.premium)}</strong></span><span>VWAP <strong>{price(index?.current?.vwap || null)}</strong></span></div></header>
           <p className="spike-index-note">{index?.note ?? "Loading monitor…"}<span>{index?.current ? `Updated ${stamp(index.current.t)} IST` : ""}</span></p>
-          <div className="spike-chart-grid"><article><h3>Minimum straddle & VWAP <span>{frame}</span></h3><LineChart series={chartSeries} format={(value) => price(value)} formatX={(value) => stamp(Date.parse(value))} height={230} fit /></article></div>
+          <div className="spike-chart-grid"><SpikeStraddleChart symbol={symbol} series={data} current={index?.current ?? null} expiry={index?.expiry ?? ""}
+            expanded={expandedSymbol === symbol} onToggleExpanded={() => setExpandedSymbol((value) => value === symbol ? null : symbol)} /></div>
           <footer className="spike-muted">Recording since {stamp(index?.recording_since)} IST. Charts show completed buckets; latest values above update from the feed.</footer>
           {index?.signal && <p className="spike-last-signal">Last qualified {direction(index.signal.direction)} · {index.signal.move_pct.toFixed(2)}% from {price(index.signal.reference)} at {stamp(index.signal.reference_at)} · crossover {stamp(index.signal.t)}</p>}
         </section>;
       })}</div>
       <section className="spike-trades"><h2>Open primary paper spreads</h2>
         {snapshot?.open.length ? <div className="spike-table-scroll"><table><thead><tr><th>Index / signal</th><th>Short leg</th><th>Fourth-OTM hedge</th><th>Size / credit</th><th>Gross P&L</th><th>Peak P&L</th><th>Manual exit</th></tr></thead><tbody>{snapshot.open.map((trade) => <tr key={trade.id} data-spike-symbol={trade.symbol}>
-          <td><strong>{trade.symbol}</strong><small>{direction(trade.direction)} · {stamp(trade.opened_at)} IST<br />Expiry {trade.expiry}</small></td><td>{trade.short.symbol}<small>Sold {price(trade.short.entry)} · cover {price(trade.mark_short)}</small></td><td>{trade.hedge.symbol}<small>Bought {price(trade.hedge.entry)} · sell {price(trade.mark_hedge)}</small></td><td>1 lot · {trade.quantity} qty<small>Credit ₹{price(trade.entry_credit)}</small></td><td className={(trade.pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.pnl)}<small>{trade.mark_stale ? "Last mark — depth stale" : `Touch mark ${stamp(trade.mark_at)}`}</small></td><td className={(trade.peak_pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.peak_pnl)}{trade.peak_at != null && <small>at {stamp(trade.peak_at)} IST</small>}</td><td><button type="button" className="btn" disabled={busy !== null} onClick={() => void close(trade)}>{busy === trade.id ? "Closing…" : "Close paper spread"}</button></td>
+          <td><strong>{trade.symbol}</strong><small>{direction(trade.direction)} · {stamp(trade.opened_at)} IST<br />Expiry {trade.expiry}</small></td><td>{trade.short.symbol}<small>Sold {price(trade.short.entry)} · cover {price(trade.mark_short)}</small></td><td>{trade.hedge.symbol}<small>Bought {price(trade.hedge.entry)} · sell {price(trade.mark_hedge)}</small></td><td>1 lot · {trade.quantity} qty<small>Credit ₹{price(trade.entry_credit)}</small></td><td className={(trade.pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.pnl)}<small>{trade.mark_stale ? "Last mark — depth stale" : `Touch mark ${stamp(trade.mark_at)}`}</small></td><td className={(trade.peak_pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.peak_pnl)}{trade.peak_at != null && <small>at {stamp(trade.peak_at)} IST</small>}</td><td><button type="button" className="btn" disabled={busy !== null} onClick={() => void close(trade)}>{busy === trade.id ? "Closing…" : "Close paper spread"}</button>{" "}{deleteButton(trade)}</td>
         </tr>)}</tbody></table></div> : <p className="spike-muted">No open paper spreads. A qualifying crossover opens one primary spread per index.</p>}
       </section>
-      <section className="spike-trades"><h2>Closed paper spreads today</h2>{snapshot?.closed.length ? <div className="spike-table-scroll"><table><thead><tr><th>Index</th><th>Spread</th><th>Entry → exit</th><th>Gross P&L</th><th>Peak P&L</th></tr></thead><tbody>{snapshot.closed.map((trade) => <tr key={trade.id}><td>{trade.symbol}</td><td>{direction(trade.direction)} · {price(trade.short.strike)} / {price(trade.hedge.strike)}</td><td>{stamp(trade.opened_at)} → {stamp(trade.closed_at)} IST</td><td className={(trade.pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.pnl)}</td><td className={(trade.peak_pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.peak_pnl)}{trade.peak_at != null && <small>at {stamp(trade.peak_at)} IST</small>}</td></tr>)}</tbody></table></div> : <p className="spike-muted">Manual exits and their P&L appear here.</p>}</section>
+      <section className="spike-trades"><h2>Closed paper spreads today</h2>{snapshot?.closed.length ? <div className="spike-table-scroll"><table><thead><tr><th>Index</th><th>Spread</th><th>Entry → exit</th><th>Gross P&L</th><th>Peak P&L</th><th>Action</th></tr></thead><tbody>{snapshot.closed.map((trade) => <tr key={trade.id}><td>{trade.symbol}</td><td>{direction(trade.direction)} · {price(trade.short.strike)} / {price(trade.hedge.strike)}</td><td>{stamp(trade.opened_at)} → {stamp(trade.closed_at)} IST</td><td className={(trade.pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.pnl)}</td><td className={(trade.peak_pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.peak_pnl)}{trade.peak_at != null && <small>at {stamp(trade.peak_at)} IST</small>}</td><td>{deleteButton(trade)}</td></tr>)}</tbody></table></div> : <p className="spike-muted">Manual exits and their P&L appear here.</p>}</section>
       <details className="spike-rules"><summary>Strategy rules and calculations</summary><ul>
         <li>The minimum straddle is the cheapest same-strike CE + PE pair across the nearest live expiry.</li>
         <li>VWAP is the sum of those two contracts’ day-volume-weighted average traded prices supplied by Dhan.</li>
