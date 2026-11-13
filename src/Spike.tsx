@@ -12,8 +12,8 @@ const stamp = (value: number | null | undefined) => value ? new Date(value).toLo
   timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit",
 }) : "—";
 const direction = (value: string) => ({
-  SHORT_PE_LONG_CE: "Short PE / Long CE",
-  SHORT_CE_LONG_PE: "Short CE / Long PE",
+  CALL_CREDIT: "Call credit",
+  PUT_CREDIT: "Put credit",
 }[value] ?? value);
 
 export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack: () => void }) {
@@ -163,9 +163,9 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
       <section className="spike-trades"><h2>Closed paper spreads today</h2>{snapshot?.closed.length ? <div className="spike-table-scroll"><table><thead><tr><th>Index</th><th>Spread</th><th>Entry → exit</th><th>Gross P&L</th><th>Peak P&L</th><th>Action</th></tr></thead><tbody>{snapshot.closed.map((trade) => <tr key={trade.id}><td>{trade.symbol}</td><td>{direction(trade.direction)} · {price(trade.short.strike)} / {price(trade.hedge.strike)}</td><td>{stamp(trade.opened_at)} → {stamp(trade.closed_at)} IST</td><td className={(trade.pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.pnl)}</td><td className={(trade.peak_pnl ?? 0) >= 0 ? "spike-positive" : "spike-negative"}>₹{price(trade.peak_pnl)}{trade.peak_at != null && <small>at {stamp(trade.peak_at)} IST</small>}</td><td>{deleteButton(trade)}</td></tr>)}</tbody></table></div> : <p className="spike-muted">Manual exits and their P&L appear here.</p>}</section>
       <details className="spike-rules"><summary>Strategy rules and calculations</summary><ul>
         <li>The minimum straddle is the cheapest same-strike CE + PE pair across the nearest live expiry.</li>
+        <li>If underlying spot rose since arming, short one-lot ATM CE and buy the fourth higher listed CE; if it fell, short ATM PE and buy the fourth lower listed PE. Flat or unavailable spot skips entry and consumes the arm.</li>
         <li>VWAP is the sum of those two contracts’ day-volume-weighted average traded prices supplied by Dhan.</li>
         <li>A premium at least 5% above the preceding 30-minute low arms the index. Its first price-driven downward VWAP cross then evaluates a paper entry.</li>
-        <li>If underlying spot rose since arming, short one-lot ATM PE and buy the fourth higher listed CE; if it fell, short ATM CE and buy the fourth lower listed PE. Flat or unavailable spot skips entry and consumes the arm.</li>
         <li>Entry uses short bid / hedge ask; manual exit uses short ask / hedge bid. Gross paper P&L excludes fees and taxes.</li>
         <li>One primary open spread per index. Entry strikes stay fixed as the minimum moves. Positions stay open until you close them.</li>
       </ul></details>

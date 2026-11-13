@@ -78,14 +78,14 @@ try {
   }
   assert.equal(spike.open.length, 2);
   const niftySpread = spike.open.find((trade) => trade.symbol === 'NIFTY');
-  assert.equal(niftySpread.direction, 'SHORT_PE_LONG_CE');
+  assert.equal(niftySpread.direction, 'CALL_CREDIT');
   assert.equal(niftySpread.quantity, 75);
-  assert.ok(niftySpread.short.symbol.endsWith('PE') && niftySpread.hedge.symbol.endsWith('CE'));
+  assert.ok(niftySpread.short.symbol.endsWith('CE') && niftySpread.hedge.symbol.endsWith('CE'));
   assert.equal(niftySpread.hedge.strike - niftySpread.short.strike, 200);
   const sensexSpread = spike.open.find((trade) => trade.symbol === 'SENSEX');
-  assert.equal(sensexSpread.direction, 'SHORT_CE_LONG_PE');
+  assert.equal(sensexSpread.direction, 'PUT_CREDIT');
   assert.equal(sensexSpread.quantity, 20);
-  assert.ok(sensexSpread.short.symbol.endsWith('CE') && sensexSpread.hedge.symbol.endsWith('PE'));
+  assert.ok(sensexSpread.short.symbol.endsWith('PE') && sensexSpread.hedge.symbol.endsWith('PE'));
   assert.equal(sensexSpread.short.strike - sensexSpread.hedge.strike, 400);
   await go.request('POST', '/__fixture/spike', { stage: 3 });
   await delay(600);

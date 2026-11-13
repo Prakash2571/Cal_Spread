@@ -10,7 +10,7 @@ export interface SpikeSample {
   ce_token: number;
   pe_token: number;
 }
-export type SpikeDirection = "SHORT_PE_LONG_CE" | "SHORT_CE_LONG_PE";
+export type SpikeDirection = "CALL_CREDIT" | "PUT_CREDIT";
 export interface SpikeSignal {
   direction: SpikeDirection;
   t: number;
