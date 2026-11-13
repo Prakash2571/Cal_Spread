@@ -11,7 +11,10 @@ const price = (value: number | null | undefined) =>
 const stamp = (value: number | null | undefined) => value ? new Date(value).toLocaleTimeString("en-GB", {
   timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit",
 }) : "—";
-const direction = (value: string) => value === "CALL_CREDIT" ? "Call credit" : "Put credit";
+const direction = (value: string) => ({
+  SHORT_PE_LONG_CE: "Short PE / Long CE",
+  SHORT_CE_LONG_PE: "Short CE / Long PE",
+}[value] ?? value);
 
 export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack: () => void }) {
   const [snapshot, setSnapshot] = useState<SpikeSnapshot | null>(null);
@@ -161,8 +164,8 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
       <details className="spike-rules"><summary>Strategy rules and calculations</summary><ul>
         <li>The minimum straddle is the cheapest same-strike CE + PE pair across the nearest live expiry.</li>
         <li>VWAP is the sum of those two contracts’ day-volume-weighted average traded prices supplied by Dhan.</li>
-        <li>At an upward price-driven VWAP crossover, premium must already be at least 5% above an earlier value in the preceding 30 minutes: short one-lot CE and buy its fourth higher listed CE strike.</li>
-        <li>At a downward price-driven VWAP crossover, premium must already be at least 5% below an earlier value in the preceding 30 minutes: short one-lot PE and buy its fourth lower listed PE strike.</li>
+        <li>A premium at least 5% above the preceding 30-minute low arms the index. Its first price-driven downward VWAP cross then evaluates a paper entry.</li>
+        <li>If underlying spot rose since arming, short one-lot ATM PE and buy the fourth higher listed CE; if it fell, short ATM CE and buy the fourth lower listed PE. Flat or unavailable spot skips entry and consumes the arm.</li>
         <li>Entry uses short bid / hedge ask; manual exit uses short ask / hedge bid. Gross paper P&L excludes fees and taxes.</li>
         <li>One primary open spread per index. Entry strikes stay fixed as the minimum moves. Positions stay open until you close them.</li>
       </ul></details>

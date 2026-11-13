@@ -10,8 +10,9 @@ export interface SpikeSample {
   ce_token: number;
   pe_token: number;
 }
+export type SpikeDirection = "SHORT_PE_LONG_CE" | "SHORT_CE_LONG_PE";
 export interface SpikeSignal {
-  direction: "CALL_CREDIT" | "PUT_CREDIT";
+  direction: SpikeDirection;
   t: number;
   reference: number;
   reference_at: number;
@@ -30,7 +31,7 @@ export interface SpikeTrade {
   id: string;
   symbol: string;
   status: "open" | "closed";
-  direction: "CALL_CREDIT" | "PUT_CREDIT";
+  direction: SpikeDirection;
   expiry: string;
   lot_size: number;
   quantity: number;
