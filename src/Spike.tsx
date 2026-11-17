@@ -165,7 +165,7 @@ export default function Spike({ canTrade, onBack }: { canTrade: boolean; onBack:
         <li>The minimum straddle is the cheapest same-strike CE + PE pair across the nearest live expiry.</li>
         <li>If underlying spot rose since arming, short one-lot ATM CE and buy the fourth higher listed CE; if it fell, short ATM PE and buy the fourth lower listed PE. Flat or unavailable spot skips entry and consumes the arm.</li>
         <li>VWAP is the sum of those two contracts’ day-volume-weighted average traded prices supplied by Dhan.</li>
-        <li>A premium at least 5% above the preceding 30-minute low arms the index. Its first price-driven downward VWAP cross then evaluates a paper entry.</li>
+        <li>A premium at least 5% above the preceding 30-minute low arms the index. Its first price-driven downward VWAP cross, or a touch within ₹1 of VWAP followed by a fall, evaluates a paper entry.</li>
         <li>Entry uses short bid / hedge ask; manual exit uses short ask / hedge bid. Gross paper P&L excludes fees and taxes.</li>
         <li>One primary open spread per index. Entry strikes stay fixed as the minimum moves. Positions stay open until you close them.</li>
       </ul></details>
