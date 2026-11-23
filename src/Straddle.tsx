@@ -63,7 +63,26 @@ const StraddleCard = memo(function StraddleCard({ item, chart, renderChart, conn
   </div>;
 });
 
-export default function Straddle({ onBack }: { onBack: () => void }) {
+export default function Straddle({ canTrade, onBack }: { canTrade: boolean; onBack: () => void }) {
+  return <main className="straddle-page">
+    <div className="spike-page">
+      <header className="spike-header">
+        <button className="btn" type="button" onClick={onBack}>← Board</button>
+        <div className="spike-header-title">
+          <h1>Straddle</h1>
+          <p>F&amp;O stocks · ATM CE + PE premium and chart VWAP</p>
+        </div>
+      </header>
+      {canTrade ? <StraddleCharts /> : <section className="spike-notice">
+        <h2>Trade access required</h2>
+        <p>Sign in to view the Straddle charts.</p>
+        <a className="btn" href="/admin/access">Sign in</a>
+      </section>}
+    </div>
+  </main>;
+}
+
+function StraddleCharts() {
   const [universe, setUniverse] = useState<Awaited<ReturnType<typeof fetchStraddleUniverse>> | null>(null);
   const [query, setQuery] = useState("");
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -188,15 +207,8 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
     setExpanded((previous) => previous === symbol ? null : symbol);
   }, []);
 
-  return <main className="straddle-page">
-    <div className="spike-page">
-      <header className="spike-header">
-        <button className="btn" type="button" onClick={onBack}>← Board</button>
-        <div className="spike-header-title">
-          <h1>Straddle</h1>
-          <p>F&amp;O stocks · ATM CE + PE premium and chart VWAP</p>
-        </div>
-      </header>
+  return (
+    <>
       <div className="straddle-controls">
         <label className="search-wrap">
           <MagnifyingGlassIcon aria-hidden="true" />
@@ -224,6 +236,6 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
           renderChart={renderSet.has(item.symbol)} connected={(!expanded || item.symbol === expanded) && renderSet.has(item.symbol) && !!viewUrl && viewUrl === connectedWindow}
           expanded={expanded === item.symbol} toggle={toggle} />)}
       </div>
-    </div>
-  </main>;
+    </>
+  );
 }

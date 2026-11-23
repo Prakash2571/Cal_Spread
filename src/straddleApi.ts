@@ -1,4 +1,4 @@
-import { API_ORIGIN } from "./api.ts";
+import { API_ORIGIN, getAdminToken } from "./api.ts";
 import type { SpikeSample } from "./spikeApi.ts";
 
 export interface StraddleUnderlying {
@@ -18,7 +18,11 @@ export interface StraddleSnapshot {
 }
 
 export async function fetchStraddleUniverse(signal: AbortSignal) {
-  const response = await fetch(`${API_ORIGIN}/api/straddle/universe`, { signal });
+  const token = getAdminToken();
+  const response = await fetch(`${API_ORIGIN}/api/straddle/universe`, {
+    signal,
+    headers: token ? { "x-admin-token": token } : undefined,
+  });
   if (!response.ok) throw new Error(`Could not load F&O stocks (HTTP ${response.status}).`);
   return response.json() as Promise<{ underlyings: StraddleUnderlying[] }>;
 }
@@ -29,6 +33,8 @@ export interface StraddleCoverage {
 
 export function straddleStreamUrl(symbols: string[] = []) {
   const params = new URLSearchParams();
+  const token = getAdminToken();
+  if (token) params.set("x-admin-token", token);
   for (const symbol of symbols) params.append("symbol", symbol);
   const query = params.toString();
   return `${API_ORIGIN}/api/straddle/stream${query ? `?${query}` : ""}`;

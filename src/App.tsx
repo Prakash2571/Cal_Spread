@@ -749,7 +749,7 @@ export default function App() {
   }
 
   if (route === "/straddle") {
-    return <Straddle onBack={() => navigate("/")} />;
+    return <Straddle canTrade={adminAuthenticated} onBack={() => navigate("/")} />;
   }
 
   // Futures vs synthetic-futures (conversion/reversal) scanner + paper trading.
@@ -872,7 +872,9 @@ export default function App() {
           {adminAuthenticated && (
             <a className="btn" href="/spike" onClick={(event) => { event.preventDefault(); navigate("/spike"); }} title="NIFTY and SENSEX minimum straddle, VWAP and one-lot paper credit spreads">Spike</a>
           )}
-          <a className="btn" href="/straddle" onClick={(event) => { event.preventDefault(); navigate("/straddle"); }} title="F&O stock straddle premiums and VWAP">Straddle</a>
+          {adminAuthenticated && (
+            <a className="btn" href="/straddle" onClick={(event) => { event.preventDefault(); navigate("/straddle"); }} title="F&O stock straddle premiums and VWAP">Straddle</a>
+          )}
           {adminAuthenticated && (
             <a
               className="btn"
