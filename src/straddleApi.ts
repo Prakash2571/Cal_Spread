@@ -14,8 +14,10 @@ export interface StraddleSnapshot {
   status: "live" | "capacity" | "closed" | "connecting" | "waiting" | "unavailable" | "pricing";
   recording_since: number;
   current: SpikeSample | null;
-  points?: SpikeSample[];
+  points?: StraddlePoint[];
 }
+
+export type StraddlePoint = SpikeSample & { gap?: boolean };
 
 export async function fetchStraddleUniverse(signal: AbortSignal) {
   const token = getAdminToken();
@@ -29,6 +31,7 @@ export async function fetchStraddleUniverse(signal: AbortSignal) {
 
 export interface StraddleCoverage {
   capacity_limited: number;
+  dhan_over_limit: boolean;
 }
 
 export function straddleStreamUrl(symbols: string[] = []) {
@@ -40,34 +43,63 @@ export function straddleStreamUrl(symbols: string[] = []) {
   return `${API_ORIGIN}/api/straddle/stream${query ? `?${query}` : ""}`;
 }
 
-export function subscribeStraddle<T>(url: string, event: string, onData: (data: T) => void, onError: () => void) {
-  let stream: EventSource | undefined;
-  let retry: number | undefined;
+export type StraddleStreamError = "capacity" | "connection";
 
-  function connect() {
-    const source = new EventSource(url);
-    stream = source;
-    source.addEventListener(event, (message) => {
-      if (stream !== source) return;
-      try {
-        onData(JSON.parse((message as MessageEvent<string>).data) as T);
-      } catch {
-        onError();
+export function subscribeStraddle<T>(url: string, event: string, onData: (data: T) => void, onError: (error: StraddleStreamError) => void) {
+  const controller = new AbortController();
+  const { signal } = controller;
+  const prefix = `event: ${event}\ndata: `;
+  let retry: number | undefined;
+  let backoff = 5000;
+
+  async function connect() {
+    let error: StraddleStreamError = "connection";
+    let retryAfter = 0;
+    try {
+      // Fetch exposes the HTTP admission response as well as the SSE frames.
+      const response = await fetch(url, { signal, headers: { Accept: "text/event-stream" } });
+      if (response.status === 503) {
+        const refusal = await response.json().catch(() => null);
+        if (refusal?.code === "straddle_stream_capacity") error = "capacity";
+        const seconds = Number(response.headers.get("Retry-After") ?? refusal?.retry_after);
+        if (Number.isFinite(seconds) && seconds > 0) retryAfter = seconds * 1000;
+      } else if (response.ok && response.headers.get("Content-Type")?.startsWith("text/event-stream") && response.body) {
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = "";
+        try {
+          while (!signal.aborted) {
+            const { value, done } = await reader.read();
+            if (done || signal.aborted) break;
+            buffer = (buffer + value).replace(/\r\n/g, "\n");
+            let end: number;
+            while ((end = buffer.indexOf("\n\n")) >= 0) {
+              const frame = buffer.slice(0, end);
+              buffer = buffer.slice(end + 2);
+              if (frame.startsWith(prefix)) {
+                const data = JSON.parse(frame.slice(prefix.length)) as T;
+                backoff = 5000;
+                onData(data);
+              }
+            }
+          }
+        } finally {
+          void reader.cancel().catch(() => {});
+        }
+      } else {
+        void response.body?.cancel().catch(() => {});
       }
-    });
-    source.onerror = () => {
-      if (stream !== source) return;
-      onError();
-      if (source.readyState === EventSource.CLOSED) {
-        retry = window.setTimeout(connect, 5000);
-      }
-    };
+    } catch {
+      // Network failures and malformed frames share the transport retry.
+    }
+    if (signal.aborted) return;
+    onError(error);
+    retry = window.setTimeout(() => { void connect(); }, Math.max(retryAfter, backoff) + Math.random() * 1000);
+    backoff = Math.min(30_000, backoff * 2);
   }
 
-  connect();
+  void connect();
   return () => {
     window.clearTimeout(retry);
-    stream?.close();
-    stream = undefined;
+    controller.abort();
   };
 }
