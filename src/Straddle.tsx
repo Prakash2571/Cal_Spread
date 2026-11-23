@@ -23,7 +23,7 @@ const statusText = {
   unavailable: "No paired options for the nearest expiry",
 };
 
-const StraddleCard = memo(function StraddleCard({ item, chart, renderChart, connected, now, expanded, toggle }: {
+export const StraddleCard = memo(function StraddleCard({ item, chart, renderChart, connected, now, expanded, toggle }: {
   item: StraddleUnderlying;
   chart?: CachedChart;
   renderChart: boolean;
@@ -57,7 +57,7 @@ const StraddleCard = memo(function StraddleCard({ item, chart, renderChart, conn
       snapshotAt={chart?.snapshotAt}
       now={now}
       liveStale={!connected}
-      emptyMessage={connected && chart?.status === "live" ? undefined : status}
+      emptyMessage={points.length > 0 || (connected && chart?.status === "live") ? undefined : status}
       footer={<footer className="straddle-card-footer">
         {chart?.recording_since ? <span>Recording since {recordingTime.format(chart.recording_since)} IST</span> : null}
         <span>{status}</span>

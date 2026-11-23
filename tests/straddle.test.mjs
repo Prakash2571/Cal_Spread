@@ -1,8 +1,52 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import SpikeStraddleChart from '../src/SpikeStraddleChart.tsx';
 
 globalThis.localStorage = { getItem: () => null };
 const { subscribeStraddle } = await import('../src/straddleApi.ts');
+const { StraddleCard } = await import('../src/Straddle.tsx');
+
+const item = { symbol: 'ABB', name: 'ABB India', expiry: '2026-11-24' };
+const now = Date.parse('2026-11-23T15:45:00+05:30');
+const bar = { t: now - 900_000, strike: 5000, expiry: item.expiry, premium: 10, vwap: 10 };
+
+function renderClosedCard(points) {
+  const chart = {
+    day: '2026-11-23', symbol: item.symbol, expiry: item.expiry, status: 'closed',
+    recording_since: 0, current: null, points, snapshotAt: now,
+  };
+  return renderToStaticMarkup(createElement(StraddleCard, {
+    item, chart, renderChart: true, connected: true, now, expanded: false, toggle() {},
+  }));
+}
+
+test('a closed Straddle card with a gap renders the plot and keeps the status in the footer', () => {
+  const html = renderClosedCard([{ ...bar, premium: 0, vwap: 0, gap: true }]);
+  assert.match(html, /<div class="spike-straddle-plot"><svg\b/);
+  assert.match(html, /class="spike-straddle-axis"/);
+  assert.match(html, /<path d="" class="spike-straddle-line premium"/);
+  assert.doesNotMatch(html, /class="spike-straddle-point"/);
+  assert.match(html, /Premium <b>No data<\/b>/);
+  assert.doesNotMatch(html, /class="spike-straddle-empty"/);
+  assert.match(html, /<footer class="straddle-card-footer"><span>Market closed<\/span><\/footer>/);
+});
+
+test('a closed Straddle card with no points shows the status in the chart area', () => {
+  const html = renderClosedCard([]);
+  assert.match(html, /<div class="spike-straddle-plot"><div class="spike-straddle-empty">Market closed<\/div>/);
+  assert.match(html, /<footer class="straddle-card-footer"><span>Market closed<\/span><\/footer>/);
+});
+
+test('Spike keeps its empty message with zero or one priced point', () => {
+  for (const series of [[], [bar]]) {
+    const html = renderToStaticMarkup(createElement(SpikeStraddleChart, {
+      symbol: 'NIFTY', series, current: null, expiry: item.expiry, now, expanded: false, onToggleExpanded() {},
+    }));
+    assert.match(html, /<div class="spike-straddle-empty">Waiting for paired CE and PE option bars\.<\/div>/);
+  }
+});
 
 function captureRetries() {
   const scheduled = [];

@@ -77,7 +77,7 @@ export default function SpikeStraddleChart({
   }, [series]);
   const pricedPoints = useMemo(() => points.filter((point) => point.premium !== null), [points]);
   const latestPriced = pricedPoints[pricedPoints.length - 1];
-  const showPlot = pricedPoints.length >= (minuteBars ? 1 : 2);
+  const showPlot = spotATM ? points.length > 0 : pricedPoints.length >= (minuteBars ? 1 : 2);
   const plot = usePlotSize(showPlot);
 
   useEffect(() => setHover(null), [symbol, expiry]);
