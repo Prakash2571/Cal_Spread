@@ -1,7 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import SpikeStraddleChart from "./SpikeStraddleChart.tsx";
-import { fetchStraddleUniverse, straddleStreamUrl, type StraddleSnapshot, type StraddleUnderlying } from "./straddleApi.ts";
+import {
+  fetchStraddleUniverse, straddleStreamUrl, subscribeStraddle,
+  type StraddleCoverage, type StraddleSnapshot, type StraddleUnderlying,
+} from "./straddleApi.ts";
 import type { SpikeSample } from "./spikeApi.ts";
 
 const noPoints: SpikeSample[] = [];
@@ -15,13 +18,14 @@ const statusText = {
   closed: "Market closed",
   connecting: "Connecting to Dhan",
   waiting: "Waiting for an active Dhan session",
+  pricing: "Waiting for current ATM quotes",
   unavailable: "No paired options for the nearest expiry",
 };
 
-const StraddleCard = memo(function StraddleCard({ item, chart, selected, connected, expanded, toggle }: {
+const StraddleCard = memo(function StraddleCard({ item, chart, renderChart, connected, expanded, toggle }: {
   item: StraddleUnderlying;
   chart?: StraddleSnapshot;
-  selected: boolean;
+  renderChart: boolean;
   connected: boolean;
   expanded: boolean;
   toggle: (symbol: string) => void;
@@ -30,12 +34,12 @@ const StraddleCard = memo(function StraddleCard({ item, chart, selected, connect
   const [collapsedHeight, setCollapsedHeight] = useState<number>();
   const { symbol, name, expiry } = item;
   const points = chart?.points ?? noPoints;
-  const current = selected && connected ? chart?.current ?? null : null;
-  const status = selected ? (connected && chart ? statusText[chart.status] : "Connecting…") : "Paused outside live view";
+  const current = connected ? chart?.current ?? null : null;
+  const status = connected && chart ? statusText[chart.status] : "Connecting…";
 
   return <div className="straddle-item" data-straddle-symbol={symbol} ref={card}
     style={expanded ? { minHeight: collapsedHeight } : undefined}>
-    <SpikeStraddleChart
+    {renderChart ? <SpikeStraddleChart
       symbol={symbol}
       name={name}
       series={points}
@@ -47,12 +51,15 @@ const StraddleCard = memo(function StraddleCard({ item, chart, selected, connect
         toggle(symbol);
       }}
       minuteBars
-      emptyMessage={selected && connected && chart?.status === "live" ? undefined : status}
+      spotATM
+      emptyMessage={connected && chart?.status === "live" ? undefined : status}
       footer={<footer className="straddle-card-footer">
         {chart?.recording_since ? <span>Recording since {recordingTime.format(chart.recording_since)} IST</span> : null}
         {points.length > 0 && <span>{status}</span>}
       </footer>}
-    />
+    /> : <section className="straddle-placeholder" aria-label={`${symbol} ATM straddle chart`}>
+      <div className="spike-straddle-head"><div><h2>{symbol} · ATM straddle</h2><p>{name}</p></div></div>
+    </section>}
   </div>;
 });
 
@@ -65,9 +72,10 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
   const [tabVisible, setTabVisible] = useState(() => !document.hidden);
   const [visible, setVisible] = useState<string[]>([]);
   const [charts, setCharts] = useState<Record<string, StraddleSnapshot>>({});
-  const [connectedWindow, setConnectedWindow] = useState("");
+  const [connectedWindow, setConnectedWindow] = useState<string>();
   const [streamError, setStreamError] = useState(false);
-  const [streamAttempt, setStreamAttempt] = useState(0);
+  const [coverageError, setCoverageError] = useState(false);
+  const [capacityLimited, setCapacityLimited] = useState(0);
   const grid = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,40 +103,43 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const cards = grid.current?.querySelectorAll<HTMLElement>("[data-straddle-symbol]");
     if (!cards) return;
-    const ratios = new Map<HTMLElement, number>();
+    const inView = new Set<HTMLElement>();
     let observing = true;
     const observer = new IntersectionObserver((entries) => {
       if (!observing) return;
-      for (const entry of entries) ratios.set(entry.target as HTMLElement, entry.intersectionRatio);
-      // Prefer the most visible charts and keep their request order stable within the grid.
-      const ranked = Array.from(cards).filter((card) => (ratios.get(card) ?? 0) >= 0.15);
-      ranked.sort((a, b) => (ratios.get(b) ?? 0) - (ratios.get(a) ?? 0));
-      const chosen = new Set(ranked.slice(0, universe?.max_live ?? 0));
-      const symbols = Array.from(cards).filter((card) => chosen.has(card)).map((card) => card.dataset.straddleSymbol!);
-      setVisible((previous) => previous.join() === symbols.join() ? previous : symbols);
-    }, { threshold: [0, 0.15, 0.5, 0.85] });
+      for (const entry of entries) {
+        const card = entry.target as HTMLElement;
+        if (entry.isIntersecting) inView.add(card);
+        else inView.delete(card);
+      }
+      const symbols = Array.from(cards).filter((card) => inView.has(card)).map((card) => card.dataset.straddleSymbol!);
+      setVisible((previous) => previous.join("\n") === symbols.join("\n") ? previous : symbols);
+    });
     for (const card of cards) observer.observe(card);
     return () => { observing = false; observer.disconnect(); };
-  }, [filtered, universe?.max_live]);
+  }, [filtered]);
 
-  const symbols = useMemo(() => {
-    if (!tabVisible) return [];
-    if (expanded) return [expanded];
+  const renderSet = useMemo(() => new Set(expanded ? [...visible, expanded] : visible), [expanded, visible]);
+  const viewUrl = useMemo(() => {
+    if (!tabVisible) return;
     const matches = new Set(filtered.map(({ symbol }) => symbol));
-    return visible.filter((symbol) => matches.has(symbol));
+    const symbols = expanded ? [expanded] : visible.filter((symbol) => matches.has(symbol));
+    if (symbols.length) return straddleStreamUrl(symbols);
   }, [tabVisible, expanded, filtered, visible]);
-  const liveWindow = symbols.join(",");
-  const liveSet = useMemo(() => new Set(symbols), [symbols]);
+
+  useEffect(() => subscribeStraddle<StraddleCoverage>(straddleStreamUrl(), "coverage", (coverage) => {
+    setCapacityLimited(coverage.capacity_limited);
+    setCoverageError(false);
+  }, () => setCoverageError(true)), []);
 
   useEffect(() => {
-    setConnectedWindow("");
+    setConnectedWindow(undefined);
     setStreamError(false);
-    if (!liveWindow) return;
-    const stream = new EventSource(straddleStreamUrl(liveWindow));
-    let retry: number | undefined;
-    const update = (event: Event) => {
-      try {
-        const snapshots = JSON.parse((event as MessageEvent<string>).data) as StraddleSnapshot[];
+    if (!viewUrl) return;
+    // Scroll and search can change the viewport repeatedly within a few frames.
+    let unsubscribe: (() => void) | undefined;
+    const timer = window.setTimeout(() => {
+      unsubscribe = subscribeStraddle<StraddleSnapshot[]>(viewUrl, "snapshot", (snapshots) => {
         if (snapshots.length === 0) return;
         setCharts((previous) => {
           const next = Object.fromEntries(Object.entries(previous).filter(([, chart]) => chart.day === snapshots[0].day));
@@ -137,28 +148,18 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
           }
           return next;
         });
-        setConnectedWindow(liveWindow);
+        setConnectedWindow(viewUrl);
         setStreamError(false);
-      } catch {
-        setConnectedWindow("");
+      }, () => {
+        setConnectedWindow(undefined);
         setStreamError(true);
-      }
-    };
-    stream.addEventListener("snapshot", update);
-    stream.onerror = () => {
-      setConnectedWindow("");
-      setStreamError(true);
-      if (stream.readyState === EventSource.CLOSED) {
-        retry = window.setTimeout(() => setStreamAttempt((value) => value + 1), 5000);
-      }
-    };
+      });
+    }, 120);
     return () => {
-      window.clearTimeout(retry);
-      stream.removeEventListener("snapshot", update);
-      stream.onerror = null;
-      stream.close();
+      window.clearTimeout(timer);
+      unsubscribe?.();
     };
-  }, [liveWindow, streamAttempt]);
+  }, [viewUrl]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -193,7 +194,7 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
         <button className="btn" type="button" onClick={onBack}>← Board</button>
         <div className="spike-header-title">
           <h1>Straddle</h1>
-          <p>F&amp;O stocks · minimum CE + PE premium and chart VWAP</p>
+          <p>F&amp;O stocks · ATM CE + PE premium and chart VWAP</p>
         </div>
       </header>
       <div className="straddle-controls">
@@ -205,19 +206,23 @@ export default function Straddle({ onBack }: { onBack: () => void }) {
         {universe && <span className="spike-muted">{filtered.length} of {universe.underlyings.length} stocks</span>}
       </div>
       <p className="straddle-session-note spike-muted">
-        Market recording opens at 09:15:00 IST. Each chart starts when first viewed during market hours.
-        It shows completed one-minute bars for periods when the stock was live.
-        {universe && ` Up to ${universe.max_live} visible stocks can stream at once, subject to shared Dhan capacity.`}
+        Recording starts for all stocks when you open this page during market hours. The session opens at 09:15 IST.
+        Charts show completed one-minute bars and leave gaps where quotes were unavailable.
       </p>
       {catalogError && <div className="spike-error" role="alert">{catalogError}{" "}
         <button className="btn" type="button" onClick={() => { setCatalogError(null); setAttempt((value) => value + 1); }}>Retry</button>
       </div>}
       {!universe && !catalogError && <p className="spike-notice" role="status">Loading F&amp;O stocks…</p>}
       {universe && filtered.length === 0 && <p className="spike-notice" role="status">No matching F&amp;O stocks.</p>}
-      {liveWindow && streamError && <p className="spike-error" role="status">Live chart connection interrupted. Reconnecting…</p>}
+      {!coverageError && capacityLimited > 0 && <p className="spike-notice" role="status">
+        Dhan capacity is limited. {capacityLimited} {capacityLimited === 1 ? "stock is" : "stocks are"} waiting to record.
+        Recently viewed charts get priority.
+      </p>}
+      {(coverageError || (viewUrl && streamError)) && <p className="spike-error" role="status">Live chart connection interrupted. Reconnecting…</p>}
       <div className="straddle-grid" ref={grid}>
         {filtered.map((item) => <StraddleCard key={item.symbol} item={item} chart={charts[item.symbol]}
-          selected={liveSet.has(item.symbol)} connected={liveWindow === connectedWindow} expanded={expanded === item.symbol} toggle={toggle} />)}
+          renderChart={renderSet.has(item.symbol)} connected={(!expanded || item.symbol === expanded) && renderSet.has(item.symbol) && !!viewUrl && viewUrl === connectedWindow}
+          expanded={expanded === item.symbol} toggle={toggle} />)}
       </div>
     </div>
   </main>;

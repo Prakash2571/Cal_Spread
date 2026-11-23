@@ -7,6 +7,7 @@ interface Props {
   symbol: string;
   name?: string;
   minuteBars?: boolean;
+  spotATM?: boolean;
   emptyMessage?: string;
   footer?: ReactNode;
   series: SpikeSample[];
@@ -53,7 +54,7 @@ function ChartExpandButton({ expanded, onClick }: { expanded: boolean; onClick: 
   </button>;
 }
 
-export default function SpikeStraddleChart({ symbol, name, series, current, expiry, expanded, onToggleExpanded, minuteBars = false, emptyMessage, footer }: Props) {
+export default function SpikeStraddleChart({ symbol, name, series, current, expiry, expanded, onToggleExpanded, minuteBars = false, spotATM = false, emptyMessage, footer }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const points = useMemo<Point[]>(() => series.filter((point) => point.premium > 0).map((point) => ({
     t: point.t, at: new Date(point.t).toISOString(), strike: point.strike, premium: point.premium,
@@ -68,7 +69,8 @@ export default function SpikeStraddleChart({ symbol, name, series, current, expi
   const last = points[points.length - 1];
   const selected = hover === null ? last : points[Math.min(hover, points.length - 1)];
   const livePremium = current?.premium ?? null;
-  const displayedStrike = selected?.strike ?? current?.strike;
+  const displayedStrike = spotATM && hover === null ? current?.strike ?? last?.strike : selected?.strike ?? current?.strike;
+  const premiumLabel = spotATM ? "ATM premium" : "min premium";
   const { width, height } = plot;
   const { pad, x, y, premiumLine, vwapLine, ticks } = useMemo(() => {
     const pad = { l: 60, r: 20, t: 18, b: 18 };
@@ -103,13 +105,13 @@ export default function SpikeStraddleChart({ symbol, name, series, current, expi
     <div className="spike-straddle-head">
       <div><h2>{symbol === "NIFTY" ? "NIFTY 50" : symbol} · ATM straddle</h2>
         {name && <p>{name}</p>}
-        <p title="Each bucket uses its own lowest same-strike CE + PE premium; the minimum strike can change throughout the day">{displayedStrike ? `${displayedStrike} CE + PE · ${expiry || "expiry unavailable"} · min premium` : "Waiting for paired option premiums"}</p></div>
+        <p title={spotATM ? "The ATM strike is the paired strike nearest to spot" : "Each bucket uses its own lowest same-strike CE + PE premium; the minimum strike can change throughout the day"}>{displayedStrike ? `${displayedStrike} CE + PE · ${expiry || "expiry unavailable"} · ${premiumLabel}` : "Waiting for paired option premiums"}</p></div>
       <ChartExpandButton expanded={expanded} onClick={onToggleExpanded} />
     </div>
     <div className="spike-straddle-toolbar">
       <div className="spike-straddle-readout"><span><i className="spike-straddle-dot premium" />Premium <b>{selected ? num(selected.premium) : "–"}</b></span>
-        <span title="Each minute's minimum CE + PE premium, weighted by the selected pair's smaller leg volume; resets each trading day"><i className="spike-straddle-dot vwap" />VWAP <b>{selected?.vwap != null ? num(selected.vwap) : "–"}</b></span>
-        {(minuteBars || livePremium !== null) && <span title={current ? `Live minimum CE + PE at strike ${current.strike}` : undefined}>Live <b>{livePremium === null ? "–" : num(livePremium)}</b></span>}
+        <span title={`Each minute's ${spotATM ? "ATM" : "minimum"} CE + PE premium, weighted by the selected pair's smaller leg volume; resets each trading day`}><i className="spike-straddle-dot vwap" />VWAP <b>{selected?.vwap != null ? num(selected.vwap) : "–"}</b></span>
+        {(minuteBars || livePremium !== null) && <span title={current ? `Live ${spotATM ? "ATM" : "minimum"} CE + PE at strike ${current.strike}` : undefined}>Live <b>{livePremium === null ? "–" : num(livePremium)}</b></span>}
         {delayed && <small>delayed</small>}</div>
     </div>
     <div className="spike-straddle-plot" ref={plot.ref}>

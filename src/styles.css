@@ -5823,8 +5823,9 @@ body {
 .straddle-controls .search { border-radius: 0; }
 .straddle-session-note { margin: 10px 0 16px; }
 .straddle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.straddle-item { min-width: 0; display: flex; }
+.straddle-item { min-width: 0; min-height: 340px; display: flex; }
 .straddle-item > section { width: 100%; }
+.straddle-placeholder { padding: 12px; border: 1px solid var(--border-subtle); background: var(--surface-1); }
 .straddle-item > .spike-straddle-card--expanded { width: 100vw; }
 .straddle-card-footer { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 10px; min-height: 17px; margin-top: 8px; color: var(--text-2); font-size: 11px; }
 .spike-straddle-point { fill: #22c55e; }
