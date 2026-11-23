@@ -51,6 +51,7 @@ import ThemeToggle from "./ThemeToggle.tsx";
 import Analytics from "./Analytics.tsx";
 import Synthetic from "./Synthetic.tsx";
 import Spike from "./Spike.tsx";
+import Straddle from "./Straddle.tsx";
 import BrandMark from "./BrandMark.tsx";
 import FairValue from "./fairValue/FairValue.tsx";
 
@@ -281,6 +282,7 @@ export default function App() {
     if (route === "/analytics") title = "Options Analytics | Calspread";
     if (route === "/synthetic") title = "Futures vs Synthetic | Calspread";
     if (route === "/spike") title = "Spike | Calspread";
+    if (route === "/straddle") title = "Straddle | Calspread";
     if (route === "/fair-value") title = "Fair Value | Calspread";
     if (route.startsWith("/admin/verify")) title = "Admin Verification | Calspread";
     if (route.startsWith("/admin/access")) title = "Trade Access | Calspread";
@@ -746,6 +748,10 @@ export default function App() {
     return <Spike canTrade={adminAuthenticated} onBack={() => navigate("/")} />;
   }
 
+  if (route === "/straddle") {
+    return <Straddle onBack={() => navigate("/")} />;
+  }
+
   // Futures vs synthetic-futures (conversion/reversal) scanner + paper trading.
   if (route === "/synthetic") {
     return (
@@ -866,6 +872,7 @@ export default function App() {
           {adminAuthenticated && (
             <a className="btn" href="/spike" onClick={(event) => { event.preventDefault(); navigate("/spike"); }} title="NIFTY and SENSEX minimum straddle, VWAP and one-lot paper credit spreads">Spike</a>
           )}
+          <a className="btn" href="/straddle" onClick={(event) => { event.preventDefault(); navigate("/straddle"); }} title="F&O stock straddle premiums and VWAP">Straddle</a>
           {adminAuthenticated && (
             <a
               className="btn"

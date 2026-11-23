@@ -1,10 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SpikeSample } from "./spikeApi.ts";
 
-type Point = { at: string; strike: number; premium: number; vwap: number | null };
+type Point = { t: number; at: string; strike: number; premium: number; vwap: number | null };
 
 interface Props {
-  symbol: "NIFTY" | "SENSEX";
+  symbol: string;
+  name?: string;
+  minuteBars?: boolean;
+  emptyMessage?: string;
+  footer?: ReactNode;
   series: SpikeSample[];
   current: SpikeSample | null;
   expiry: string;
@@ -18,13 +22,13 @@ const timeFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", 
 const chartTime = (iso: string) => timeFormat.format(new Date(iso));
 
 // Ported from Live Index Algo F: the plot owns its size, including when expanded.
-function usePlotSize() {
+function usePlotSize(enabled: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 900, height: 280 });
 
   useLayoutEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!enabled || !element) return;
     const measure = () => {
       const width = Math.max(220, Math.round(element.clientWidth));
       const height = Math.max(180, Math.round(element.clientHeight));
@@ -34,7 +38,7 @@ function usePlotSize() {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [enabled]);
 
   return { ref, ...size };
 }
@@ -49,13 +53,15 @@ function ChartExpandButton({ expanded, onClick }: { expanded: boolean; onClick: 
   </button>;
 }
 
-export default function SpikeStraddleChart({ symbol, series, current, expiry, expanded, onToggleExpanded }: Props) {
+export default function SpikeStraddleChart({ symbol, name, series, current, expiry, expanded, onToggleExpanded, minuteBars = false, emptyMessage, footer }: Props) {
   const [hover, setHover] = useState<number | null>(null);
-  const plot = usePlotSize();
   const points = useMemo<Point[]>(() => series.filter((point) => point.premium > 0).map((point) => ({
-    at: new Date(point.t).toISOString(), strike: point.strike, premium: point.premium,
+    t: point.t, at: new Date(point.t).toISOString(), strike: point.strike, premium: point.premium,
     vwap: point.vwap > 0 ? point.vwap : null,
   })), [series]);
+
+  const showPlot = points.length >= (minuteBars ? 1 : 2);
+  const plot = usePlotSize(showPlot);
 
   useEffect(() => setHover(null), [symbol, expiry]);
 
@@ -70,43 +76,64 @@ export default function SpikeStraddleChart({ symbol, series, current, expiry, ex
     const low = values.length ? Math.floor(Math.min(...values) * .97) : 0;
     const high = values.length ? Math.ceil(Math.max(...values) * 1.03) : 1;
     const span = Math.max(1, high - low);
-    const x = (i: number) => pad.l + (points.length < 2 ? 0 : i / (points.length - 1)) * (width - pad.l - pad.r);
+    const firstTime = points[0]?.t ?? 0;
+    const duration = (points[points.length - 1]?.t ?? firstTime) - firstTime;
+    const x = (i: number) => {
+      const ratio = minuteBars && duration > 0 ? (points[i].t - firstTime) / duration : i / Math.max(1, points.length - 1);
+      return pad.l + ratio * (width - pad.l - pad.r);
+    };
     const y = (value: number) => height - pad.b - (value - low) / span * (height - pad.t - pad.b);
-    const premiumLine = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.premium).toFixed(1)}`).join(" ");
+    const gap = (i: number) => minuteBars && i > 0 && points[i].t - points[i - 1].t > 60_000;
+    const premiumLine = points.map((p, i) => `${i && !gap(i) ? "L" : "M"}${x(i).toFixed(1)} ${y(p.premium).toFixed(1)}`).join(" ");
     let hasVWAP = false;
     const vwapLine = points.map((p, i) => {
       if (p.vwap === null) { hasVWAP = false; return ""; }
-      const command = `${hasVWAP ? "L" : "M"}${x(i).toFixed(1)} ${y(p.vwap).toFixed(1)}`;
+      const command = `${hasVWAP && !gap(i) ? "L" : "M"}${x(i).toFixed(1)} ${y(p.vwap).toFixed(1)}`;
       hasVWAP = true;
       return command;
     }).join(" ");
     const ticks = [0, 1, 2, 3, 4].map((i) => low + span * i / 4);
     return { pad, x, y, premiumLine, vwapLine, ticks };
-  }, [points, width, height]);
+  }, [points, width, height, minuteBars]);
   const latestAt = last ? Date.parse(last.at) : 0;
-  const delayed = latestAt > 0 && Date.now() - latestAt > 180_000;
+  const delayed = !minuteBars && latestAt > 0 && Date.now() - latestAt > 180_000;
 
   return <section className={`spike-straddle-card${expanded ? " spike-straddle-card--expanded" : ""}`} aria-label={`${symbol} ATM straddle chart`}
     role={expanded ? "dialog" : undefined} aria-modal={expanded || undefined}>
     <div className="spike-straddle-head">
-      <div><h2>{symbol === "NIFTY" ? "NIFTY 50" : "SENSEX"} · ATM straddle</h2>
+      <div><h2>{symbol === "NIFTY" ? "NIFTY 50" : symbol} · ATM straddle</h2>
+        {name && <p>{name}</p>}
         <p title="Each bucket uses its own lowest same-strike CE + PE premium; the minimum strike can change throughout the day">{displayedStrike ? `${displayedStrike} CE + PE · ${expiry || "expiry unavailable"} · min premium` : "Waiting for paired option premiums"}</p></div>
       <ChartExpandButton expanded={expanded} onClick={onToggleExpanded} />
     </div>
     <div className="spike-straddle-toolbar">
       <div className="spike-straddle-readout"><span><i className="spike-straddle-dot premium" />Premium <b>{selected ? num(selected.premium) : "–"}</b></span>
         <span title="Each minute's minimum CE + PE premium, weighted by the selected pair's smaller leg volume; resets each trading day"><i className="spike-straddle-dot vwap" />VWAP <b>{selected?.vwap != null ? num(selected.vwap) : "–"}</b></span>
-        {livePremium !== null && <span title={`Live minimum CE + PE at strike ${current?.strike}`}>Live <b>{num(livePremium)}</b></span>}
+        {(minuteBars || livePremium !== null) && <span title={current ? `Live minimum CE + PE at strike ${current.strike}` : undefined}>Live <b>{livePremium === null ? "–" : num(livePremium)}</b></span>}
         {delayed && <small>delayed</small>}</div>
     </div>
     <div className="spike-straddle-plot" ref={plot.ref}>
-      {points.length < 2 ? <div className="spike-straddle-empty">Waiting for paired CE and PE option bars.</div> :
+      {!showPlot ? <div className="spike-straddle-empty">{emptyMessage ?? "Waiting for paired CE and PE option bars."}</div> :
         <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="ATM premium and volume weighted average price, completed buckets"
-          onMouseMove={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const px = (e.clientX - rect.left) / rect.width * width; setHover(Math.max(0, Math.min(points.length - 1, Math.round((px - pad.l) / (width - pad.l - pad.r) * (points.length - 1))))); }}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const px = (e.clientX - rect.left) / rect.width * width;
+            if (!minuteBars) {
+              setHover(Math.max(0, Math.min(points.length - 1, Math.round((px - pad.l) / (width - pad.l - pad.r) * (points.length - 1)))));
+              return;
+            }
+            const closest = points.reduce((best, _, i) => Math.abs(px - x(i)) < Math.abs(px - x(best)) ? i : best, 0);
+            setHover(closest);
+          }}
           onMouseLeave={() => setHover(null)}>
           {[0, 1, 2, 3, 4].map((step) => <line key={`vertical-${step}`} x1={pad.l + (width - pad.l - pad.r) * step / 4} y1={pad.t} x2={pad.l + (width - pad.l - pad.r) * step / 4} y2={height - pad.b} className="spike-straddle-grid spike-straddle-grid-vertical" />)}
           {ticks.map((tick, i) => <g key={i}><line x1={pad.l} y1={y(tick)} x2={width - pad.r} y2={y(tick)} className="spike-straddle-grid" /><text x={pad.l - 8} y={y(tick) + 4} textAnchor="end" className="spike-straddle-axis">{num(tick)}</text></g>)}
           <path d={premiumLine} className="spike-straddle-line premium" /><path d={vwapLine} className="spike-straddle-line vwap" />
+          {minuteBars && points.map((point, i) => {
+            const hasNeighbor = (i > 0 && point.t - points[i - 1].t <= 60_000) ||
+              (i + 1 < points.length && points[i + 1].t - point.t <= 60_000);
+            return hasNeighbor ? null : <circle key={point.t} cx={x(i)} cy={y(point.premium)} r={3} className="spike-straddle-point" />;
+          })}
           {hover !== null && <line x1={x(Math.min(hover, points.length - 1))} y1={pad.t} x2={x(Math.min(hover, points.length - 1))} y2={height - pad.b} className="spike-straddle-guide" />}
           {hover !== null && selected && <g className="spike-straddle-hover-time" transform={`translate(${Math.max(pad.l + 28, Math.min(width - pad.r - 28, x(Math.min(hover, points.length - 1))))}, ${pad.t + 4})`}>
             <rect x={-28} y={0} width={56} height={22} />
@@ -114,5 +141,6 @@ export default function SpikeStraddleChart({ symbol, series, current, expiry, ex
           </g>}
         </svg>}
     </div>
+    {footer}
   </section>;
 }

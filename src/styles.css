@@ -3,7 +3,7 @@
    The single source of colour, type, spacing, radius, elevation
    and motion values in this stylesheet.
    ================================================================ */
-:root {
+:root, .straddle-page {
   color-scheme: dark;
 
   /* ---- Surfaces (elevation steps) ---- */
@@ -5811,4 +5811,26 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .spike-straddle-expand-button { transition-duration: 0.001ms !important; }
+}
+
+.straddle-page {
+  min-height: 100dvh;
+  color: var(--text-1);
+  background: var(--surface-0);
+}
+.straddle-controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.straddle-controls .search-wrap { width: min(100%, 330px); }
+.straddle-controls .search { border-radius: 0; }
+.straddle-session-note { margin: 10px 0 16px; }
+.straddle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.straddle-item { min-width: 0; display: flex; }
+.straddle-item > section { width: 100%; }
+.straddle-item > .spike-straddle-card--expanded { width: 100vw; }
+.straddle-card-footer { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 10px; min-height: 17px; margin-top: 8px; color: var(--text-2); font-size: 11px; }
+.spike-straddle-point { fill: #22c55e; }
+@media (max-width: 960px) {
+  .straddle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .straddle-grid { grid-template-columns: minmax(0, 1fr); }
 }
