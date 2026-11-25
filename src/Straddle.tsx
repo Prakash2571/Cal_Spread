@@ -237,7 +237,7 @@ function StraddleCharts() {
         {universe && <span className="spike-muted">{filtered.length} of {universe.underlyings.length} stocks</span>}
       </div>
       <p className="straddle-session-note spike-muted">
-        Recording starts for all stocks when you open this page during market hours. The session opens at 09:15 IST.
+        Recording runs automatically on trading days from 09:15 to 15:30 IST.
         Charts show completed one-minute bars and leave gaps where quotes were unavailable.
       </p>
       {catalogError && <div className="spike-error" role="alert">{catalogError}{" "}
@@ -250,7 +250,6 @@ function StraddleCharts() {
       </p>}
       {!coverageError && coverage && !coverage.dhan_over_limit && coverage.capacity_limited > 0 && <p className="spike-notice" role="status">
         Dhan capacity is limited. {coverage.capacity_limited} {coverage.capacity_limited === 1 ? "stock is" : "stocks are"} waiting to record.
-        Recently viewed charts get priority.
       </p>}
       {viewUrl && streamError === "capacity" && <p className="spike-error" role="status">All Straddle chart streams are in use. Retrying…</p>}
       {(coverageError || (viewUrl && streamError === "connection")) && <p className="spike-error" role="status">Live chart connection interrupted. Reconnecting…</p>}
